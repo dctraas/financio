@@ -3,19 +3,37 @@ package com.financio.app.ui.importing
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.DefaultAccount
+import com.financio.core.categorize.LearnedRule
+import com.financio.core.model.Category
+import com.financio.core.repository.CategoryRepository
 import com.financio.core.usecase.ImportPreview
 import com.financio.core.usecase.ImportStatementUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 sealed interface ImportUiState {
     data object PickFile : ImportUiState
     data object Loading : ImportUiState
-    data class Ready(val fileName: String, val preview: ImportPreview) : ImportUiState
+
+    /**
+     * [manualCategoryChoices] maps an index into [preview]'s `needsCategory` list to the category
+     * the user picked for it — kept here rather than mutating [preview] itself so the "X te
+     * controleren" count in the summary stays accurate as choices come in. Every transaction in
+     * [preview] ends up imported on confirm regardless of whether it got a manual category (see
+     * [ImportViewModel.confirm]), so [preview]'s own `total` is the number that will be imported.
+     */
+    data class Ready(
+        val fileName: String,
+        val preview: ImportPreview,
+        val manualCategoryChoices: Map<Int, Long> = emptyMap(),
+    ) : ImportUiState
+
     data class Failed(val message: String) : ImportUiState
     data object Imported : ImportUiState
 }
@@ -23,10 +41,14 @@ sealed interface ImportUiState {
 @HiltViewModel
 class ImportViewModel @Inject constructor(
     private val importStatementUseCase: ImportStatementUseCase,
+    private val categoryRepository: CategoryRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ImportUiState>(ImportUiState.PickFile)
     val uiState: StateFlow<ImportUiState> = _uiState.asStateFlow()
+
+    val categories: StateFlow<List<Category>> = categoryRepository.observeCategories()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun onFilePicked(fileName: String, content: String) {
         _uiState.value = ImportUiState.Loading
@@ -40,16 +62,37 @@ class ImportViewModel @Inject constructor(
         }
     }
 
+    /** [needsCategoryIndex] indexes into `preview.needsCategory`, not the combined transaction list. */
+    fun assignCategory(needsCategoryIndex: Int, categoryId: Long) {
+        val current = _uiState.value
+        if (current !is ImportUiState.Ready) return
+        _uiState.value = current.copy(
+            manualCategoryChoices = current.manualCategoryChoices + (needsCategoryIndex to categoryId),
+        )
+    }
+
     /**
-     * Persists only the transactions a rule already categorized. The ones in
-     * [ImportPreview.needsCategory] wait for a manual categorization screen — a fase-1
-     * follow-up not yet built — rather than being imported uncategorized.
+     * Persists the auto-categorized transactions, the ones the user just assigned by hand (which
+     * also become a remembered rule, per the architecture's "geen match → vraag het → onthoud
+     * het" behavior), and — unlike dropping them — the rest of `needsCategory` too, uncategorized,
+     * so nothing an import found silently disappears; they show up as "Te categoriseren" in the
+     * transaction list and can be fixed there instead.
      */
     fun confirm() {
         val current = _uiState.value
         if (current !is ImportUiState.Ready) return
         viewModelScope.launch {
-            importStatementUseCase.confirm(current.preview.ready)
+            val manuallyCategorized = current.preview.needsCategory.mapIndexed { index, transaction ->
+                current.manualCategoryChoices[index]?.let { categoryId -> transaction.copy(categoryId = categoryId) }
+                    ?: transaction
+            }
+            importStatementUseCase.confirm(current.preview.ready + manuallyCategorized)
+
+            current.manualCategoryChoices.forEach { (index, categoryId) ->
+                val transaction = current.preview.needsCategory[index]
+                categoryRepository.addRule(LearnedRule.from(categoryId, transaction.counterpartyName))
+            }
+
             _uiState.value = ImportUiState.Imported
         }
     }

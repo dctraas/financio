@@ -19,6 +19,9 @@ interface TransactionRepository {
     suspend fun existingDedupHashes(accountId: Long): Set<String>
     suspend fun insertAll(transactions: List<Transaction>)
     fun observeSpent(categoryId: Long, yearMonth: YearMonth): Flow<Money>
+
+    /** Manual categorization of an already-persisted transaction — from the transaction list's "Te categoriseren" state. */
+    suspend fun updateCategory(transactionId: Long, categoryId: Long)
 }
 
 interface CategoryRepository {

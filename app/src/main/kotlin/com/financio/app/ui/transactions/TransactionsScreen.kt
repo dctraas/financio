@@ -13,27 +13,34 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.theme.CategoryColors
+import com.financio.core.model.Category
 import com.financio.core.model.Money
 import com.financio.core.model.Transaction
 
 @Composable
 fun TransactionsScreen(onImportClick: () -> Unit, viewModel: TransactionsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+    var categorizing by remember { mutableStateOf<Transaction?>(null) }
 
     Scaffold(
         topBar = {
@@ -50,11 +57,52 @@ fun TransactionsScreen(onImportClick: () -> Unit, viewModel: TransactionsViewMod
         } else {
             LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize()) {
                 items(state.transactions, key = { it.id }) { transaction ->
-                    TransactionRow(transaction, categoryName = state.categoriesById[transaction.categoryId]?.name)
+                    TransactionRow(
+                        transaction = transaction,
+                        categoryName = state.categoriesById[transaction.categoryId]?.name,
+                        onClick = { if (transaction.categoryId == null) categorizing = transaction },
+                    )
                 }
             }
         }
     }
+
+    categorizing?.let { transaction ->
+        CategoryPickerDialog(
+            transactionName = transaction.counterpartyName,
+            categories = state.categories,
+            onDismiss = { categorizing = null },
+            onSelect = { categoryId ->
+                viewModel.categorize(transaction, categoryId)
+                categorizing = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun CategoryPickerDialog(
+    transactionName: String,
+    categories: List<Category>,
+    onDismiss: () -> Unit,
+    onSelect: (Long) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Categorie voor $transactionName") },
+        text = {
+            Column {
+                categories.forEach { category ->
+                    Text(
+                        category.name,
+                        modifier = Modifier.fillMaxWidth().clickable { onSelect(category.id) }.padding(vertical = 12.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },
+    )
 }
 
 @Composable
@@ -80,9 +128,9 @@ private fun EmptyTransactions(padding: PaddingValues, onImportClick: () -> Unit)
 }
 
 @Composable
-private fun TransactionRow(transaction: Transaction, categoryName: String?) {
+private fun TransactionRow(transaction: Transaction, categoryName: String?, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         CategoryDot(categoryName)
