@@ -48,14 +48,18 @@ vinden. Nog te controleren:
   `net.zetetic:sqlcipher-android` naar 4.18.0 te tillen (geverifieerd: de klasse bestaat nog en
   de LOAD-segmenten zijn daadwerkelijk 16 KB uitgelijnd). `libandroidx.graphics.path.so` — een
   transitieve afhankelijkheid, vermoedelijk via `navigation-compose`'s predictive-back-animatie —
-  kon **niet** worden opgelost vanuit deze omgeving: die library staat alleen op Google's
-  Maven-repository, niet op Maven Central, dus ik kon geen 16 KB-uitgelijnde versie verifiëren.
-  **Actie voor jou**: open Project Structure → Dependencies in Android Studio (of het
-  lampje-icoon naast een verouderde versie in `gradle/libs.versions.toml`) en werk
-  `navigationCompose`, `activityCompose` en `composeBom` bij naar hun huidige laatste versie —
-  Android Studio heeft wél live toegang tot die repository en kiest een geldig versienummer.
-- of `compileSdk`/`targetSdk` 35 en de overige versies in `gradle/libs.versions.toml` nog de
-  gewenste keuze zijn tegen die tijd;
+  kon niet vanuit deze sandbox worden opgelost (die library staat alleen op Google's
+  Maven-repository, hier niet bereikbaar); de projecteigenaar heeft `navigationCompose`,
+  `activityCompose` en `composeBom` via Android Studio bijgewerkt naar respectievelijk `2.10.0`,
+  `1.13.0` en `2026.08.00`.
+- **AGP 8 → 9, compileSdk 35 → 37.** Die bijgewerkte libraries bleken zelf AGP 9.1.0 en
+  compileSdk 37 te vereisen (`checkDebugAarMetadata` faalde daar expliciet op — geen giswerk,
+  de foutmelding noemt deze versies letterlijk). Beide zijn dienovereenkomstig bijgewerkt in
+  `gradle/libs.versions.toml` en `app/build.gradle.kts`. Dit is een major-AGP-sprong die niet in
+  deze sandbox getest kon worden — reken erop dat dit nog een extra rondje foutmeldingen kan
+  opleveren (bijvoorbeeld rond de minimale Gradle-versie die AGP 9 vereist, of DSL die tussen
+  AGP 8 en 9 is gewijzigd) voordat de build weer volledig groen is.
+- of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
 
