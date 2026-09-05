@@ -88,6 +88,17 @@ vinden. Nog te controleren:
   versie eenmalig te declareren voor alle modules) — daardoor faalde de configuratie alsnog met
   "Unresolved reference 'android'" zodra de catalogus-entry weg was. Dat was geen nieuwe
   ecosysteemverrassing maar een onvolledige eigen fix; nu ook uit het root-bestand verwijderd.
+- **Hilt 2.52 → 2.60.1.** De Hilt Gradle-plugin faalde met "Android BaseExtension not found"
+  tegen AGP 9.1.0 — dit keer wél een genuine, bevestigde ecosysteemincompatibiliteit, niet iets
+  wat de sandbox had kunnen voorkomen: Hilt's eigen Gradle-plugin kreeg pas AGP 9-ondersteuning
+  vanaf versie 2.59 (bevestigd via [google/dagger#4944](https://github.com/google/dagger/issues/4944)
+  en [#5083](https://github.com/google/dagger/issues/5083); 2.52 dateert van ruim daarvoor). 2.59
+  zelf had echter een kapotte `ComponentTreeDeps`-runtime tegen AGP 9
+  ([#5099](https://github.com/google/dagger/issues/5099)), pas gefixt in latere patches. Daarom
+  niet naar 2.59 maar naar **2.60.1** getild — de nieuwste release op Maven Central op het moment
+  van deze fix, met de vervolgfixes verwerkt. `hilt-android` en `hilt-android-compiler` zijn
+  beide bevestigd te bestaan op Maven Central in versie 2.60.1 (rechtstreeks met `curl`
+  gecontroleerd, geen giswerk). `:core` gebruikt geen Hilt en is hier niet door geraakt.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
