@@ -13,8 +13,15 @@ import java.time.format.DateTimeFormatter
  * columns between export versions. A column this parser needs that's missing fails loudly with
  * [UnrecognizedFormatException] instead of silently reading the wrong field.
  *
- * Known simplification: assumes no column value itself contains a ";" — true for every ING
- * export seen so far, since names/descriptions use ING's own separators internally.
+ * The field delimiter is auto-detected between a real tab and ";" rather than hardcoded: a real
+ * "Mijn ING" export (despite the ".csv" extension) turned out to be tab-delimited, not the
+ * semicolon originally assumed from the architecture doc's illustration — confirmed against an
+ * actual downloaded export. Semicolon is kept as a fallback since it's a plausible variant (e.g.
+ * a different export setting) and was the original assumption; if neither delimiter yields a
+ * recognizable header this still fails with the same clear "column missing" error.
+ *
+ * Known simplification: assumes no column value itself contains the detected delimiter — true
+ * for every ING export seen so far, since names/descriptions use ING's own separators internally.
  */
 class CsvIngParser : BankStatementParser {
 
@@ -24,7 +31,8 @@ class CsvIngParser : BankStatementParser {
         val lines = content.lineSequence().filter { it.isNotBlank() }.toList()
         require(lines.isNotEmpty()) { "Leeg CSV-bestand." }
 
-        val header = lines.first().split(";").map { it.trim() }
+        val delimiter = detectDelimiter(lines.first())
+        val header = lines.first().split(delimiter).map { it.trim() }
         val columnIndex = REQUIRED_COLUMNS.associateWith { column ->
             header.indexOf(column).also { index ->
                 if (index < 0) {
@@ -35,11 +43,16 @@ class CsvIngParser : BankStatementParser {
             }
         }
 
-        return lines.drop(1).map { line -> parseLine(line, columnIndex, accountId) }
+        return lines.drop(1).map { line -> parseLine(line, delimiter, columnIndex, accountId) }
     }
 
-    private fun parseLine(line: String, columnIndex: Map<String, Int>, accountId: Long): ParsedTransaction {
-        val fields = line.split(";")
+    private fun detectDelimiter(headerLine: String): Char =
+        CANDIDATE_DELIMITERS.firstOrNull { delimiter ->
+            headerLine.split(delimiter).map { it.trim() }.contains(COL_DATE)
+        } ?: ';' // no candidate recognized the header; fall through to the original error below
+
+    private fun parseLine(line: String, delimiter: Char, columnIndex: Map<String, Int>, accountId: Long): ParsedTransaction {
+        val fields = line.split(delimiter)
         fun col(name: String): String = fields.getOrElse(columnIndex.getValue(name)) { "" }.trim()
 
         val date = LocalDate.parse(col(COL_DATE), DATE_FORMAT)
@@ -82,6 +95,7 @@ class CsvIngParser : BankStatementParser {
         private val REQUIRED_COLUMNS = listOf(
             COL_DATE, COL_NAME, COL_COUNTERPARTY, COL_DIRECTION, COL_AMOUNT, COL_NOTES, COL_BALANCE,
         )
+        private val CANDIDATE_DELIMITERS = listOf('\t', ';')
         private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd")
     }
 }

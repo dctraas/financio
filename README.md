@@ -128,6 +128,13 @@ vinden. Nog te controleren:
   dit patroon). Toegevoegd: `System.loadLibrary("sqlcipher")` vóór `Room.databaseBuilder(...)` in
   `DatabaseModule.provideDatabase()`. Een eigen omissie uit de oorspronkelijke opzet, niet
   gerelateerd aan de eerdere versie-bumps.
+- **CSV-import faalde met "Kolom 'Datum' ontbreekt".** Een echte "Mijn ING"-export bleek
+  tab-gescheiden te zijn (ondanks de `.csv`-extensie), niet met puntkomma's zoals aangenomen op
+  basis van de illustratie in het architectuurdocument. `CsvIngParser` detecteert het
+  scheidingsteken nu automatisch (tab of puntkomma, tab eerst geprobeerd) op basis van of de
+  header daarmee de kolom "Datum" herkent; puntkomma blijft als fallback werken. Getest tegen een
+  echte, geanonimiseerde export (`CsvIngParserTest`) — dit keer wél in de sandbox echt gebouwd en
+  getest, want dit raakt alleen `:core`: **36 tests, groen** (was 35, plus de nieuwe test).
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).

@@ -56,4 +56,22 @@ class CsvIngParserTest {
             CsvIngParser().parse(missingColumn, accountId = 1)
         }
     }
+
+    @Test
+    fun `parses a real tab-delimited ING export despite the csv extension`() {
+        // A real "Mijn ING" download turned out to be tab-delimited, not semicolon as the
+        // architecture doc's illustration (and sampleCsv above) assumed. Columns and a debit
+        // line taken directly from an actual export (IBAN/card details anonymized).
+        val tabDelimited = listOf(
+            listOf("Datum", "Naam / Omschrijving", "Rekening", "Tegenrekening", "Code", "Af Bij", "Bedrag (EUR)", "Mutatiesoort", "Mededelingen", "Saldo na mutatie", "Tag"),
+            listOf("20260904", "Nettorama a.onderweg GORINCHEM", "NL63INGB0663396727", "", "BA", "Af", "30,63", "Betaalautomaat", "Kaartnr: 5238 53** **** 8897", "1876,54", ""),
+        ).joinToString("\n") { it.joinToString("\t") }
+
+        val txn = CsvIngParser().parse(tabDelimited, accountId = 1).single()
+        assertEquals(LocalDate.of(2026, 9, 4), txn.date)
+        assertEquals(Money(-3063), txn.amount)
+        assertEquals(Money(187654), txn.balanceAfter)
+        assertEquals(null, txn.counterpartyIban) // Tegenrekening blank for card payments
+        assertEquals("Nettorama a.onderweg GORINCHEM", txn.counterpartyName)
+    }
 }
