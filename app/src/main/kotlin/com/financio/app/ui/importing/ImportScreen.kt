@@ -33,9 +33,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.core.model.Category
-import com.financio.core.model.Transaction
+import com.financio.core.usecase.UncategorizedGroup
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel()) {
@@ -91,6 +94,7 @@ private fun ReadyContent(
     viewModel: ImportViewModel,
 ) {
     val preview = state.preview
+    val groups = preview.needsCategoryGrouped
 
     LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         item {
@@ -103,17 +107,28 @@ private fun ReadyContent(
             )
         }
 
-        if (preview.needsCategory.isNotEmpty()) {
+        if (groups.isNotEmpty()) {
             item {
-                Text("Te controleren", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Te controleren — ${groups.size} tegenpartijen, één keuze per tegenpartij",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "Gesorteerd op grootste totaalbedrag eerst — je keuze geldt voor alle transacties van " +
+                        "deze tegenpartij, nu en bij toekomstige imports.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             }
-            items(preview.needsCategory.size) { index ->
-                UncategorizedRow(
-                    transaction = preview.needsCategory[index],
+            items(groups, key = { it.counterpartyName }) { group ->
+                UncategorizedGroupRow(
+                    group = group,
                     categories = categories,
-                    selectedCategoryId = state.manualCategoryChoices[index],
-                    onSelect = { categoryId -> viewModel.assignCategory(index, categoryId) },
+                    selectedCategoryId = state.manualCategoryChoices[group.counterpartyName],
+                    onSelect = { categoryId -> viewModel.assignCategory(group.counterpartyName, categoryId) },
                 )
             }
         }
@@ -129,8 +144,8 @@ private fun ReadyContent(
 }
 
 @Composable
-private fun UncategorizedRow(
-    transaction: Transaction,
+private fun UncategorizedGroupRow(
+    group: UncategorizedGroup,
     categories: List<Category>,
     selectedCategoryId: Long?,
     onSelect: (Long) -> Unit,
@@ -139,10 +154,17 @@ private fun UncategorizedRow(
     val selectedName = categories.firstOrNull { it.id == selectedCategoryId }?.name
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(transaction.counterpartyName, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(group.counterpartyName, fontWeight = FontWeight.Bold)
+            Text(
+                groupSummary(group),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Column {
             Text(
                 selectedName ?: "Kies categorie ▾",
@@ -163,3 +185,31 @@ private fun UncategorizedRow(
         }
     }
 }
+
+/**
+ * "3× · €45,20 · 4 – 12 sep" for a repeated merchant, or "€30,63 · 4 sep" for a one-off — the
+ * context that actually helps decide a category (impact and recency), without the raw ING
+ * card/transfer boilerplate (Kaartnr/Datum/Tijd/Transactie/Term) that clutters the description
+ * field and rarely matters for picking a category.
+ */
+private fun groupSummary(group: UncategorizedGroup): String {
+    val amount = if (group.count > 1 && group.minAmount != group.maxAmount) {
+        "${group.minAmount.toDisplayString()} – ${group.maxAmount.toDisplayString()} (totaal ${group.totalAmount.toDisplayString()})"
+    } else {
+        group.totalAmount.toDisplayString()
+    }
+    val period = if (group.firstDate == group.lastDate) formatShortDate(group.firstDate) else {
+        "${formatShortDate(group.firstDate)} – ${formatShortDate(group.lastDate)}"
+    }
+    val countPrefix = if (group.count > 1) "${group.count}× · " else ""
+    return "$countPrefix$amount · $period"
+}
+
+private val shortDateFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("nl"))
+
+private fun formatShortDate(date: LocalDate): String =
+    date.format(shortDateFormatter).let { formatted ->
+        // Force a lowercase month abbreviation regardless of locale data quirks ("4 Sep" -> "4 sep").
+        val parts = formatted.split(" ")
+        if (parts.size == 2) "${parts[0]} ${parts[1].lowercase()}" else formatted
+    }

@@ -22,6 +22,10 @@ interface CategoryDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(category: CategoryEntity): Long
+
+    /** Used by [com.financio.app.data.local.DatabaseSeeder] to decide whether seeding has already run. */
+    @Query("SELECT COUNT(*) FROM categories")
+    suspend fun count(): Int
 }
 
 @Dao
@@ -31,6 +35,9 @@ interface CategoryRuleDao {
 
     @Insert
     suspend fun insert(rule: CategoryRuleEntity)
+
+    @Insert
+    suspend fun insertAll(rules: List<CategoryRuleEntity>)
 }
 
 @Dao

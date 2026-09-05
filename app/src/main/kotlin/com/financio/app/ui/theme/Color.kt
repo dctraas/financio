@@ -58,12 +58,23 @@ object FinancioColorsDark : FinancioColorTokens {
     override val roseSoft = Color(0xFF3C2420)
 }
 
-/** Category identity colors — same swatches as the schermontwerp mockup, deliberately not semantic. */
+/**
+ * Category identity colors — the first five swatches match the schermontwerp mockup exactly;
+ * the rest extend that same muted palette for the default categories added when the app had no
+ * seeded categories at all (see DefaultCategorization in :core). Deliberately not semantic.
+ */
 object CategoryColors {
     val groceries = Color(0xFF5B7A52)
     val subscriptions = Color(0xFF7A6A45)
     val dining = Color(0xFF8A4A3D)
     val transport = Color(0xFF4C6E77)
     val clothing = Color(0xFF6B6485)
+    val housing = Color(0xFF4A5A8A)
+    val health = Color(0xFF3D8A6E)
+    val leisure = Color(0xFF9C7A3D)
+    val travel = Color(0xFF3D8FA3)
+    val gifts = Color(0xFFA35D82)
+    val savings = Color(0xFF4A8A5D)
+    val income = Color(0xFF2E7D6B)
     val fallback = Color(0xFF8B9992)
 }

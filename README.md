@@ -28,7 +28,17 @@ traject.
 - **Budgetten** — limieten per categorie met groen/amber/rood, tik op een categorie voor de grafiek.
 - **Grafieken** — maand-op-maand en jaar-op-jaar per categorie, met de budgetlimiet als lijn in de grafiek.
 - **Importeren** — CSV/MT940 inlezen, dedupliceren, automatisch categoriseren; wat overblijft
-  kun je vóór het bevestigen handmatig toewijzen (en dat wordt onthouden als nieuwe regel).
+  wordt **per tegenpartij gegroepeerd** (één keuze voor alle 40 Albert Heijn-transacties samen,
+  in plaats van 40 losse keuzes), gesorteerd op grootste totaalbedrag eerst, met aantal/bedrag/
+  periode per groep. Elke keuze wordt onthouden als nieuwe regel voor toekomstige imports.
+- **Standaardcategorieën en -regels** — een nieuwe, lege database wordt eenmalig gevuld met 13
+  categorieën (Boodschappen, Vervoer, Uit eten, Abonnementen, Kleding & verzorging, Wonen &
+  vaste lasten, Gezondheid & verzekering, Vrije tijd & hobby's, Vakantie & reizen, Cadeaus &
+  giften, Sparen & beleggen, Inkomsten, Overig) en een curated set trefwoordregels voor
+  bekende, ondubbelzinnige merken (supermarkten, energieleveranciers, streamingdiensten, etc.) —
+  zie `DefaultCategorization` in `:core`. Bewust géén regel voor generieke webshops (Bol.com,
+  Amazon): die verkopen van alles, dus daar gokken we niet — één keer handmatig kiezen volstaat,
+  daarna onthouden als regel.
 - **Instellingen** — budgetlimieten instellen, categorisatieregels inzien, biometrische
   vergrendeling aan/uit.
 - **App-vergrendeling** — `BiometricPrompt` (vingerafdruk/gezicht/schermbeveiliging) vóór de
@@ -144,7 +154,12 @@ vinden. Nog te controleren:
   alleen `:core`: **37 tests, groen** (was 36, plus de nieuwe test).
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
-  het verwachte systeemscherm toont (`app/MainActivity.kt`).
+  het verwachte systeemscherm toont (`app/MainActivity.kt`);
+- of `DatabaseSeeder.seedIfEmpty()` daadwerkelijk draait vóór het eerste import-scherm de
+  categorielijst opvraagt (`FinancioApplication.onCreate()` start het als fire-and-forget
+  coroutine op `Dispatchers.IO`) — de logica zelf (`DefaultCategorization` in `:core`) is
+  volledig getest, maar de Hilt-injectie in `Application` en de Room-transactie eromheen zijn
+  Android-specifiek en dus niet in deze sandbox te verifiëren.
 
 ## Bekende beperkingen
 
@@ -153,6 +168,17 @@ vinden. Nog te controleren:
   wel een punt om later te verfijnen als het als hinderlijk ervaren wordt.
 - Handmatige categorisatie in het importscherm gebruikt een eenvoudig dropdown-menu, geen
   zoekbalk — prima bij een handvol categorieën, minder prettig bij tientallen.
+- Standaardregels (prioriteit 20) winnen altijd van een latere handmatige correctie voor
+  dezelfde tegenpartij, omdat een handmatige correctie alleen als `LearnedRule` (prioriteit 50,
+  lager wint niet) wordt opgeslagen — in de praktijk raakt dit alleen import, niet de
+  transactielijst: een transactie die al automatisch gecategoriseerd is verschijnt sowieso niet
+  in "Te controleren", dus de vraag komt niet eens op. Wil je een standaardregel permanent
+  overrulen, dan kan dat nu alleen door de betreffende transacties in de transactielijst stuk
+  voor stuk handmatig te hercategoriseren — er is nog geen scherm om regels te verwijderen of
+  de prioriteit aan te passen.
+- Er is nog geen manier om een categorie handmatig aan te maken of te verwijderen buiten de
+  meegeleverde standaardset — dat verschijnt pas zodra Instellingen een "Categorie toevoegen"
+  actie krijgt.
 
 ## Ontwerpdocumenten
 
