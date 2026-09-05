@@ -18,7 +18,7 @@ data class BudgetStatusColors(val ok: Color, val warning: Color, val over: Color
 
 @Composable
 fun FinancioTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    val tokens = if (darkTheme) FinancioColorsDark else FinancioColorsLight
+    val tokens: FinancioColorTokens = if (darkTheme) FinancioColorsDark else FinancioColorsLight
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(

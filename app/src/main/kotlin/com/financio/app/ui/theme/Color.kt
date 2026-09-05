@@ -5,36 +5,57 @@ import androidx.compose.ui.graphics.Color
 // Mirrors the design tokens from the schermontwerp artifact 1:1, so the app matches what was
 // reviewed rather than drifting into a fresh palette during implementation.
 
-object FinancioColorsLight {
-    val background = Color(0xFFF4F7F5)
-    val surface = Color(0xFFFFFFFF)
-    val surfaceAlt = Color(0xFFEAF0EC)
-    val ink = Color(0xFF16231F)
-    val inkSoft = Color(0xFF5C6E67)
-    val inkFaint = Color(0xFF8B9992)
-    val line = Color(0xFFDCE5E0)
-    val accent = Color(0xFF1E8A63)
-    val accentSoft = Color(0xFFDEEFE6)
-    val amber = Color(0xFFB9791F)
-    val amberSoft = Color(0xFFF6E8CE)
-    val rose = Color(0xFFC0392B)
-    val roseSoft = Color(0xFFF8E1DD)
+/**
+ * Without this shared interface, `if (darkTheme) FinancioColorsDark else FinancioColorsLight`
+ * in Theme.kt infers as `Any` — the two objects have no common supertype otherwise — and every
+ * `tokens.xxx` property access fails to resolve.
+ */
+interface FinancioColorTokens {
+    val background: Color
+    val surface: Color
+    val surfaceAlt: Color
+    val ink: Color
+    val inkSoft: Color
+    val inkFaint: Color
+    val line: Color
+    val accent: Color
+    val accentSoft: Color
+    val amber: Color
+    val amberSoft: Color
+    val rose: Color
+    val roseSoft: Color
 }
 
-object FinancioColorsDark {
-    val background = Color(0xFF0E1613)
-    val surface = Color(0xFF172420)
-    val surfaceAlt = Color(0xFF1D2E29)
-    val ink = Color(0xFFE8EDEA)
-    val inkSoft = Color(0xFF9FB0AA)
-    val inkFaint = Color(0xFF71827C)
-    val line = Color(0xFF2A3B36)
-    val accent = Color(0xFF4FCB9B)
-    val accentSoft = Color(0xFF1C332B)
-    val amber = Color(0xFFE8AC55)
-    val amberSoft = Color(0xFF3A2E18)
-    val rose = Color(0xFFF0796A)
-    val roseSoft = Color(0xFF3C2420)
+object FinancioColorsLight : FinancioColorTokens {
+    override val background = Color(0xFFF4F7F5)
+    override val surface = Color(0xFFFFFFFF)
+    override val surfaceAlt = Color(0xFFEAF0EC)
+    override val ink = Color(0xFF16231F)
+    override val inkSoft = Color(0xFF5C6E67)
+    override val inkFaint = Color(0xFF8B9992)
+    override val line = Color(0xFFDCE5E0)
+    override val accent = Color(0xFF1E8A63)
+    override val accentSoft = Color(0xFFDEEFE6)
+    override val amber = Color(0xFFB9791F)
+    override val amberSoft = Color(0xFFF6E8CE)
+    override val rose = Color(0xFFC0392B)
+    override val roseSoft = Color(0xFFF8E1DD)
+}
+
+object FinancioColorsDark : FinancioColorTokens {
+    override val background = Color(0xFF0E1613)
+    override val surface = Color(0xFF172420)
+    override val surfaceAlt = Color(0xFF1D2E29)
+    override val ink = Color(0xFFE8EDEA)
+    override val inkSoft = Color(0xFF9FB0AA)
+    override val inkFaint = Color(0xFF71827C)
+    override val line = Color(0xFF2A3B36)
+    override val accent = Color(0xFF4FCB9B)
+    override val accentSoft = Color(0xFF1C332B)
+    override val amber = Color(0xFFE8AC55)
+    override val amberSoft = Color(0xFF3A2E18)
+    override val rose = Color(0xFFF0796A)
+    override val roseSoft = Color(0xFF3C2420)
 }
 
 /** Category identity colors — same swatches as the schermontwerp mockup, deliberately not semantic. */

@@ -46,6 +46,10 @@ kotlin {
     // is running Gradle instead of 17, and the build refuses the mismatch. Same fix as :core.
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        // TopAppBar (used on every screen) is still @ExperimentalMaterial3Api in the pinned
+        // Material3 version — an unacknowledged @RequiresOptIn usage is a compile error, not
+        // just a warning, so this needs an explicit opt-in rather than per-file annotations.
+        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
     }
 }
 
