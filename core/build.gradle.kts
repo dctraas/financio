@@ -22,6 +22,9 @@ dependencies {
     testImplementation(libs.junit5.api)
     testImplementation(libs.junit5.params)
     testRuntimeOnly(libs.junit5.engine)
+    // Gradle 9 no longer puts this on the test classpath implicitly — without it, `gradle test`
+    // fails at runtime with "Failed to load JUnit Platform" even though everything compiles.
+    testRuntimeOnly(libs.junit5.platform.launcher)
 }
 
 tasks.test {

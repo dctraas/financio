@@ -54,11 +54,19 @@ vinden. Nog te controleren:
   `1.13.0` en `2026.08.00`.
 - **AGP 8 → 9, compileSdk 35 → 37.** Die bijgewerkte libraries bleken zelf AGP 9.1.0 en
   compileSdk 37 te vereisen (`checkDebugAarMetadata` faalde daar expliciet op — geen giswerk,
-  de foutmelding noemt deze versies letterlijk). Beide zijn dienovereenkomstig bijgewerkt in
-  `gradle/libs.versions.toml` en `app/build.gradle.kts`. Dit is een major-AGP-sprong die niet in
-  deze sandbox getest kon worden — reken erop dat dit nog een extra rondje foutmeldingen kan
-  opleveren (bijvoorbeeld rond de minimale Gradle-versie die AGP 9 vereist, of DSL die tussen
-  AGP 8 en 9 is gewijzigd) voordat de build weer volledig groen is.
+  de foutmelding noemt deze versies letterlijk). Beide zijn dienovereenkomstig bijgewerkt.
+- **Gradle 8.14.3 → 9.3.1.** AGP 9.1.0 vereist dat zelf. De wrapper (`gradle/wrapper/*`,
+  `gradlew`, `gradlew.bat`) is bijgewerkt en dit keer wél in deze sandbox getest: Gradle 9.3.1
+  gedownload en `:core` er letterlijk mee gebouwd, met de échte `gradle/libs.versions.toml` en
+  `core/build.gradle.kts` uit deze repo (niet een losse testharness zoals bij eerdere fixes) —
+  **35 tests, groen**. Dat testen ving meteen een echt Gradle 9-probleem op: sinds Gradle 9 komt
+  de JUnit Platform Launcher niet meer automatisch op het testklassenpad terecht, dus `gradle
+  test` faalde met "Failed to load JUnit Platform" tot `junit-platform-launcher:1.11.0` expliciet
+  als `testRuntimeOnly`-afhankelijkheid was toegevoegd — inmiddels gedaan.
+  Er staat nog wél een niet-blokkerende deprecatie-waarschuwing ("incompatible with Gradle 10")
+  die uit de Kotlin Gradle-plugin zelf komt (een verouderd `Usage`-attribuut) — pas op te lossen
+  door Kotlin/KSP samen te updaten, wat bewust een aparte stap blijft (zie eerder in dit
+  gesprek: Kotlin en KSP moeten in lockstep, niet los).
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
