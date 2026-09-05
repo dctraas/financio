@@ -1,0 +1,8 @@
+<resources>
+    <!-- Compose draws the real theme (see ui/theme); this is just the manifest-required
+         pre-Compose window background so there's no flash of the wrong color at cold start. -->
+    <style name="Theme.Financio" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@color/window_background</item>
+    </style>
+</resources>

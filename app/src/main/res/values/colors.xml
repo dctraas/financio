@@ -1,0 +1,4 @@
+<resources>
+    <!-- Matches --app-bg (light) from the schermontwerp artifact's design tokens. -->
+    <color name="window_background">#F4F7F5</color>
+</resources>
