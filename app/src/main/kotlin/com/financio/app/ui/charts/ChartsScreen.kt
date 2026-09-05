@@ -1,6 +1,7 @@
 package com.financio.app.ui.charts
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,6 +70,13 @@ fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = h
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
                     ModeSwitch(mode = state.mode, onModeChange = viewModel::selectMode)
 
+                    PeriodNavigator(
+                        label = state.referenceLabel,
+                        canGoToNextPeriod = state.canGoToNextPeriod,
+                        onPrevious = viewModel::goToPreviousPeriod,
+                        onNext = viewModel::goToNextPeriod,
+                    )
+
                     Text(
                         state.currentTotal.toDisplayString(),
                         style = MaterialTheme.typography.headlineMedium,
@@ -100,6 +109,39 @@ fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = h
                 }
             }
         }
+    }
+}
+
+/**
+ * The bar chart used to always show a fixed trailing window ending "now", with no way to look
+ * further back — this lets you shift that whole window, one month/year at a time. Text-based
+ * ‹ › affordances, matching the rest of the app's plain-text link style (e.g. "Beheren →" in
+ * Instellingen) rather than an icon whose availability in the trimmed icon set isn't guaranteed.
+ */
+@Composable
+private fun PeriodNavigator(label: String, canGoToNextPeriod: Boolean, onPrevious: () -> Unit, onNext: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(top = 12.dp),
+    ) {
+        Text(
+            "‹",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable(onClick = onPrevious).padding(horizontal = 4.dp, vertical = 2.dp),
+        )
+        Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "›",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (canGoToNextPeriod) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+            modifier = Modifier
+                .let { if (canGoToNextPeriod) it.clickable(onClick = onNext) else it }
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+        )
     }
 }
 

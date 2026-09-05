@@ -24,9 +24,16 @@ traject.
 
 ## Wat er werkt
 
-- **Transacties** — lijst, met tik-om-te-categoriseren voor niet-gematchte transacties.
+- **Transacties** — lijst met datum per regel, zoeken op naam/omschrijving, filteren op categorie
+  (inclusief een "Niet gecategoriseerd"-filter) en sorteren (datum/bedrag, op- of aflopend) — de
+  controles die bunq/YNAB/Buddy ook boven hun transactielijst zetten. Een niet-gecategoriseerde
+  transactie is nu duidelijk te onderscheiden (omlijnde amberkleurige stip + "Tik om te
+  categoriseren" in plaats van de neutrale kleur van een echte categorie als "Overig"). Tik op
+  *elke* transactie, ook een al gecategoriseerde, om de categorie te wijzigen.
 - **Budgetten** — limieten per categorie met groen/amber/rood, tik op een categorie voor de grafiek.
-- **Grafieken** — maand-op-maand en jaar-op-jaar per categorie, met de budgetlimiet als lijn in de grafiek.
+- **Grafieken** — maand-op-maand en jaar-op-jaar per categorie, met de budgetlimiet als lijn in de
+  grafiek en een ‹ ›-navigator om het weergegeven venster naar eerdere maanden/jaren te schuiven
+  (voorheen alleen een vast venster eindigend op vandaag, met geen manier om terug te bladeren).
 - **Importeren** — CSV/MT940 inlezen, dedupliceren, automatisch categoriseren; wat overblijft
   wordt **per tegenpartij gegroepeerd** (één keuze voor alle 40 Albert Heijn-transacties samen,
   in plaats van 40 losse keuzes), gesorteerd op grootste totaalbedrag eerst, met aantal/bedrag/
@@ -171,6 +178,17 @@ vinden. Nog te controleren:
   `CategoryRepository` drie nieuwe methodes (`addCategory`/`deleteCategory`/`deleteRule`); beide
   volledig unit-getest (49 tests groen, was 47). De Android-laag (DAO's, Room-repository-impl,
   Compose-UI, navigatie) is zoals altijd niet in deze sandbox te bouwen.
+- **Transacties: filteren/sorteren, datum tonen, altijd kunnen hercategoriseren; Grafieken:
+  periode-navigator.** Drie losse verzoeken in één keer verwerkt, alle drie zuivere UI-/
+  ViewModel-wijzigingen in `:app` — geen `:core`-code geraakt, dus niets hier opnieuw te
+  bouwen/testen. `TransactionsViewModel` filtert/sorteert nu client-side (zoekterm, categorie,
+  4 sorteringen) over de al geladen lijst — bewust geen SQL-query per filtercombinatie, want een
+  persoonlijke rekening is klein genoeg om dat overbodig te maken. `ChartsViewModel` kreeg een
+  verschuifbaar ankerpunt (`referenceMonth`) in plaats van een vast venster dat altijd op vandaag
+  eindigde. Bewust `‹`/`›`-tekens gebruikt in plaats van `Icons.Filled.ChevronLeft`/`ChevronRight`:
+  kon niet verifiëren of die iconen in de meegeleverde `material-icons-core` zitten (versus de
+  niet-meegeleverde `material-icons-extended`) zonder een build, dus liever hetzelfde
+  platte-tekst-linkpatroon dat de rest van de app al gebruikt (bijv. "Beheren →").
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`);
@@ -196,6 +214,11 @@ vinden. Nog te controleren:
   categorie Y in plaats van Z" verwijder je 'm en maak je 'm opnieuw aan.
 - Een categorie verwijderen kan niet ongedaan worden gemaakt; er komt geen bevestiging-met-
   voorbeeld ("dit raakt N transacties en M regels"), alleen de generieke waarschuwingstekst.
+- De grafieken-periodenavigator kan onbeperkt terug — er is geen "geen data meer, klaar"-grens;
+  je ziet dan gewoon lege (€0,00) staven voor periodes vóór je eerste import.
+- Filteren/sorteren in Transacties werkt alleen op wat al geladen is in het geheugen (client-side);
+  bij een zeer lange transactiehistorie (jaren) zou dit ooit naar een database-query verplaatst
+  moeten worden, maar voor fase 1 is dat verre toekomstmuziek.
 
 ## Ontwerpdocumenten
 
