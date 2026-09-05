@@ -34,6 +34,9 @@ data class ChartsUiState(
     val deltaLabel: String? = null,
     val deltaIsIncrease: Boolean = false,
     val limit: Money? = null,
+    /** The rightmost bar's period, e.g. "september 2026" or "2026" — shown next to the ‹ › navigator. */
+    val referenceLabel: String = "",
+    val canGoToNextPeriod: Boolean = false,
 )
 
 @HiltViewModel
@@ -45,16 +48,23 @@ class ChartsViewModel @Inject constructor(
 
     private val selectedCategoryId = MutableStateFlow<Long?>(null)
     private val mode = MutableStateFlow(ChartMode.MONTH_OVER_MONTH)
+    // The rightmost bar's period. Defaults to "now"; goToPreviousPeriod/goToNextPeriod shift the
+    // whole 6-month/4-year window, which is how you get to see a month or year further back than
+    // the fixed trailing window this screen used to show with no way to move it.
+    private val referenceMonth = MutableStateFlow(YearMonth.now())
     private val categories = categoryRepository.observeCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val uiState: StateFlow<ChartsUiState> = combine(categories, selectedCategoryId, mode) { cats, selected, m ->
-        Triple(cats, selected ?: cats.firstOrNull()?.id, m)
-    }.flatMapLatest { (cats, categoryId, m) ->
+    val uiState: StateFlow<ChartsUiState> = combine(
+        categories, selectedCategoryId, mode, referenceMonth,
+    ) { cats, selected, m, anchor ->
+        ChartQuery(cats, selected ?: cats.firstOrNull()?.id, m, anchor)
+    }.flatMapLatest { query ->
+        val categoryId = query.categoryId
         if (categoryId == null) {
-            flowOf(ChartsUiState(categories = cats))
+            flowOf(ChartsUiState(categories = query.categories))
         } else {
-            seriesFor(cats, categoryId, m)
+            seriesFor(query.categories, categoryId, query.mode, query.anchor)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChartsUiState())
 
@@ -66,29 +76,48 @@ class ChartsViewModel @Inject constructor(
         mode.value = newMode
     }
 
-    private fun seriesFor(cats: List<Category>, categoryId: Long, m: ChartMode) = run {
-        val periods = periodsFor(m)
+    fun goToPreviousPeriod() {
+        referenceMonth.value = shift(referenceMonth.value, mode.value, -1)
+    }
+
+    fun goToNextPeriod() {
+        val candidate = shift(referenceMonth.value, mode.value, +1)
+        if (!candidate.isAfter(YearMonth.now())) referenceMonth.value = candidate
+    }
+
+    private fun shift(anchor: YearMonth, m: ChartMode, steps: Long): YearMonth = when (m) {
+        ChartMode.MONTH_OVER_MONTH -> anchor.plusMonths(steps)
+        ChartMode.YEAR_OVER_YEAR -> anchor.plusYears(steps)
+    }
+
+    private data class ChartQuery(
+        val categories: List<Category>,
+        val categoryId: Long?,
+        val mode: ChartMode,
+        val anchor: YearMonth,
+    )
+
+    private fun seriesFor(cats: List<Category>, categoryId: Long, m: ChartMode, anchor: YearMonth) = run {
+        val periods = periodsFor(m, anchor)
         combine(periods.map { period -> transactionRepository.observeSpent(categoryId, period) }) { amounts ->
-            buildState(cats, categoryId, m, periods, amounts.toList())
+            buildState(cats, categoryId, m, anchor, periods, amounts.toList())
         }.flatMapLatest { partial ->
-            budgetRepository.observeBudgets(YearMonth.now()).map { budgets ->
+            budgetRepository.observeBudgets(anchor).map { budgets ->
                 partial.copy(limit = budgets.firstOrNull { it.categoryId == categoryId }?.limit)
             }
         }
     }
 
-    private fun periodsFor(m: ChartMode): List<YearMonth> {
-        val now = YearMonth.now()
-        return when (m) {
-            ChartMode.MONTH_OVER_MONTH -> (5 downTo 0).map { now.minusMonths(it.toLong()) }
-            ChartMode.YEAR_OVER_YEAR -> (3 downTo 0).map { now.minusYears(it.toLong()) }
-        }
+    private fun periodsFor(m: ChartMode, anchor: YearMonth): List<YearMonth> = when (m) {
+        ChartMode.MONTH_OVER_MONTH -> (5 downTo 0).map { anchor.minusMonths(it.toLong()) }
+        ChartMode.YEAR_OVER_YEAR -> (3 downTo 0).map { anchor.minusYears(it.toLong()) }
     }
 
     private fun buildState(
         cats: List<Category>,
         categoryId: Long,
         m: ChartMode,
+        anchor: YearMonth,
         periods: List<YearMonth>,
         amounts: List<Money>,
     ): ChartsUiState {
@@ -110,7 +139,15 @@ class ChartsViewModel @Inject constructor(
             currentTotal = current,
             deltaLabel = deltaLabel,
             deltaIsIncrease = previous != null && current.cents > previous.cents,
+            referenceLabel = referenceLabelFor(anchor, m),
+            canGoToNextPeriod = anchor.isBefore(YearMonth.now()),
         )
+    }
+
+    private fun referenceLabelFor(anchor: YearMonth, m: ChartMode): String = when (m) {
+        ChartMode.MONTH_OVER_MONTH ->
+            "${anchor.month.getDisplayName(TextStyle.FULL, Locale("nl")).replaceFirstChar { it.uppercase() }} ${anchor.year}"
+        ChartMode.YEAR_OVER_YEAR -> anchor.year.toString()
     }
 
     private fun labelFor(period: YearMonth, m: ChartMode): String = when (m) {

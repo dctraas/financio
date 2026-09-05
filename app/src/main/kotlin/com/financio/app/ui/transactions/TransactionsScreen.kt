@@ -1,22 +1,28 @@
 package com.financio.app.ui.transactions
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,10 +35,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.theme.CategoryColors
+import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.core.model.Category
 import com.financio.core.model.Money
 import com.financio.core.model.Transaction
@@ -52,16 +61,26 @@ fun TransactionsScreen(onImportClick: () -> Unit, viewModel: TransactionsViewMod
             )
         },
     ) { padding ->
-        if (state.transactions.isEmpty()) {
+        if (!state.hasUnfilteredTransactions) {
             EmptyTransactions(padding, onImportClick)
         } else {
-            LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize()) {
-                items(state.transactions, key = { it.id }) { transaction ->
-                    TransactionRow(
-                        transaction = transaction,
-                        categoryName = state.categoriesById[transaction.categoryId]?.name,
-                        onClick = { if (transaction.categoryId == null) categorizing = transaction },
-                    )
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                TransactionFilters(state = state, viewModel = viewModel)
+                if (state.transactions.isEmpty()) {
+                    NoFilterResults(onClearFilters = viewModel::clearFilters)
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(state.transactions, key = { it.id }) { transaction ->
+                            TransactionRow(
+                                transaction = transaction,
+                                categoryName = state.categoriesById[transaction.categoryId]?.name,
+                                // Always editable, not just when uncategorized: an automatically
+                                // assigned category can be wrong, and there was previously no way
+                                // to fix that here.
+                                onClick = { categorizing = transaction },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -71,6 +90,7 @@ fun TransactionsScreen(onImportClick: () -> Unit, viewModel: TransactionsViewMod
         CategoryPickerDialog(
             transactionName = transaction.counterpartyName,
             categories = state.categories,
+            currentCategoryId = transaction.categoryId,
             onDismiss = { categorizing = null },
             onSelect = { categoryId ->
                 viewModel.categorize(transaction, categoryId)
@@ -84,6 +104,7 @@ fun TransactionsScreen(onImportClick: () -> Unit, viewModel: TransactionsViewMod
 private fun CategoryPickerDialog(
     transactionName: String,
     categories: List<Category>,
+    currentCategoryId: Long?,
     onDismiss: () -> Unit,
     onSelect: (Long) -> Unit,
 ) {
@@ -93,8 +114,11 @@ private fun CategoryPickerDialog(
         text = {
             Column {
                 categories.forEach { category ->
+                    val isCurrent = category.id == currentCategoryId
                     Text(
                         category.name,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.fillMaxWidth().clickable { onSelect(category.id) }.padding(vertical = 12.dp),
                     )
                 }
@@ -127,19 +151,101 @@ private fun EmptyTransactions(padding: PaddingValues, onImportClick: () -> Unit)
     }
 }
 
+/**
+ * Search, category filter chips and a sort choice — the same three controls competing budgeting
+ * apps (bunq, YNAB, Buddy) put above their transaction list. Filtering/sorting happens in the
+ * ViewModel over the already-loaded list rather than in SQL: a personal account's history is
+ * small enough that this is simpler than pushing every filter combination into a query.
+ */
+@Composable
+private fun TransactionFilters(state: TransactionsUiState, viewModel: TransactionsViewModel) {
+    var sortMenuOpen by remember { mutableStateOf(false) }
+
+    Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+        OutlinedTextField(
+            value = state.searchQuery,
+            onValueChange = viewModel::setSearchQuery,
+            placeholder = { Text("Zoeken op naam of omschrijving") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        LazyRow(
+            contentPadding = PaddingValues(vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item {
+                FilterChip(
+                    selected = state.categoryFilter == CategoryFilter.All,
+                    onClick = { viewModel.setCategoryFilter(CategoryFilter.All) },
+                    label = { Text("Alle") },
+                )
+            }
+            item {
+                FilterChip(
+                    selected = state.categoryFilter == CategoryFilter.Uncategorized,
+                    onClick = { viewModel.setCategoryFilter(CategoryFilter.Uncategorized) },
+                    label = { Text("Niet gecategoriseerd") },
+                )
+            }
+            items(state.categories, key = { it.id }) { category ->
+                FilterChip(
+                    selected = state.categoryFilter == CategoryFilter.Specific(category.id),
+                    onClick = { viewModel.setCategoryFilter(CategoryFilter.Specific(category.id)) },
+                    label = { Text(category.name) },
+                )
+            }
+        }
+
+        Box {
+            Text(
+                "Sorteren: ${state.sort.label} ▾",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.clickable { sortMenuOpen = true }.padding(vertical = 4.dp),
+            )
+            DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                TransactionSort.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label) },
+                        onClick = { viewModel.setSort(option); sortMenuOpen = false },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoFilterResults(onClearFilters: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(32.dp)) {
+        Text("Geen transacties voor dit filter.", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Wis filters →",
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 12.dp).clickable(onClick = onClearFilters),
+        )
+    }
+}
+
 @Composable
 private fun TransactionRow(transaction: Transaction, categoryName: String?, onClick: () -> Unit) {
+    val uncategorized = categoryName == null
+    val warningColor = LocalBudgetStatusColors.current.warning
+
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CategoryDot(categoryName)
+        CategoryDot(categoryName, warningColor)
         Column(modifier = Modifier.weight(1f)) {
             Text(transaction.counterpartyName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
             Text(
-                categoryName ?: "Te categoriseren",
+                subtitleFor(categoryName, transaction),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (uncategorized) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (uncategorized) warningColor else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         val isIncome = transaction.amount.cents > 0
@@ -151,10 +257,26 @@ private fun TransactionRow(transaction: Transaction, categoryName: String?, onCl
     }
 }
 
+/** "Boodschappen · 4 sep" when categorized, or an unmissable "Tik om te categoriseren · 4 sep" when not. */
+private fun subtitleFor(categoryName: String?, transaction: Transaction): String {
+    val label = categoryName ?: "Tik om te categoriseren"
+    return "$label · ${transaction.date.toShortDisplayString()}"
+}
+
+/**
+ * A filled dot for an actual category (including "Overig" in its own neutral gray) versus an
+ * *outlined* dot in the budget-warning amber for "no category yet" — a plain gray fill would be
+ * ambiguous with "Overig", which is a real, deliberately chosen category, not a missing one.
+ */
 @Composable
-private fun CategoryDot(categoryName: String?) {
-    val color = categoryColorFor(categoryName)
-    androidx.compose.foundation.Canvas(Modifier.size(11.dp)) { drawCircle(color) }
+private fun CategoryDot(categoryName: String?, warningColor: Color) {
+    androidx.compose.foundation.Canvas(Modifier.size(11.dp)) {
+        if (categoryName == null) {
+            drawCircle(warningColor, style = Stroke(width = 1.5.dp.toPx()))
+        } else {
+            drawCircle(categoryColorFor(categoryName))
+        }
+    }
 }
 
 private fun categoryColorFor(categoryName: String?): Color = when (categoryName?.lowercase()) {

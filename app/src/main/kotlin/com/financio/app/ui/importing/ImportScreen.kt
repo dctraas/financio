@@ -32,13 +32,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.ui.common.toShortDisplayString
 import com.financio.core.model.Category
 import com.financio.core.usecase.UncategorizedGroup
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @Composable
 fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel()) {
@@ -198,18 +196,9 @@ private fun groupSummary(group: UncategorizedGroup): String {
     } else {
         group.totalAmount.toDisplayString()
     }
-    val period = if (group.firstDate == group.lastDate) formatShortDate(group.firstDate) else {
-        "${formatShortDate(group.firstDate)} – ${formatShortDate(group.lastDate)}"
+    val period = if (group.firstDate == group.lastDate) group.firstDate.toShortDisplayString() else {
+        "${group.firstDate.toShortDisplayString()} – ${group.lastDate.toShortDisplayString()}"
     }
     val countPrefix = if (group.count > 1) "${group.count}× · " else ""
     return "$countPrefix$amount · $period"
 }
-
-private val shortDateFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("nl"))
-
-private fun formatShortDate(date: LocalDate): String =
-    date.format(shortDateFormatter).let { formatted ->
-        // Force a lowercase month abbreviation regardless of locale data quirks ("4 Sep" -> "4 sep").
-        val parts = formatted.split(" ")
-        if (parts.size == 2) "${parts[0]} ${parts[1].lowercase()}" else formatted
-    }
