@@ -128,13 +128,20 @@ vinden. Nog te controleren:
   dit patroon). Toegevoegd: `System.loadLibrary("sqlcipher")` vóór `Room.databaseBuilder(...)` in
   `DatabaseModule.provideDatabase()`. Een eigen omissie uit de oorspronkelijke opzet, niet
   gerelateerd aan de eerdere versie-bumps.
-- **CSV-import faalde met "Kolom 'Datum' ontbreekt".** Een echte "Mijn ING"-export bleek
-  tab-gescheiden te zijn (ondanks de `.csv`-extensie), niet met puntkomma's zoals aangenomen op
-  basis van de illustratie in het architectuurdocument. `CsvIngParser` detecteert het
-  scheidingsteken nu automatisch (tab of puntkomma, tab eerst geprobeerd) op basis van of de
-  header daarmee de kolom "Datum" herkent; puntkomma blijft als fallback werken. Getest tegen een
-  echte, geanonimiseerde export (`CsvIngParserTest`) — dit keer wél in de sandbox echt gebouwd en
-  getest, want dit raakt alleen `:core`: **36 tests, groen** (was 35, plus de nieuwe test).
+- **CSV-import faalde met "Kolom 'Datum' ontbreekt" — twee keer, met een verkeerde eerste
+  diagnose.** De eerste keer leek de export tab-gescheiden; dat bleek achteraf een
+  kopieerartefact (Excel → terminal-plak) te zijn, geen echt tab-teken — mijn fout, ik had toen
+  geen letterlijke bytes van het bestand, alleen hoe het er in de terugkoppeling uitzag. De
+  échte, herbevestigde oorzaak: ING's CSV-velden staan tussen dubbele aanhalingstekens
+  (`"Datum";"Naam / Omschrijving";...`, RFC 4180-stijl) en de parser haalde die aanhalingstekens
+  nooit weg — het token was dus letterlijk `"Datum"`, wat nooit gelijk is aan `Datum`. Dit keer
+  bevestigd tegen een letterlijke, geciteerde export die de projecteigenaar rechtstreeks plakte.
+  `CsvIngParser` heeft nu een RFC 4180-bewuste regel-splitser (`splitCsvLine`) die aanhalingstekens
+  correct verwijdert (en `""`-escapes ontsnapt) vóórdat kolomnamen/waarden vergeleken worden; de
+  eerdere tab/puntkomma-detectie blijft staan (onschadelijk, kost niets) maar is nu gedocumenteerd
+  als defensief, niet als bevestigd echt formaat. Getest tegen de exacte, geanonimiseerde
+  originele export (`CsvIngParserTest`) — in de sandbox echt gebouwd en getest, want dit raakt
+  alleen `:core`: **37 tests, groen** (was 36, plus de nieuwe test).
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).

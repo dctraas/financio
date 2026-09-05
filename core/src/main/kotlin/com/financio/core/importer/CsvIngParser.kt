@@ -13,15 +13,17 @@ import java.time.format.DateTimeFormatter
  * columns between export versions. A column this parser needs that's missing fails loudly with
  * [UnrecognizedFormatException] instead of silently reading the wrong field.
  *
- * The field delimiter is auto-detected between a real tab and ";" rather than hardcoded: a real
- * "Mijn ING" export (despite the ".csv" extension) turned out to be tab-delimited, not the
- * semicolon originally assumed from the architecture doc's illustration — confirmed against an
- * actual downloaded export. Semicolon is kept as a fallback since it's a plausible variant (e.g.
- * a different export setting) and was the original assumption; if neither delimiter yields a
- * recognizable header this still fails with the same clear "column missing" error.
+ * Fields are optionally RFC 4180-quoted (`"Datum";"Naam / Omschrijving";...`) — confirmed
+ * against a real "Mijn ING" export copied straight out of the app, rather than via a
+ * spreadsheet/editor round-trip that had silently dropped the quotes in an earlier report of
+ * this same file. [splitCsvLine] strips the surrounding quotes (and un-escapes `""` to `"`)
+ * so column names and values compare correctly either way. The field delimiter is auto-detected
+ * between a real tab and ";" for the same reason — a differently-garbled paste of this file
+ * once looked tab-delimited — with ";" as the fallback and, per RFC 4180, the actual ING format.
  *
- * Known simplification: assumes no column value itself contains the detected delimiter — true
- * for every ING export seen so far, since names/descriptions use ING's own separators internally.
+ * Known simplification: does not support a delimiter or newline embedded inside a quoted field
+ * value — true for every ING export seen so far, since names/descriptions use ING's own
+ * separators (colons, spaces) internally, never a literal ";".
  */
 class CsvIngParser : BankStatementParser {
 
@@ -32,7 +34,7 @@ class CsvIngParser : BankStatementParser {
         require(lines.isNotEmpty()) { "Leeg CSV-bestand." }
 
         val delimiter = detectDelimiter(lines.first())
-        val header = lines.first().split(delimiter).map { it.trim() }
+        val header = splitCsvLine(lines.first(), delimiter).map { it.trim() }
         val columnIndex = REQUIRED_COLUMNS.associateWith { column ->
             header.indexOf(column).also { index ->
                 if (index < 0) {
@@ -48,11 +50,41 @@ class CsvIngParser : BankStatementParser {
 
     private fun detectDelimiter(headerLine: String): Char =
         CANDIDATE_DELIMITERS.firstOrNull { delimiter ->
-            headerLine.split(delimiter).map { it.trim() }.contains(COL_DATE)
+            splitCsvLine(headerLine, delimiter).map { it.trim() }.contains(COL_DATE)
         } ?: ';' // no candidate recognized the header; fall through to the original error below
 
+    /**
+     * Splits one CSV line on [delimiter], honoring RFC 4180 quoting: a field wrapped in `"..."`
+     * may contain the delimiter or a `""`-escaped quote literally, and the surrounding quotes
+     * themselves are stripped from the result. An unquoted field is returned as-is.
+     */
+    private fun splitCsvLine(line: String, delimiter: Char): List<String> {
+        val fields = mutableListOf<String>()
+        val current = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            when {
+                inQuotes && c == '"' && i + 1 < line.length && line[i + 1] == '"' -> {
+                    current.append('"')
+                    i++ // consume both quotes of the "" escape
+                }
+                c == '"' -> inQuotes = !inQuotes
+                c == delimiter && !inQuotes -> {
+                    fields.add(current.toString())
+                    current.clear()
+                }
+                else -> current.append(c)
+            }
+            i++
+        }
+        fields.add(current.toString())
+        return fields
+    }
+
     private fun parseLine(line: String, delimiter: Char, columnIndex: Map<String, Int>, accountId: Long): ParsedTransaction {
-        val fields = line.split(delimiter)
+        val fields = splitCsvLine(line, delimiter)
         fun col(name: String): String = fields.getOrElse(columnIndex.getValue(name)) { "" }.trim()
 
         val date = LocalDate.parse(col(COL_DATE), DATE_FORMAT)
