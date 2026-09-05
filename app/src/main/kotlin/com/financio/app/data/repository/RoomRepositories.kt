@@ -40,6 +40,10 @@ class RoomTransactionRepository @Inject constructor(
 
     override fun observeSpent(categoryId: Long, yearMonth: YearMonth): Flow<Money> =
         dao.observeSpent(categoryId, yearMonth.toString()).map { Money(it) }
+
+    override suspend fun updateCategory(transactionId: Long, categoryId: Long) {
+        dao.updateCategory(transactionId, categoryId)
+    }
 }
 
 class RoomCategoryRepository @Inject constructor(

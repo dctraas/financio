@@ -66,4 +66,7 @@ interface TransactionDao {
         """
     )
     fun observeSpent(categoryId: Long, yearMonth: String): Flow<Long>
+
+    @Query("UPDATE transactions SET categoryId = :categoryId WHERE id = :transactionId")
+    suspend fun updateCategory(transactionId: Long, categoryId: Long)
 }

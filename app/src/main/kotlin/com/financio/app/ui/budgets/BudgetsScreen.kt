@@ -2,6 +2,7 @@ package com.financio.app.ui.budgets
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +31,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 @Composable
-fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
+fun BudgetsScreen(onCategoryClick: (Long) -> Unit = {}, viewModel: BudgetsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val monthLabel = state.yearMonth.month.getDisplayName(TextStyle.FULL, Locale("nl")) + " " + state.yearMonth.year
 
@@ -54,14 +55,16 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
                 }
-                items(state.rows, key = { it.budget.id }) { row -> BudgetCard(row) }
+                items(state.rows, key = { it.budget.id }) { row ->
+                    BudgetCard(row, onClick = { row.category?.let { onCategoryClick(it.id) } })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun BudgetCard(row: BudgetRow) {
+private fun BudgetCard(row: BudgetRow, onClick: () -> Unit) {
     val statusColors = LocalBudgetStatusColors.current
     val statusColor = when (row.status) {
         BudgetStatus.OK -> statusColors.ok
@@ -77,6 +80,7 @@ private fun BudgetCard(row: BudgetRow) {
             .clip(RoundedCornerShape(14.dp))
             .background(cardTint)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
             .padding(16.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
