@@ -25,10 +25,10 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FinancioDatabase {
         val passphrase = DatabasePassphraseProvider(context).getOrCreatePassphrase()
-        // Class name per net.zetetic:sqlcipher-android's AndroidX/Room integration. This is the
-        // one piece of the skeleton that couldn't be verified in this sandbox (no Android SDK /
-        // no access to Google's Maven repo here) — double-check it against the installed
-        // sqlcipher-android version's docs the first time this module is built for real.
+        // Verified directly against the 4.18.0 AAR (downloaded from Maven Central and inspected)
+        // that this class still exists under this package, and that its bundled arm64-v8a native
+        // library has 16 KB-aligned LOAD segments — required on newer devices, see the 16 KB
+        // page size fix in the version bump that pinned this version.
         return Room.databaseBuilder(context, FinancioDatabase::class.java, "financio.db")
             .openHelperFactory(SupportOpenHelperFactory(passphrase))
             .build()

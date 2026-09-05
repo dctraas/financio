@@ -41,10 +41,19 @@ Nog niet gecompileerd in een echte Android-omgeving — zie "Bouwen" hieronder.
 
 `:core:test` is in deze repo geverifieerd (35 tests, groen). `:app` kon in de omgeving waarin
 dit skeleton is opgezet niet gebouwd worden — die had geen toegang tot Google's Maven-repository
-(nodig voor AndroidX/AGP) — dus open het project in Android Studio voor de eerste echte build
-van `:app`. Controleer daarbij in ieder geval:
-- de exacte SQLCipher-integratieklasse in `app/di/DatabaseModule.kt` tegen de geïnstalleerde
-  `net.zetetic:sqlcipher-android`-versie;
+(nodig voor AndroidX/AGP) — dus is dit voor het eerst echt gecompileerd en gestart in Android
+Studio door de projecteigenaar, wat een paar dingen aan het licht bracht die de sandbox niet kon
+vinden. Nog te controleren:
+- **16 KB-pagina-uitlijning van AndroidX-native libraries.** `libsqlcipher.so` is opgelost door
+  `net.zetetic:sqlcipher-android` naar 4.18.0 te tillen (geverifieerd: de klasse bestaat nog en
+  de LOAD-segmenten zijn daadwerkelijk 16 KB uitgelijnd). `libandroidx.graphics.path.so` — een
+  transitieve afhankelijkheid, vermoedelijk via `navigation-compose`'s predictive-back-animatie —
+  kon **niet** worden opgelost vanuit deze omgeving: die library staat alleen op Google's
+  Maven-repository, niet op Maven Central, dus ik kon geen 16 KB-uitgelijnde versie verifiëren.
+  **Actie voor jou**: open Project Structure → Dependencies in Android Studio (of het
+  lampje-icoon naast een verouderde versie in `gradle/libs.versions.toml`) en werk
+  `navigationCompose`, `activityCompose` en `composeBom` bij naar hun huidige laatste versie —
+  Android Studio heeft wél live toegang tot die repository en kiest een geldig versienummer.
 - of `compileSdk`/`targetSdk` 35 en de overige versies in `gradle/libs.versions.toml` nog de
   gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel

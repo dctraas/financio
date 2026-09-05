@@ -13,7 +13,7 @@ room = "2.6.1"
 coroutines = "1.9.0"
 biometric = "1.1.0"
 fragmentKtx = "1.8.3"
-sqlcipher = "4.5.7"
+sqlcipher = "4.18.0"
 junit5 = "5.11.0"
 
 [libraries]
