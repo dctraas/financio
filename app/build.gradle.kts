@@ -40,6 +40,15 @@ android {
     }
 }
 
+kotlin {
+    // Must match android.compileOptions above — the Android Gradle plugin does not sync these
+    // for you, so without this the Kotlin (and therefore ksp) compile tasks target whatever JDK
+    // is running Gradle instead of 17, and the build refuses the mismatch. Same fix as :core.
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
     implementation(project(":core"))
 
