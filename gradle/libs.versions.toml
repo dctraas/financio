@@ -4,8 +4,14 @@
 # these are the exact versions the reporter's own Android Studio resolved and reported requiring
 # AGP 9.1.0 and compileSdk 37 in a real "checkDebugAarMetadata" failure.
 agp = "9.1.0"
-kotlin = "2.0.21"
-ksp = "2.0.21-1.0.28"
+# Bumped together, in lockstep, alongside the AGP jump above: Kotlin 2.0.21 is what caused
+# "Cannot add extension with name 'kotlin'" when applying org.jetbrains.kotlin.android against
+# AGP 9.1.0 — a genuine incompatibility, not a config error, since Kotlin 2.0.21 predates AGP 9
+# by a long way. KSP's own versioning scheme changed too: from Kotlin 2.3 onward it no longer
+# embeds the Kotlin version in its own version string, so it isn't literally "2.3.21-x.y.z"
+# anymore — 2.3.11 is KSP's own current release for this Kotlin line.
+kotlin = "2.3.21"
+ksp = "2.3.11"
 coreKtx = "1.13.1"
 lifecycle = "2.8.6"
 activityCompose = "1.13.0"

@@ -63,10 +63,16 @@ vinden. Nog te controleren:
   de JUnit Platform Launcher niet meer automatisch op het testklassenpad terecht, dus `gradle
   test` faalde met "Failed to load JUnit Platform" tot `junit-platform-launcher:1.11.0` expliciet
   als `testRuntimeOnly`-afhankelijkheid was toegevoegd — inmiddels gedaan.
-  Er staat nog wél een niet-blokkerende deprecatie-waarschuwing ("incompatible with Gradle 10")
-  die uit de Kotlin Gradle-plugin zelf komt (een verouderd `Usage`-attribuut) — pas op te lossen
-  door Kotlin/KSP samen te updaten, wat bewust een aparte stap blijft (zie eerder in dit
-  gesprek: Kotlin en KSP moeten in lockstep, niet los).
+- **Kotlin 2.0.21 → 2.3.21, KSP 2.0.21-1.0.28 → 2.3.11.** AGP 9.1.0 kon niet samen met
+  Kotlin 2.0.21 — `org.jetbrains.kotlin.android` faalde met "Cannot add extension with name
+  'kotlin'", een genuine versie-incompatibiliteit (Kotlin 2.0.21 dateert van ruim vóór AGP 9).
+  Dit maakte de eerder bewust uitgestelde Kotlin/KSP-update alsnog noodzakelijk. Beide zijn in
+  deze sandbox echt geverifieerd, inclusief het samenspel: een minimaal Kotlin+KSP-scratchproject
+  gebouwd om de versiecombinatie te bevestigen, én `:core` opnieuw gedraaid met de bijgewerkte
+  `gradle/libs.versions.toml` — **35 tests, groen**, en de eerdere "incompatible with Gradle
+  10"-waarschuwing (uit de Kotlin-plugin zelf) is als bijvangst ook verdwenen. Let op: KSP's
+  eigen versienummering is losgekoppeld van Kotlin's versienummer sinds Kotlin 2.3 — `2.3.11` is
+  geen typfout voor `2.3.21-iets`, KSP volgt vanaf hier zijn eigen releaseschema.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
