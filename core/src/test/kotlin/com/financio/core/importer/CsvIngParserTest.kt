@@ -58,10 +58,12 @@ class CsvIngParserTest {
     }
 
     @Test
-    fun `parses a real tab-delimited ING export despite the csv extension`() {
-        // A real "Mijn ING" download turned out to be tab-delimited, not semicolon as the
-        // architecture doc's illustration (and sampleCsv above) assumed. Columns and a debit
-        // line taken directly from an actual export (IBAN/card details anonymized).
+    fun `tab-delimited input is still recognized (defensive - seen from a garbled paste, not a real export)`() {
+        // An earlier bug report of a real export appeared tab-delimited, which turned out to be
+        // a copy-paste artifact rather than the file's actual format (see the RFC 4180-quoted
+        // test below for what a real export looks like). Delimiter auto-detection is kept
+        // regardless, since it's harmless and costs nothing if a genuinely tab-separated paste
+        // shows up again.
         val tabDelimited = listOf(
             listOf("Datum", "Naam / Omschrijving", "Rekening", "Tegenrekening", "Code", "Af Bij", "Bedrag (EUR)", "Mutatiesoort", "Mededelingen", "Saldo na mutatie", "Tag"),
             listOf("20260904", "Nettorama a.onderweg GORINCHEM", "NL63INGB0663396727", "", "BA", "Af", "30,63", "Betaalautomaat", "Kaartnr: 5238 53** **** 8897", "1876,54", ""),
@@ -73,5 +75,28 @@ class CsvIngParserTest {
         assertEquals(Money(187654), txn.balanceAfter)
         assertEquals(null, txn.counterpartyIban) // Tegenrekening blank for card payments
         assertEquals("Nettorama a.onderweg GORINCHEM", txn.counterpartyName)
+    }
+
+    @Test
+    fun `parses a real RFC 4180-quoted, semicolon-delimited ING export`() {
+        // This is the actual "Mijn ING" export format, confirmed against a real download copied
+        // straight from the source: every field wrapped in double quotes, ";" as the delimiter.
+        // IBAN and card details anonymized; everything else (including the Mededelingen content)
+        // taken verbatim.
+        val quoted = """
+            "Datum";"Naam / Omschrijving";"Rekening";"Tegenrekening";"Code";"Af Bij";"Bedrag (EUR)";"Mutatiesoort";"Mededelingen";"Saldo na mutatie";"Tag"
+            "20260904";"Nettorama a.onderweg GORINCHEM";"NL63INGB0663396727";"";"BA";"Af";"30,63";"Betaalautomaat";"Kaartnr: 5238 53** **** 8897 Datum: 04-09-2026 Tijd: 10:00 Transactie: I96213 Term: 1BGD9H Apple Pay Valutadatum: 04-09-2026";"1876,54";""
+        """.trimIndent()
+
+        val txn = CsvIngParser().parse(quoted, accountId = 1).single()
+        assertEquals(LocalDate.of(2026, 9, 4), txn.date)
+        assertEquals(Money(-3063), txn.amount)
+        assertEquals(Money(187654), txn.balanceAfter)
+        assertEquals(null, txn.counterpartyIban) // Tegenrekening blank for card payments
+        assertEquals("Nettorama a.onderweg GORINCHEM", txn.counterpartyName)
+        assertEquals(
+            "Nettorama a.onderweg GORINCHEM — Kaartnr: 5238 53** **** 8897 Datum: 04-09-2026 Tijd: 10:00 Transactie: I96213 Term: 1BGD9H Apple Pay Valutadatum: 04-09-2026",
+            txn.description,
+        )
     }
 }
