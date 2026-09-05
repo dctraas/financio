@@ -99,6 +99,17 @@ vinden. Nog te controleren:
   van deze fix, met de vervolgfixes verwerkt. `hilt-android` en `hilt-android-compiler` zijn
   beide bevestigd te bestaan op Maven Central in versie 2.60.1 (rechtstreeks met `curl`
   gecontroleerd, geen giswerk). `:core` gebruikt geen Hilt en is hier niet door geraakt.
+- **Room 2.6.1 → 2.8.4.** `:app:kspDebugKotlin` faalde met `IllegalStateException: unexpected
+  jvm signature V` diep in Room's eigen annotation processor (bij het verwerken van een
+  `suspend`-DAO-methode met een `Unit`-returntype). Dit is een bevestigde, bekende KSP2-bug
+  ([google/ksp#2177](https://github.com/google/ksp/issues/2177),
+  [#2957](https://github.com/google/ksp/issues/2957)) tegen onze Kotlin 2.3.21/KSP 2.3.11 —
+  Room 2.6.1 dateert van vóór KSP2 en loopt hier tegenaan. Gefixt upstream in Room; getild naar
+  **2.8.4**, de nieuwste stabiele release (geverifieerd via developer.android.com/jetpack/androidx/releases/room).
+  Room 2.8.0 verhoogde zelf de minSdk-ondergrens naar 23 — ruim onder onze minSdk 26, dus geen
+  verdere aanpassing nodig. Zijdelings: sinds Room 2.7 is `room-ktx` een leeg artifact (alle
+  functionaliteit zit nu in `room-runtime`) — blijft onschadelijk in de dependency-lijst staan,
+  hoeft niet weg. `:core` gebruikt geen Room en is hier niet door geraakt.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
