@@ -120,6 +120,14 @@ vinden. Nog te controleren:
   skeleton-opzet: `FinancioApplication` (met `@HiltAndroidApp`) bestond al, maar
   `AndroidManifest.xml`'s `<application>`-tag verwees er nooit naar. Toegevoegd:
   `android:name=".FinancioApplication"`.
+- **`UnsatisfiedLinkError` op `SQLiteConnection.nativeOpen`.** Na de manifest-fix startte de app,
+  maar crashte bij de eerste databasetoegang. `net.zetetic:sqlcipher-android`'s
+  `SupportOpenHelperFactory` laadt de native SQLCipher-library niet automatisch — dat moet de
+  toepassing zelf doen vóór elke databasehandeling, per de library's eigen documentatie
+  ([sqlcipher/sqlcipher-android](https://github.com/sqlcipher/sqlcipher-android)'s README, exact
+  dit patroon). Toegevoegd: `System.loadLibrary("sqlcipher")` vóór `Room.databaseBuilder(...)` in
+  `DatabaseModule.provideDatabase()`. Een eigen omissie uit de oorspronkelijke opzet, niet
+  gerelateerd aan de eerdere versie-bumps.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
