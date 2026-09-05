@@ -8,12 +8,15 @@ plugins {
 
 android {
     namespace = "com.financio.app"
-    compileSdk = 35
+    // 37, and AGP 9.1.0 in gradle/libs.versions.toml, because navigation-compose 2.10.0 and the
+    // compose-bom 2026.08.00 artifacts both declare that floor in their AAR metadata — bumping
+    // the libraries without this raises "checkDebugAarMetadata" failures naming exactly this.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.financio.app"
         minSdk = 26 // biometric app-lock + adaptive icons without extra fallback code
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1"
     }
