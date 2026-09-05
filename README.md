@@ -73,6 +73,15 @@ vinden. Nog te controleren:
   10"-waarschuwing (uit de Kotlin-plugin zelf) is als bijvangst ook verdwenen. Let op: KSP's
   eigen versienummering is losgekoppeld van Kotlin's versienummer sinds Kotlin 2.3 — `2.3.11` is
   geen typfout voor `2.3.21-iets`, KSP volgt vanaf hier zijn eigen releaseschema.
+- **`org.jetbrains.kotlin.android`-plugin verwijderd uit `app/build.gradle.kts`.** AGP 9.0
+  introduceerde ingebouwde Kotlin-ondersteuning, standaard aan — de losse Kotlin Android-plugin
+  toepassen geeft sindsdien een harde configuratiefout ("no longer required for Kotlin support
+  since AGP 9.0"), niet alleen een waarschuwing. Dit had eigenlijk de échte oorzaak van de
+  vorige "Cannot add extension with name 'kotlin'"-fout kunnen zijn (Kotlin 2.3.21 geeft nu
+  gewoon een duidelijke diagnose in plaats van een generieke Gradle-extensiebotsing). Geverifieerd
+  via Android's eigen releasenotes (de sandbox heeft geen toegang tot Google's Maven om dit zelf
+  te bouwen). `:core` gebruikt een aparte, niet-Android Kotlin-plugin en is hier niet door
+  geraakt — nog steeds 35 tests, groen.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
