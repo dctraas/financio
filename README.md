@@ -6,11 +6,13 @@ Android-app om ING-transacties in te laden (CSV/MT940), in te delen in categorie
 categorie budgetlimieten te bewaken — met een rode markering zodra een categorie over budget
 gaat. Fase 1 is bewust lokaal-only: geen backend, geen bankvergunning, geen netwerkpermissie.
 
-## Status: fase 1 compleet (ongebouwd)
+## Status: fase 1 compleet, bouwt en start
 
 Alle fase-1 functionaliteit uit de routekaart is geïmplementeerd: transacties, budgetten,
 grafieken, instellingen, importeren, biometrische vergrendeling en handmatige categorisatie.
-Nog niet gecompileerd in een echte Android-omgeving — zie "Bouwen" hieronder.
+`:app` compileert inmiddels succesvol in een echte Android Studio-omgeving; de eerste
+opstart-crash (zie "Nog te controleren") is gefixt — zie dat overzicht voor de rest van het
+traject.
 
 ## Modules
 
@@ -110,6 +112,14 @@ vinden. Nog te controleren:
   verdere aanpassing nodig. Zijdelings: sinds Room 2.7 is `room-ktx` een leeg artifact (alle
   functionaliteit zit nu in `room-runtime`) — blijft onschadelijk in de dependency-lijst staan,
   hoeft niet weg. `:core` gebruikt geen Room en is hier niet door geraakt.
+- **`:app` compileert nu — eerste opstart-crash: `FinancioApplication` ontbrak in het manifest.**
+  Na alle bovenstaande build-fixes compileerde `:app` voor het eerst succesvol, maar de app
+  crashte direct bij opstart met "Hilt Activity must be attached to an @HiltAndroidApp
+  Application. Did you forget to specify your Application's class name in your manifest's
+  `<application />`'s `android:name` attribute?" — een eigen fout uit de oorspronkelijke
+  skeleton-opzet: `FinancioApplication` (met `@HiltAndroidApp`) bestond al, maar
+  `AndroidManifest.xml`'s `<application>`-tag verwees er nooit naar. Toegevoegd:
+  `android:name=".FinancioApplication"`.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
