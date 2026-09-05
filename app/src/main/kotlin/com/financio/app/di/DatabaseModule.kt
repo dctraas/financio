@@ -24,6 +24,11 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FinancioDatabase {
+        // Required before any SQLCipher-for-Android operation, per the library's own docs
+        // (github.com/sqlcipher/sqlcipher-android's README): SupportOpenHelperFactory does not
+        // load the native library itself, so without this the first query throws
+        // UnsatisfiedLinkError on SQLiteConnection.nativeOpen.
+        System.loadLibrary("sqlcipher")
         val passphrase = DatabasePassphraseProvider(context).getOrCreatePassphrase()
         // Verified directly against the 4.18.0 AAR (downloaded from Maven Central and inspected)
         // that this class still exists under this package, and that its bundled arm64-v8a native
