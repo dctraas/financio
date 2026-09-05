@@ -82,7 +82,7 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
 
     implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
+    implementation(libs.room.ktx) // blank artifact since Room 2.7 (merged into room-runtime); harmless to keep
     ksp(libs.room.compiler)
     implementation(libs.sqlcipher.android)
 

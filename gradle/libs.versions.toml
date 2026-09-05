@@ -24,7 +24,12 @@ navigationCompose = "2.10.0"
 # 2.59 itself. hilt-android/-compiler are confirmed to exist at 2.60.1 on Maven Central.
 hilt = "2.60.1"
 hiltNavigationCompose = "1.4.0"
-room = "2.6.1"
+# 2.6.1's KSP annotation processor hits a genuine KSP2 bug ("unexpected jvm signature V" on
+# suspend DAO methods returning Unit — confirmed via google/ksp#2177/#2957) against our
+# Kotlin 2.3.21/KSP 2.3.11. Fixed upstream in Room; bumped to the latest stable release,
+# 2.8.4 (confirmed via developer.android.com/jetpack/androidx/releases/room). Room 2.8.0 raised
+# its own minSdk floor to 23, well under our minSdk 26, so no further bump needed there.
+room = "2.8.4"
 coroutines = "1.9.0"
 biometric = "1.1.0"
 fragmentKtx = "1.8.3"
