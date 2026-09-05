@@ -162,7 +162,15 @@ private fun categoryColorFor(categoryName: String?): Color = when (categoryName?
     "abonnementen" -> CategoryColors.subscriptions
     "uit eten" -> CategoryColors.dining
     "vervoer" -> CategoryColors.transport
-    "kleding" -> CategoryColors.clothing
+    "kleding & verzorging" -> CategoryColors.clothing
+    "wonen & vaste lasten" -> CategoryColors.housing
+    "gezondheid & verzekering" -> CategoryColors.health
+    "vrije tijd & hobby's" -> CategoryColors.leisure
+    "vakantie & reizen" -> CategoryColors.travel
+    "cadeaus & giften" -> CategoryColors.gifts
+    "sparen & beleggen" -> CategoryColors.savings
+    "inkomsten" -> CategoryColors.income
+    // "Overig" and anything user-created falls through to the neutral dot on purpose.
     else -> CategoryColors.fallback
 }
 

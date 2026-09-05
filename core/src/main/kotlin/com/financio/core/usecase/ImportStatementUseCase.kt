@@ -19,6 +19,9 @@ data class ImportPreview(
     val duplicateCount: Int,
 ) {
     val total: Int get() = ready.size + needsCategory.size
+
+    /** [needsCategory], grouped by merchant so the review screen asks once per merchant, not once per line. */
+    val needsCategoryGrouped: List<UncategorizedGroup> get() = needsCategory.groupForReview()
 }
 
 /**

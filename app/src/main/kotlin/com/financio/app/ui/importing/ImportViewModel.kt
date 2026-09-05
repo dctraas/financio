@@ -22,8 +22,9 @@ sealed interface ImportUiState {
     data object Loading : ImportUiState
 
     /**
-     * [manualCategoryChoices] maps an index into [preview]'s `needsCategory` list to the category
-     * the user picked for it — kept here rather than mutating [preview] itself so the "X te
+     * [manualCategoryChoices] maps a counterparty name — one of [ImportPreview.needsCategoryGrouped]'s
+     * groups — to the category the user picked for it, applying to *every* transaction sharing
+     * that name in this batch. Kept here rather than mutating [preview] itself so the "X te
      * controleren" count in the summary stays accurate as choices come in. Every transaction in
      * [preview] ends up imported on confirm regardless of whether it got a manual category (see
      * [ImportViewModel.confirm]), so [preview]'s own `total` is the number that will be imported.
@@ -31,7 +32,7 @@ sealed interface ImportUiState {
     data class Ready(
         val fileName: String,
         val preview: ImportPreview,
-        val manualCategoryChoices: Map<Int, Long> = emptyMap(),
+        val manualCategoryChoices: Map<String, Long> = emptyMap(),
     ) : ImportUiState
 
     data class Failed(val message: String) : ImportUiState
@@ -62,35 +63,35 @@ class ImportViewModel @Inject constructor(
         }
     }
 
-    /** [needsCategoryIndex] indexes into `preview.needsCategory`, not the combined transaction list. */
-    fun assignCategory(needsCategoryIndex: Int, categoryId: Long) {
+    /** [counterpartyName] is a group key from `preview.needsCategoryGrouped`, applying to every transaction that shares it. */
+    fun assignCategory(counterpartyName: String, categoryId: Long) {
         val current = _uiState.value
         if (current !is ImportUiState.Ready) return
         _uiState.value = current.copy(
-            manualCategoryChoices = current.manualCategoryChoices + (needsCategoryIndex to categoryId),
+            manualCategoryChoices = current.manualCategoryChoices + (counterpartyName to categoryId),
         )
     }
 
     /**
      * Persists the auto-categorized transactions, the ones the user just assigned by hand (which
      * also become a remembered rule, per the architecture's "geen match → vraag het → onthoud
-     * het" behavior), and — unlike dropping them — the rest of `needsCategory` too, uncategorized,
-     * so nothing an import found silently disappears; they show up as "Te categoriseren" in the
-     * transaction list and can be fixed there instead.
+     * het" behavior — one rule per merchant, not per line), and — unlike dropping them — the rest
+     * of `needsCategory` too, uncategorized, so nothing an import found silently disappears; they
+     * show up as "Te categoriseren" in the transaction list and can be fixed there instead.
      */
     fun confirm() {
         val current = _uiState.value
         if (current !is ImportUiState.Ready) return
         viewModelScope.launch {
-            val manuallyCategorized = current.preview.needsCategory.mapIndexed { index, transaction ->
-                current.manualCategoryChoices[index]?.let { categoryId -> transaction.copy(categoryId = categoryId) }
-                    ?: transaction
+            val manuallyCategorized = current.preview.needsCategory.map { transaction ->
+                current.manualCategoryChoices[transaction.counterpartyName]?.let { categoryId ->
+                    transaction.copy(categoryId = categoryId)
+                } ?: transaction
             }
             importStatementUseCase.confirm(current.preview.ready + manuallyCategorized)
 
-            current.manualCategoryChoices.forEach { (index, categoryId) ->
-                val transaction = current.preview.needsCategory[index]
-                categoryRepository.addRule(LearnedRule.from(categoryId, transaction.counterpartyName))
+            current.manualCategoryChoices.forEach { (counterpartyName, categoryId) ->
+                categoryRepository.addRule(LearnedRule.from(categoryId, counterpartyName))
             }
 
             _uiState.value = ImportUiState.Imported
