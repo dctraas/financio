@@ -61,7 +61,8 @@ junit5-platform-launcher = { group = "org.junit.platform", name = "junit-platfor
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+# No kotlin-android entry: AGP 9.0+ has built-in Kotlin support and fails the build if that
+# plugin is applied on top of it. android.application alone now compiles :app's Kotlin sources.
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

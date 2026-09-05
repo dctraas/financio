@@ -1,6 +1,9 @@
+// No org.jetbrains.kotlin.android plugin here: AGP 9.0+ has built-in Kotlin support and now
+// fails the build if that plugin is applied on top of it ("no longer required for Kotlin
+// support since AGP 9.0"). android.application alone compiles the Kotlin sources; the Compose
+// compiler plugin is a separate concern (code-gen for @Composable) and stays.
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
