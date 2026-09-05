@@ -26,6 +26,10 @@ interface CategoryDao {
     /** Used by [com.financio.app.data.local.DatabaseSeeder] to decide whether seeding has already run. */
     @Query("SELECT COUNT(*) FROM categories")
     suspend fun count(): Int
+
+    /** Cascades to category_rules (ON DELETE CASCADE) and sets transactions.categoryId to null (ON DELETE SET NULL). */
+    @Query("DELETE FROM categories WHERE id = :categoryId")
+    suspend fun delete(categoryId: Long)
 }
 
 @Dao
@@ -38,6 +42,9 @@ interface CategoryRuleDao {
 
     @Insert
     suspend fun insertAll(rules: List<CategoryRuleEntity>)
+
+    @Query("DELETE FROM category_rules WHERE id = :ruleId")
+    suspend fun delete(ruleId: Long)
 }
 
 @Dao

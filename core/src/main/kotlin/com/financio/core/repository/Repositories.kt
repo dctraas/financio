@@ -28,6 +28,13 @@ interface CategoryRepository {
     fun observeCategories(): Flow<List<Category>>
     fun observeRules(): Flow<List<CategoryRule>>
     suspend fun addRule(rule: CategoryRule)
+
+    /** Returns the new category's id. */
+    suspend fun addCategory(name: String, colorHex: String): Long
+
+    /** Deleting a category also deletes any rule pointing at it and un-categorizes its transactions. */
+    suspend fun deleteCategory(categoryId: Long)
+    suspend fun deleteRule(ruleId: Long)
 }
 
 interface BudgetRepository {

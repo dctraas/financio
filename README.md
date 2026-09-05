@@ -39,7 +39,11 @@ traject.
   zie `DefaultCategorization` in `:core`. Bewust géén regel voor generieke webshops (Bol.com,
   Amazon): die verkopen van alles, dus daar gokken we niet — één keer handmatig kiezen volstaat,
   daarna onthouden als regel.
-- **Instellingen** — budgetlimieten instellen, categorisatieregels inzien, biometrische
+- **Categorieën & regels beheren** — eigen scherm (via Instellingen → "Beheren"): categorieën
+  toevoegen/verwijderen, en regels handmatig toevoegen/verwijderen (trefwoord of exacte
+  tegenrekening/IBAN). Een handmatig toegevoegde regel (`ManualRule`, prioriteit 10) wint altijd
+  van zowel een standaardregel (20) als een geleerde regel uit import (50).
+- **Instellingen** — budgetlimieten instellen, link naar categorie-/regelbeheer, biometrische
   vergrendeling aan/uit.
 - **App-vergrendeling** — `BiometricPrompt` (vingerafdruk/gezicht/schermbeveiliging) vóór de
   content, aan te zetten in Instellingen; staat standaard aan.
@@ -152,6 +156,21 @@ vinden. Nog te controleren:
   als defensief, niet als bevestigd echt formaat. Getest tegen de exacte, geanonimiseerde
   originele export (`CsvIngParserTest`) — in de sandbox echt gebouwd en getest, want dit raakt
   alleen `:core`: **37 tests, groen** (was 36, plus de nieuwe test).
+- **`FOREIGN KEY constraint failed` bij importeren.** De allereerste import na de vorige fixes
+  crashte alsnog: `TransactionEntity.accountId` heeft een foreign key naar `accounts.id`, maar
+  er werd nergens ooit een rij in `accounts` aangemaakt — `AccountDao.insert()` bestond al sinds
+  het skeleton maar werd nooit aangeroepen. `DatabaseSeeder` seedt nu ook het enige fase-1-account
+  (`DefaultAccount`, expliciet met id 1 zodat het overeenkomt met wat de rest van de app
+  aanneemt), naast de categorieën/regels van de vorige fix. Beide seeds zijn onafhankelijk
+  idempotent (los gecontroleerd op bestaan) zodat dit ook op een bestaande installatie die de
+  categorieën al wél kreeg (maar het account nooit) alsnog vanzelf herstelt, zonder de app-data
+  te hoeven wissen.
+- **Categorieën & regels beheren.** Nieuw scherm (`CategoryManagementScreen`, bereikbaar via
+  Instellingen) om categorieën en regels handmatig toe te voegen/verwijderen — zie "Wat er werkt"
+  hierboven. `:core` kreeg `ManualRule` (prioriteit 10, wint van standaard- en geleerde regels) en
+  `CategoryRepository` drie nieuwe methodes (`addCategory`/`deleteCategory`/`deleteRule`); beide
+  volledig unit-getest (49 tests groen, was 47). De Android-laag (DAO's, Room-repository-impl,
+  Compose-UI, navigatie) is zoals altijd niet in deze sandbox te bouwen.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`);
@@ -168,17 +187,15 @@ vinden. Nog te controleren:
   wel een punt om later te verfijnen als het als hinderlijk ervaren wordt.
 - Handmatige categorisatie in het importscherm gebruikt een eenvoudig dropdown-menu, geen
   zoekbalk — prima bij een handvol categorieën, minder prettig bij tientallen.
-- Standaardregels (prioriteit 20) winnen altijd van een latere handmatige correctie voor
-  dezelfde tegenpartij, omdat een handmatige correctie alleen als `LearnedRule` (prioriteit 50,
-  lager wint niet) wordt opgeslagen — in de praktijk raakt dit alleen import, niet de
-  transactielijst: een transactie die al automatisch gecategoriseerd is verschijnt sowieso niet
-  in "Te controleren", dus de vraag komt niet eens op. Wil je een standaardregel permanent
-  overrulen, dan kan dat nu alleen door de betreffende transacties in de transactielijst stuk
-  voor stuk handmatig te hercategoriseren — er is nog geen scherm om regels te verwijderen of
-  de prioriteit aan te passen.
-- Er is nog geen manier om een categorie handmatig aan te maken of te verwijderen buiten de
-  meegeleverde standaardset — dat verschijnt pas zodra Instellingen een "Categorie toevoegen"
-  actie krijgt.
+- Standaardregels (prioriteit 20) winnen van een `LearnedRule` uit import (prioriteit 50) voor
+  dezelfde tegenpartij — in de praktijk onschadelijk, want een al automatisch gecategoriseerde
+  transactie verschijnt sowieso niet in "Te controleren". Wil je een standaardregel structureel
+  overrulen: voeg in Categorieën & regels een handmatige regel toe (prioriteit 10, wint altijd)
+  in plaats van te wachten op een nieuwe import.
+- Regels kunnen alleen worden toegevoegd/verwijderd, niet bewerkt — voor "regel X moet naar
+  categorie Y in plaats van Z" verwijder je 'm en maak je 'm opnieuw aan.
+- Een categorie verwijderen kan niet ongedaan worden gemaakt; er komt geen bevestiging-met-
+  voorbeeld ("dit raakt N transacties en M regels"), alleen de generieke waarschuwingstekst.
 
 ## Ontwerpdocumenten
 
