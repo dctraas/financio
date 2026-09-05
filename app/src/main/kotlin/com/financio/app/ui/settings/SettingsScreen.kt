@@ -1,5 +1,6 @@
 package com.financio.app.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,12 +33,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.core.model.Category
-import com.financio.core.model.CategoryRule
-import com.financio.core.model.MatchType
 import com.financio.core.model.Money
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(onManageCategoriesClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
 
     Scaffold(topBar = { TopAppBar(title = { Text("Instellingen") }) }) { padding ->
@@ -64,7 +63,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             if (state.categories.isEmpty()) {
                 item {
                     Text(
-                        "Nog geen categorieën — die verschijnen zodra je transacties hebt geïmporteerd.",
+                        "Categorieën worden aangemaakt zodra de app voor het eerst opstart — even geduld.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
@@ -79,19 +78,21 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 }
             }
 
-            item { SectionHeader("Categorisatieregels") }
-            if (state.rules.isEmpty()) {
-                item {
-                    Text(
-                        "Nog geen regels — die ontstaan automatisch zodra je een transactie handmatig " +
-                            "categoriseert.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 0.dp),
-                    )
-                }
-            } else {
-                val categoriesById = state.categories.associateBy { it.id }
-                items(state.rules, key = { "rule-${it.id}" }) { rule -> RuleRow(rule, categoriesById[rule.categoryId]) }
+            item { SectionHeader("Categorieën & regels") }
+            item {
+                Text(
+                    "Categorieën toevoegen of verwijderen, en regels beheren waarmee transacties " +
+                        "automatisch worden gecategoriseerd.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Text(
+                    "Beheren →",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 8.dp).clickable(onClick = onManageCategoriesClick),
+                )
             }
         }
     }
@@ -132,26 +133,6 @@ private fun BudgetLimitRow(category: Category, currentLimit: Money?, onSave: (Mo
             parseEuroInput(text)?.let(onSave)
         }) { Icon(Icons.Filled.Check, contentDescription = "Limiet opslaan") }
     }
-}
-
-@Composable
-private fun RuleRow(rule: CategoryRule, category: Category?) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(rule.pattern, fontWeight = FontWeight.SemiBold)
-            Text(
-                matchTypeLabel(rule.matchType) + " · prioriteit ${rule.priority}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(category?.name ?: "Onbekende categorie", color = MaterialTheme.colorScheme.primary)
-    }
-}
-
-private fun matchTypeLabel(matchType: MatchType) = when (matchType) {
-    MatchType.COUNTERPARTY_EXACT -> "Tegenrekening"
-    MatchType.KEYWORD -> "Trefwoord"
 }
 
 private fun Money.toEuroInputString(): String {

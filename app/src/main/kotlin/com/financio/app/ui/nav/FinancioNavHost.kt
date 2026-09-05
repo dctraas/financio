@@ -16,6 +16,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.financio.app.ui.budgets.BudgetsScreen
+import com.financio.app.ui.categories.CategoryManagementScreen
 import com.financio.app.ui.charts.ChartsScreen
 import com.financio.app.ui.importing.ImportScreen
 import com.financio.app.ui.settings.SettingsScreen
@@ -31,6 +32,7 @@ private sealed class Destination(val route: String, val label: String) {
     data object Charts : Destination(CHARTS_ROUTE, "Grafieken")
     data object Settings : Destination("settings", "Instellingen")
     data object Import : Destination("import", "Importeren")
+    data object CategoryManagement : Destination("categories", "Categorieën & regels")
 }
 
 private val bottomTabs = listOf(Destination.Transactions, Destination.Budgets, Destination.Charts, Destination.Settings)
@@ -86,8 +88,11 @@ fun FinancioNavHost() {
                 val categoryId = backStackEntry.arguments?.getLong(ARG_CATEGORY_ID)?.takeIf { it > 0 }
                 ChartsScreen(initialCategoryId = categoryId)
             }
-            composable(Destination.Settings.route) { SettingsScreen() }
+            composable(Destination.Settings.route) {
+                SettingsScreen(onManageCategoriesClick = { navController.navigate(Destination.CategoryManagement.route) })
+            }
             composable(Destination.Import.route) { ImportScreen(onDone = { navController.popBackStack() }) }
+            composable(Destination.CategoryManagement.route) { CategoryManagementScreen() }
         }
     }
 }
@@ -100,5 +105,6 @@ private fun NavIcon(destination: Destination) {
         Destination.Charts -> ChartsIcon()
         Destination.Settings -> SettingsIcon()
         Destination.Import -> Unit
+        Destination.CategoryManagement -> Unit
     }
 }

@@ -61,6 +61,17 @@ class RoomCategoryRepository @Inject constructor(
         ruleDao.insert(rule.toRuleEntity())
     }
 
+    override suspend fun addCategory(name: String, colorHex: String): Long =
+        categoryDao.insert(com.financio.app.data.local.CategoryEntity(name = name, colorHex = colorHex))
+
+    override suspend fun deleteCategory(categoryId: Long) {
+        categoryDao.delete(categoryId)
+    }
+
+    override suspend fun deleteRule(ruleId: Long) {
+        ruleDao.delete(ruleId)
+    }
+
     private fun CategoryRule.toRuleEntity() = com.financio.app.data.local.CategoryRuleEntity(
         id = id,
         categoryId = categoryId,
