@@ -82,6 +82,12 @@ vinden. Nog te controleren:
   via Android's eigen releasenotes (de sandbox heeft geen toegang tot Google's Maven om dit zelf
   te bouwen). `:core` gebruikt een aparte, niet-Android Kotlin-plugin en is hier niet door
   geraakt — nog steeds 35 tests, groen.
+- **Root-`build.gradle.kts` miste dezelfde opschoning.** De vorige fix verwijderde de
+  `kotlin-android`-plugin uit `app/build.gradle.kts` en de catalogus-entry, maar over het hoofd
+  gezien dat het root-`build.gradle.kts` diezelfde alias óók nog met `apply false` aanriep (om de
+  versie eenmalig te declareren voor alle modules) — daardoor faalde de configuratie alsnog met
+  "Unresolved reference 'android'" zodra de catalogus-entry weg was. Dat was geen nieuwe
+  ecosysteemverrassing maar een onvolledige eigen fix; nu ook uit het root-bestand verwijderd.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`).
