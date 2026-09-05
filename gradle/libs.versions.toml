@@ -17,7 +17,12 @@ lifecycle = "2.8.6"
 activityCompose = "1.13.0"
 composeBom = "2026.08.00"
 navigationCompose = "2.10.0"
-hilt = "2.52"
+# Hilt's Gradle plugin only gained AGP 9 support starting at 2.59 (2.52 fails hard with "Android
+# BaseExtension not found" against AGP 9 — confirmed via google/dagger issues #4944/#5083). 2.59
+# itself shipped a broken ComponentTreeDeps runtime artifact for AGP 9 (issue #5099); 2.60.1 is
+# the latest release on Maven Central and includes the follow-up fixes, so used here rather than
+# 2.59 itself. hilt-android/-compiler are confirmed to exist at 2.60.1 on Maven Central.
+hilt = "2.60.1"
 hiltNavigationCompose = "1.4.0"
 room = "2.6.1"
 coroutines = "1.9.0"
