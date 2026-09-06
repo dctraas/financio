@@ -50,6 +50,29 @@ class CsvIngParserTest {
     }
 
     @Test
+    fun `reads the Tag column when present and non-blank`() {
+        val tagged = sampleCsv.replace("1284,56;", "1284,56;Verjaardag")
+        val txn = CsvIngParser().parse(tagged, accountId = 1).single()
+        assertEquals("Verjaardag", txn.tag)
+    }
+
+    @Test
+    fun `tag is null when the column is blank`() {
+        val txn = CsvIngParser().parse(sampleCsv, accountId = 1).single()
+        assertEquals(null, txn.tag)
+    }
+
+    @Test
+    fun `tag is null, not an error, when the whole column is missing - it's optional, not required`() {
+        val withoutTagColumn = sampleCsv.lines().let { lines ->
+            lines.mapIndexed { index, line -> if (index == 0) line.removeSuffix(";Tag") else line.trimEnd(';') }
+        }.joinToString("\n")
+
+        val txn = CsvIngParser().parse(withoutTagColumn, accountId = 1).single()
+        assertEquals(null, txn.tag)
+    }
+
+    @Test
     fun `fails loudly instead of guessing when a required column is missing`() {
         val missingColumn = sampleCsv.replace("Tegenrekening;", "")
         assertThrows(UnrecognizedFormatException::class.java) {

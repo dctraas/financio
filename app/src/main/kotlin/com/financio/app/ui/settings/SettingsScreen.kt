@@ -104,7 +104,9 @@ fun SettingsScreen(onManageCategoriesClick: () -> Unit, viewModel: SettingsViewM
                     BudgetLimitRow(
                         category = category,
                         currentLimit = state.limitsByCategory[category.id],
+                        rolloverEnabled = state.rolloverByCategory[category.id] ?: false,
                         onSave = { limit -> viewModel.setLimit(category.id, limit) },
+                        onRolloverChange = { enabled -> viewModel.setRollover(category.id, enabled) },
                     )
                 }
             }
@@ -198,28 +200,49 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun BudgetLimitRow(category: Category, currentLimit: Money?, onSave: (Money) -> Unit) {
+private fun BudgetLimitRow(
+    category: Category,
+    currentLimit: Money?,
+    rolloverEnabled: Boolean,
+    onSave: (Money) -> Unit,
+    onRolloverChange: (Boolean) -> Unit,
+) {
     // Keyed on category.id so a re-emission of the budgets flow (e.g. after saving a *different*
     // category's limit) doesn't clobber what the user is still typing in this field.
     var text by remember(category.id) { mutableStateOf(currentLimit?.toEuroInputString() ?: "") }
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(category.name, modifier = Modifier.weight(1f))
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            singleLine = true,
-            placeholder = { Text("geen limiet") },
-            prefix = { Text("€") },
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.width(120.dp),
-        )
-        IconButton(onClick = {
-            parseEuroInput(text)?.let(onSave)
-        }) { Icon(Icons.Filled.Check, contentDescription = "Limiet opslaan") }
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(category.name, modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                placeholder = { Text("geen limiet") },
+                prefix = { Text("€") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.width(120.dp),
+            )
+            IconButton(onClick = {
+                parseEuroInput(text)?.let(onSave)
+            }) { Icon(Icons.Filled.Check, contentDescription = "Limiet opslaan") }
+        }
+        // Rollover only means something once there's a limit to roll over from - hidden until then
+        // rather than letting the user flip a toggle that has nothing to do yet.
+        if (currentLimit != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Restant meenemen naar volgende maand",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = rolloverEnabled, onCheckedChange = onRolloverChange)
+            }
+        }
     }
 }
 

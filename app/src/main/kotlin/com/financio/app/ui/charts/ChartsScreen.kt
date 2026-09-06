@@ -24,13 +24,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.core.model.Money
 
@@ -54,57 +57,65 @@ fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = h
             }
         } else {
             Column(Modifier.fillMaxSize().padding(padding).padding(vertical = 12.dp)) {
-                LazyRow(
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(state.categories, key = { it.id }) { category ->
-                        FilterChip(
-                            selected = category.id == state.selectedCategoryId,
-                            onClick = { viewModel.selectCategory(category.id) },
-                            label = { Text(category.name) },
-                        )
+                // Category selection has no meaning for Saldoverloop - it's the account's whole
+                // balance, not any one category's activity.
+                if (state.mode != ChartMode.BALANCE_HISTORY) {
+                    LazyRow(
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(state.categories, key = { it.id }) { category ->
+                            FilterChip(
+                                selected = category.id == state.selectedCategoryId,
+                                onClick = { viewModel.selectCategory(category.id) },
+                                label = { Text(category.name) },
+                            )
+                        }
                     }
                 }
 
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
                     ModeSwitch(mode = state.mode, onModeChange = viewModel::selectMode)
 
-                    PeriodNavigator(
-                        label = state.referenceLabel,
-                        canGoToNextPeriod = state.canGoToNextPeriod,
-                        onPrevious = viewModel::goToPreviousPeriod,
-                        onNext = viewModel::goToNextPeriod,
-                    )
-
-                    Text(
-                        state.currentTotal.toDisplayString(),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
-                    state.deltaLabel?.let { label ->
-                        val statusColors = LocalBudgetStatusColors.current
-                        Text(
-                            (if (state.deltaIsIncrease) "▲ " else "▼ ") + label,
-                            color = if (state.deltaIsIncrease) statusColors.over else statusColors.ok,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(top = 4.dp),
+                    if (state.mode == ChartMode.BALANCE_HISTORY) {
+                        BalanceHistorySection(state.balancePoints)
+                    } else {
+                        PeriodNavigator(
+                            label = state.referenceLabel,
+                            canGoToNextPeriod = state.canGoToNextPeriod,
+                            onPrevious = viewModel::goToPreviousPeriod,
+                            onNext = viewModel::goToNextPeriod,
                         )
-                    }
 
-                    BarChart(
-                        points = state.points,
-                        limit = state.limit,
-                        modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 20.dp),
-                    )
-                    state.limit?.let {
                         Text(
-                            "Gestippelde lijn = budgetlimiet (${it.toDisplayString()})",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp),
+                            state.currentTotal.toDisplayString(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 16.dp),
                         )
+                        state.deltaLabel?.let { label ->
+                            val statusColors = LocalBudgetStatusColors.current
+                            Text(
+                                (if (state.deltaIsIncrease) "▲ " else "▼ ") + label,
+                                color = if (state.deltaIsIncrease) statusColors.over else statusColors.ok,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+
+                        BarChart(
+                            points = state.points,
+                            limit = state.limit,
+                            modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 20.dp),
+                        )
+                        state.limit?.let {
+                            Text(
+                                "Gestippelde lijn = budgetlimiet (${it.toDisplayString()})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -147,16 +158,113 @@ private fun PeriodNavigator(label: String, canGoToNextPeriod: Boolean, onPreviou
 
 @Composable
 private fun ModeSwitch(mode: ChartMode, onModeChange: (ChartMode) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(
-            selected = mode == ChartMode.MONTH_OVER_MONTH,
-            onClick = { onModeChange(ChartMode.MONTH_OVER_MONTH) },
-            label = { Text("Maand-op-maand") },
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            FilterChip(
+                selected = mode == ChartMode.MONTH_OVER_MONTH,
+                onClick = { onModeChange(ChartMode.MONTH_OVER_MONTH) },
+                label = { Text("Maand-op-maand") },
+            )
+        }
+        item {
+            FilterChip(
+                selected = mode == ChartMode.YEAR_OVER_YEAR,
+                onClick = { onModeChange(ChartMode.YEAR_OVER_YEAR) },
+                label = { Text("Jaar-op-jaar") },
+            )
+        }
+        item {
+            FilterChip(
+                selected = mode == ChartMode.BALANCE_HISTORY,
+                onClick = { onModeChange(ChartMode.BALANCE_HISTORY) },
+                label = { Text("Saldoverloop") },
+            )
+        }
+    }
+}
+
+@Composable
+private fun BalanceHistorySection(points: List<BalancePoint>) {
+    if (points.isEmpty()) {
+        Text(
+            "Nog geen saldogegevens beschikbaar voor de geïmporteerde transacties.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 16.dp),
         )
-        FilterChip(
-            selected = mode == ChartMode.YEAR_OVER_YEAR,
-            onClick = { onModeChange(ChartMode.YEAR_OVER_YEAR) },
-            label = { Text("Jaar-op-jaar") },
+        return
+    }
+    Text(
+        points.last().balance.toDisplayString(),
+        style = MaterialTheme.typography.headlineMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 16.dp),
+    )
+    Text(
+        "Huidig saldo",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    BalanceLineChart(points = points, modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 20.dp))
+    Text(
+        "Saldo na elke dag met transacties, laatste ${points.size} dagen met activiteit.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun BalanceLineChart(points: List<BalancePoint>, modifier: Modifier = Modifier) {
+    if (points.isEmpty()) return
+    val lineColor = MaterialTheme.colorScheme.primary
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val zeroLineColor = LocalBudgetStatusColors.current.warning
+
+    val minValue = points.minOf { it.balance.cents }
+    val maxValue = points.maxOf { it.balance.cents }.coerceAtLeast(minValue + 1)
+
+    Canvas(modifier) {
+        val labelHeight = 20.dp.toPx()
+        val chartHeight = size.height - labelHeight
+        val stepX = if (points.size > 1) size.width / (points.size - 1) else 0f
+
+        fun yFor(cents: Long): Float {
+            val fraction = (cents - minValue).toFloat() / (maxValue - minValue).toFloat()
+            return chartHeight - chartHeight * fraction
+        }
+
+        // Only meaningful (and drawn) when the range actually straddles zero.
+        if (minValue < 0 && maxValue > 0) {
+            val zeroY = yFor(0)
+            drawLine(
+                color = zeroLineColor,
+                start = Offset(0f, zeroY),
+                end = Offset(size.width, zeroY),
+                strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
+            )
+        }
+
+        val path = Path()
+        points.forEachIndexed { index, point ->
+            val x = index * stepX
+            val y = yFor(point.balance.cents)
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(path, color = lineColor, style = Stroke(width = 2.5.dp.toPx()))
+
+        val labelPaint = android.graphics.Paint().apply {
+            color = labelColor.toArgb()
+            textSize = 11.sp.toPx()
+        }
+        labelPaint.textAlign = android.graphics.Paint.Align.LEFT
+        drawContext.canvas.nativeCanvas.drawText(
+            points.first().date.toShortDisplayString(), 0f, size.height - 4.dp.toPx(), labelPaint,
+        )
+        labelPaint.textAlign = android.graphics.Paint.Align.RIGHT
+        drawContext.canvas.nativeCanvas.drawText(
+            points.last().date.toShortDisplayString(), size.width, size.height - 4.dp.toPx(), labelPaint,
         )
     }
 }

@@ -28,6 +28,7 @@ data class SettingsUiState(
     val categories: List<Category> = emptyList(),
     val rules: List<CategoryRule> = emptyList(),
     val limitsByCategory: Map<Long, Money> = emptyMap(),
+    val rolloverByCategory: Map<Long, Boolean> = emptyMap(),
 )
 
 sealed interface ImportResult {
@@ -60,6 +61,7 @@ class SettingsViewModel @Inject constructor(
             categories = categories,
             rules = rules,
             limitsByCategory = budgets.associate { it.categoryId to it.limit },
+            rolloverByCategory = budgets.associate { it.categoryId to it.rollover },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
@@ -73,6 +75,11 @@ class SettingsViewModel @Inject constructor(
     /** Called once the user finishes editing a limit field — not on every keystroke. */
     fun setLimit(categoryId: Long, limit: Money) {
         viewModelScope.launch { budgetRepository.setLimit(categoryId, currentMonth, limit) }
+    }
+
+    /** Unused budget left over at the end of a month gets added as bonus headroom the next month. */
+    fun setRollover(categoryId: Long, rollover: Boolean) {
+        viewModelScope.launch { budgetRepository.setRollover(categoryId, currentMonth, rollover) }
     }
 
     /**

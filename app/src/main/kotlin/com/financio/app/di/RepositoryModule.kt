@@ -1,10 +1,14 @@
 package com.financio.app.di
 
+import com.financio.app.data.repository.RoomAccountRepository
 import com.financio.app.data.repository.RoomBudgetRepository
 import com.financio.app.data.repository.RoomCategoryRepository
+import com.financio.app.data.repository.RoomSavingsGoalRepository
 import com.financio.app.data.repository.RoomTransactionRepository
+import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.BudgetRepository
 import com.financio.core.repository.CategoryRepository
+import com.financio.core.repository.SavingsGoalRepository
 import com.financio.core.repository.TransactionRepository
 import dagger.Binds
 import dagger.Module
@@ -32,4 +36,12 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindBudgetRepository(impl: RoomBudgetRepository): BudgetRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAccountRepository(impl: RoomAccountRepository): AccountRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSavingsGoalRepository(impl: RoomSavingsGoalRepository): SavingsGoalRepository
 }

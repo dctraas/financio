@@ -32,10 +32,14 @@ traject.
   *elke* transactie, ook een al gecategoriseerde, om de categorie te wijzigen — daarna wordt
   gevraagd of dezelfde categorie ook toegepast moet worden op de andere transacties van diezelfde
   tegenpartij die al in de lijst staan (scheelt tijd bij bijvoorbeeld 40 Albert Heijn-regels).
+  Ook ING's eigen "Tag"-label (indien aanwezig) wordt getoond en is doorzoekbaar.
 - **Budgetten** — limieten per categorie met groen/amber/rood, tik op een categorie voor de grafiek.
+  Optionele rollover per categorie (in te stellen in Instellingen): onbenut budget van vorige
+  maand telt als bonusruimte bij deze maand op.
 - **Grafieken** — maand-op-maand en jaar-op-jaar per categorie, met de budgetlimiet als lijn in de
   grafiek en een ‹ ›-navigator om het weergegeven venster naar eerdere maanden/jaren te schuiven
   (voorheen alleen een vast venster eindigend op vandaag, met geen manier om terug te bladeren).
+  Een derde modus, Saldoverloop, toont het banksaldo zelf als lijngrafiek in de tijd.
 - **Importeren** — CSV/MT940 inlezen, dedupliceren, automatisch categoriseren; wat overblijft
   wordt **per tegenpartij gegroepeerd** (één keuze voor alle 40 Albert Heijn-transacties samen,
   in plaats van 40 losse keuzes), gesorteerd op grootste totaalbedrag eerst, met aantal/bedrag/
@@ -229,6 +233,40 @@ vinden. Nog te controleren:
   (zowel als afgerond vierkant als cirkel-uitgesneden, ter simulatie van hoe verschillende
   launchers adaptieve iconen bijsnijden) — het enige stuk van deze hele lijst dat wél visueel
   geverifieerd kon worden vóórdat het jouw toestel bereikt.
+- **Eerste echte schemamigratie (v1 → v2): ING-Tag, saldoverloop, gesplitste transacties,
+  spaardoelen.** Vier van een grotere batch functionaliteiten (zie hieronder), maar allemaal
+  gebouwd op dezelfde, bewust *puur additieve* migratie: twee nieuwe nullable kolommen op
+  `transactions` (`balanceCents`, `tag`, beide `DEFAULT NULL`) en twee gloednieuwe, lege tabellen
+  (`transaction_splits`, `savings_goals`) — geen enkele bestaande kolom of rij wordt aangeraakt.
+  Dat is bewust: een migratie die bestaande data moet *transformeren* (zoals de eerdere
+  Budgetten-dubbeling) vertrouwde ik zonder build niet genoeg om blind te proberen; een puur
+  additieve migratie wel. Dit keer bovendien niet alleen met de ogen gereviewd, maar ook echt
+  *uitgevoerd*: met Python's ingebouwde `sqlite3`-module is het exacte v1-schema (op basis van
+  Room's eigen DDL-conventies) nagebouwd, gevuld met voorbeelddata, en is de *letterlijke*
+  migratie-SQL uit `Migrations.kt` erop losgelaten — 15 assertions, allemaal geslaagd: kolommen
+  bestaan met het juiste type/nullability, bestaande rijen blijven intact, FK's en cascade-deletes
+  werken op de nieuwe tabellen, en de nieuwe UNION-gebaseerde `observeSpent`/`observeCategoryTotal`
+  (die een gesplitste transactie's toewijzingen meetellen zonder dubbel te tellen) rekenen correct.
+  Dit is voor het eerst in dit traject een Room-schemawijziging die daadwerkelijk gedraaid is in
+  plaats van alleen gelezen — sterker dan alle eerdere `:app`-reviews, al blijft de Room/Hilt/
+  Compose-integratie eromheen (zoals altijd) niet in deze sandbox te bouwen. `:core` (het model,
+  `SplitValidation`, `SubscriptionDetector`, `SafeToSpendCalculator`, `BudgetEvaluator.
+  effectiveLimit()`) is wél volledig unit-getest: **88 tests groen, was 64**.
+- **ING-Tag zichtbaar en doorzoekbaar.** `CsvIngParser` leest nu ook ING's eigen "Tag"-kolom uit
+  (een label dat je zelf in Mijn ING aan een transactie kunt hangen, bijv. "Vakantie 2024") —
+  optioneel, geen harde eis zoals de verplichte kolommen. Getoond als klein label naast de
+  tegenpartijnaam in Transacties, en meegenomen in de zoekbalk (naast naam/omschrijving).
+- **Budgetrollover.** `BudgetEntity.rollover` bestond al sinds het allereerste schema maar werd
+  nergens gelezen — nu daadwerkelijk toegepast: onbenut budget van vorige maand (limiet min
+  besteed, nooit negatief) telt als bonusruimte bij deze maand op, aan/uit te zetten per categorie
+  in Instellingen. Een overschrijding vorige maand wordt nooit als straf doorgerekend — rollover
+  helpt alleen, het verkleint nooit.
+- **Saldoverloop-grafiek.** Nieuwe modus in Grafieken (naast maand-op-maand/jaar-op-jaar) die het
+  banksaldo na elke dag met transactie-activiteit als lijn toont, met een gestippelde nullijn zodra
+  het bereik door nul heen gaat. ING's CSV bevat geen tijdstip, alleen een datum — bij meerdere
+  transacties op dezelfde dag is er dus geen waterdicht signaal voor de volgorde binnen die dag;
+  gekozen voor een gedocumenteerde, deterministische benadering (de laatst-ingevoerde transactie
+  van die dag) in plaats van te gokken.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`);

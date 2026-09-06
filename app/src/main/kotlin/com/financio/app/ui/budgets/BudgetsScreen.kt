@@ -90,9 +90,20 @@ private fun BudgetCard(row: BudgetRow, onClick: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "${row.spent.toDisplayString()} / ${row.budget.limit.toDisplayString()}",
+                "${row.spent.toDisplayString()} / ${row.effectiveLimit.toDisplayString()}",
                 color = if (row.status == BudgetStatus.OVER) statusColor else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.SemiBold,
+            )
+        }
+        // Only shown when rollover actually added something - a rollover budget that started the
+        // month fully spent has no bonus to explain.
+        val rolloverBonus = row.effectiveLimit - row.budget.limit
+        if (row.budget.rollover && rolloverBonus.cents > 0) {
+            Text(
+                "waarvan ${rolloverBonus.toDisplayString()} meegenomen van vorige maand",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
         ProgressTrack(percentage = row.percentage, color = statusColor)

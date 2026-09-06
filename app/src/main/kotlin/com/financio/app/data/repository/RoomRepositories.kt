@@ -1,18 +1,26 @@
 package com.financio.app.data.repository
 
+import com.financio.app.data.local.AccountDao
 import com.financio.app.data.local.BudgetDao
 import com.financio.app.data.local.CategoryDao
 import com.financio.app.data.local.CategoryRuleDao
+import com.financio.app.data.local.SavingsGoalDao
+import com.financio.app.data.local.SavingsGoalEntity
 import com.financio.app.data.local.TransactionDao
 import com.financio.app.data.local.toDomain
 import com.financio.app.data.local.toEntity
+import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
 import com.financio.core.model.Money
+import com.financio.core.model.SavingsGoal
 import com.financio.core.model.Transaction
+import com.financio.core.model.TransactionSplit
+import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.BudgetRepository
 import com.financio.core.repository.CategoryRepository
+import com.financio.core.repository.SavingsGoalRepository
 import com.financio.core.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -31,6 +39,9 @@ class RoomTransactionRepository @Inject constructor(
     override fun observeTransactions(accountId: Long): Flow<List<Transaction>> =
         dao.observeByAccount(accountId).map { entities -> entities.map { it.toDomain() } }
 
+    override fun observeAllTransactions(): Flow<List<Transaction>> =
+        dao.observeAll().map { entities -> entities.map { it.toDomain() } }
+
     override suspend fun existingDedupHashes(accountId: Long): Set<String> =
         dao.existingDedupHashes(accountId).toSet()
 
@@ -44,12 +55,22 @@ class RoomTransactionRepository @Inject constructor(
     override fun observeCategoryTotal(categoryId: Long, yearMonth: YearMonth): Flow<Money> =
         dao.observeCategoryTotal(categoryId, yearMonth.toString()).map { Money(it) }
 
+    override fun observeCategoryNetAllTime(categoryId: Long): Flow<Money> =
+        dao.observeCategoryNetAllTime(categoryId).map { Money(it) }
+
     override suspend fun updateCategory(transactionId: Long, categoryId: Long) {
         dao.updateCategory(transactionId, categoryId)
     }
 
     override suspend fun updateCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int =
         dao.updateCategoryForCounterparty(accountId, counterpartyName, categoryId)
+
+    override fun observeSplits(transactionId: Long): Flow<List<TransactionSplit>> =
+        dao.observeSplits(transactionId).map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun setSplits(transactionId: Long, splits: List<TransactionSplit>, fallbackCategoryId: Long?) {
+        dao.setSplits(transactionId, splits.map { it.toEntity() }, fallbackCategoryId)
+    }
 }
 
 class RoomCategoryRepository @Inject constructor(
@@ -111,5 +132,43 @@ class RoomBudgetRepository @Inject constructor(
             rollover = existing?.rollover ?: false,
         )
         dao.upsert(budget.toEntity())
+    }
+
+    override suspend fun setRollover(categoryId: Long, yearMonth: YearMonth, rollover: Boolean) {
+        val existing = dao.find(categoryId, yearMonth.toString())
+        val budget = Budget(
+            id = existing?.id ?: 0,
+            categoryId = categoryId,
+            yearMonth = yearMonth,
+            limit = existing?.let { Money(it.limitCents) } ?: Money.ZERO,
+            rollover = rollover,
+        )
+        dao.upsert(budget.toEntity())
+    }
+}
+
+class RoomAccountRepository @Inject constructor(
+    private val dao: AccountDao,
+) : AccountRepository {
+
+    override fun observeAccounts(): Flow<List<Account>> =
+        dao.observeAll().map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun addAccount(name: String, ibanMasked: String): Long =
+        dao.insert(com.financio.app.data.local.AccountEntity(name = name, ibanMasked = ibanMasked))
+}
+
+class RoomSavingsGoalRepository @Inject constructor(
+    private val dao: SavingsGoalDao,
+) : SavingsGoalRepository {
+
+    override fun observeGoals(): Flow<List<SavingsGoal>> =
+        dao.observeAll().map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun addGoal(name: String, targetAmount: Money, categoryId: Long): Long =
+        dao.insert(SavingsGoalEntity(name = name, targetAmountCents = targetAmount.cents, categoryId = categoryId))
+
+    override suspend fun deleteGoal(goalId: Long) {
+        dao.delete(goalId)
     }
 }

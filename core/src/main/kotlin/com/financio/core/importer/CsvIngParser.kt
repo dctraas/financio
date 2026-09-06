@@ -44,8 +44,12 @@ class CsvIngParser : BankStatementParser {
                 }
             }
         }
+        // Optional, unlike the columns above: "Tag" is a real ING export column (set from within
+        // the ING app itself), but treated as a bonus rather than required — an export missing it
+        // shouldn't fail to import over a field nothing here depends on.
+        val tagIndex = header.indexOf(COL_TAG).takeIf { it >= 0 }
 
-        return lines.drop(1).map { line -> parseLine(line, delimiter, columnIndex, accountId) }
+        return lines.drop(1).map { line -> parseLine(line, delimiter, columnIndex, tagIndex, accountId) }
     }
 
     private fun detectDelimiter(headerLine: String): Char =
@@ -83,7 +87,13 @@ class CsvIngParser : BankStatementParser {
         return fields
     }
 
-    private fun parseLine(line: String, delimiter: Char, columnIndex: Map<String, Int>, accountId: Long): ParsedTransaction {
+    private fun parseLine(
+        line: String,
+        delimiter: Char,
+        columnIndex: Map<String, Int>,
+        tagIndex: Int?,
+        accountId: Long,
+    ): ParsedTransaction {
         val fields = splitCsvLine(line, delimiter)
         fun col(name: String): String = fields.getOrElse(columnIndex.getValue(name)) { "" }.trim()
 
@@ -102,6 +112,7 @@ class CsvIngParser : BankStatementParser {
             .joinToString(" — ")
 
         val balance = col(COL_BALANCE).takeIf { it.isNotBlank() }?.let { Money.parseCommaDecimal(it) }
+        val tag = tagIndex?.let { index -> fields.getOrElse(index) { "" }.trim() }?.takeIf { it.isNotBlank() }
 
         return ParsedTransaction(
             accountId = accountId,
@@ -112,6 +123,7 @@ class CsvIngParser : BankStatementParser {
             description = description,
             balanceAfter = balance,
             sourceFormat = SourceFormat.CSV,
+            tag = tag,
         )
     }
 
@@ -123,6 +135,7 @@ class CsvIngParser : BankStatementParser {
         private const val COL_AMOUNT = "Bedrag (EUR)"
         private const val COL_NOTES = "Mededelingen"
         private const val COL_BALANCE = "Saldo na mutatie"
+        private const val COL_TAG = "Tag"
 
         private val REQUIRED_COLUMNS = listOf(
             COL_DATE, COL_NAME, COL_COUNTERPARTY, COL_DIRECTION, COL_AMOUNT, COL_NOTES, COL_BALANCE,

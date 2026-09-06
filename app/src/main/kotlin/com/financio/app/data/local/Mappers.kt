@@ -1,12 +1,15 @@
 package com.financio.app.data.local
 
+import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
 import com.financio.core.model.MatchType
 import com.financio.core.model.Money
+import com.financio.core.model.SavingsGoal
 import com.financio.core.model.SourceFormat
 import com.financio.core.model.Transaction
+import com.financio.core.model.TransactionSplit
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -21,6 +24,8 @@ fun TransactionEntity.toDomain() = Transaction(
     categoryId = categoryId,
     sourceFormat = SourceFormat.valueOf(sourceFormat),
     dedupHash = dedupHash,
+    balanceAfter = balanceCents?.let { Money(it) },
+    tag = tag,
 )
 
 fun Transaction.toEntity() = TransactionEntity(
@@ -34,6 +39,31 @@ fun Transaction.toEntity() = TransactionEntity(
     categoryId = categoryId,
     sourceFormat = sourceFormat.name,
     dedupHash = dedupHash,
+    balanceCents = balanceAfter?.cents,
+    tag = tag,
+)
+
+fun AccountEntity.toDomain() = Account(id = id, name = name, ibanMasked = ibanMasked)
+
+fun TransactionSplitEntity.toDomain() = TransactionSplit(
+    id = id,
+    transactionId = transactionId,
+    categoryId = categoryId,
+    amount = Money(amountCents),
+)
+
+fun TransactionSplit.toEntity() = TransactionSplitEntity(
+    id = id,
+    transactionId = transactionId,
+    categoryId = categoryId,
+    amountCents = amount.cents,
+)
+
+fun SavingsGoalEntity.toDomain() = SavingsGoal(
+    id = id,
+    name = name,
+    targetAmount = Money(targetAmountCents),
+    categoryId = categoryId,
 )
 
 fun CategoryEntity.toDomain() = Category(id = id, name = name, colorHex = colorHex, parentId = parentId)

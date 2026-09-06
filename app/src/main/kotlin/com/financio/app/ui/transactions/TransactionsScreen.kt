@@ -1,5 +1,6 @@
 package com.financio.app.ui.transactions
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
@@ -203,7 +205,7 @@ private fun TransactionFilters(state: TransactionsUiState, viewModel: Transactio
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = viewModel::setSearchQuery,
-            placeholder = { Text("Zoeken op naam of omschrijving") },
+            placeholder = { Text("Zoeken op naam, omschrijving of tag") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -278,7 +280,17 @@ private fun TransactionRow(transaction: Transaction, categoryName: String?, onCl
     ) {
         CategoryDot(categoryName, warningColor)
         Column(modifier = Modifier.weight(1f)) {
-            Text(transaction.counterpartyName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    transaction.counterpartyName,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                // ING's own "Tag" label from Mijn ING (e.g. "Vakantie 2024") - independent of
+                // Financio's categories, so it's shown alongside rather than folded into one.
+                transaction.tag?.let { tag -> TagChip(tag) }
+            }
             Text(
                 subtitleFor(categoryName, transaction),
                 style = MaterialTheme.typography.bodyMedium,
@@ -293,6 +305,18 @@ private fun TransactionRow(transaction: Transaction, categoryName: String?, onCl
             color = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+@Composable
+private fun TagChip(tag: String) {
+    Text(
+        tag,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 /** "Boodschappen · 4 sep" when categorized, or an unmissable "Tik om te categoriseren · 4 sep" when not. */
