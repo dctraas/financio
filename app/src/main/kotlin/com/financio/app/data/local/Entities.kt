@@ -73,4 +73,42 @@ data class TransactionEntity(
     val categoryId: Long?,
     @ColumnInfo(defaultValue = "CSV") val sourceFormat: String,
     val dedupHash: String,
+    /** Account balance right after this transaction, per the bank export — null for older rows and for MT940 imports. Added in schema v2. */
+    @ColumnInfo(defaultValue = "NULL") val balanceCents: Long? = null,
+    /** ING's own CSV "Tag" column. Added in schema v2. */
+    @ColumnInfo(defaultValue = "NULL") val tag: String? = null,
+)
+
+/**
+ * One category's share of a split transaction — see [com.financio.core.model.TransactionSplit].
+ * Added in schema v2.
+ */
+@Entity(
+    tableName = "transaction_splits",
+    foreignKeys = [
+        ForeignKey(entity = TransactionEntity::class, parentColumns = ["id"], childColumns = ["transactionId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = CategoryEntity::class, parentColumns = ["id"], childColumns = ["categoryId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("transactionId"), Index("categoryId")],
+)
+data class TransactionSplitEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val transactionId: Long,
+    val categoryId: Long,
+    val amountCents: Long,
+)
+
+/** See [com.financio.core.model.SavingsGoal]. Added in schema v2. */
+@Entity(
+    tableName = "savings_goals",
+    foreignKeys = [
+        ForeignKey(entity = CategoryEntity::class, parentColumns = ["id"], childColumns = ["categoryId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("categoryId")],
+)
+data class SavingsGoalEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val targetAmountCents: Long,
+    val categoryId: Long,
 )

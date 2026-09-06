@@ -17,6 +17,8 @@ data class ParsedTransaction(
     val description: String,
     val balanceAfter: Money?,
     val sourceFormat: SourceFormat,
+    /** ING's own CSV "Tag" column (set from within the ING app) — always null for MT940, which has no equivalent field. */
+    val tag: String? = null,
 ) {
     /** Identity for dedup: same account, date, amount, counterparty and description = same transaction. */
     val dedupKey: String
@@ -36,4 +38,7 @@ data class Transaction(
     val categoryId: Long?,
     val sourceFormat: SourceFormat,
     val dedupHash: String,
+    /** Account balance right after this transaction, if the export included one — powers the saldoverloop chart. */
+    val balanceAfter: Money? = null,
+    val tag: String? = null,
 )

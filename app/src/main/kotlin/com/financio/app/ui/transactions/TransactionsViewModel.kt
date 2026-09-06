@@ -115,7 +115,8 @@ class TransactionsViewModel @Inject constructor(
     private fun matchesSearch(transaction: Transaction, query: String): Boolean =
         query.isBlank() ||
             transaction.counterpartyName.contains(query, ignoreCase = true) ||
-            transaction.description.contains(query, ignoreCase = true)
+            transaction.description.contains(query, ignoreCase = true) ||
+            (transaction.tag?.contains(query, ignoreCase = true) ?: false)
 
     private fun matchesCategoryFilter(transaction: Transaction, filter: CategoryFilter): Boolean = when (filter) {
         CategoryFilter.All -> true

@@ -68,5 +68,7 @@ class ImportStatementUseCase(
         categoryId = matcher.categorize(this),
         sourceFormat = sourceFormat,
         dedupHash = Dedup.hashOf(this),
+        balanceAfter = balanceAfter,
+        tag = tag,
     )
 }

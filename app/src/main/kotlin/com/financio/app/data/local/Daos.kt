@@ -13,6 +13,9 @@ interface AccountDao {
 
     @Query("SELECT * FROM accounts WHERE id = :id")
     suspend fun get(id: Long): AccountEntity?
+
+    @Query("SELECT * FROM accounts ORDER BY name")
+    fun observeAll(): Flow<List<AccountEntity>>
 }
 
 @Dao
@@ -81,9 +84,25 @@ interface BudgetDao {
 }
 
 @Dao
+interface SavingsGoalDao {
+    @Query("SELECT * FROM savings_goals ORDER BY name")
+    fun observeAll(): Flow<List<SavingsGoalEntity>>
+
+    @Insert
+    suspend fun insert(goal: SavingsGoalEntity): Long
+
+    @Query("DELETE FROM savings_goals WHERE id = :goalId")
+    suspend fun delete(goalId: Long)
+}
+
+@Dao
 interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE accountId = :accountId ORDER BY date DESC, id DESC")
     fun observeByAccount(accountId: Long): Flow<List<TransactionEntity>>
+
+    /** Every transaction, every account — categorization/budgets/charts don't care which account money moved through. */
+    @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
+    fun observeAll(): Flow<List<TransactionEntity>>
 
     @Query("SELECT dedupHash FROM transactions WHERE accountId = :accountId")
     suspend fun existingDedupHashes(accountId: Long): List<String>
@@ -92,37 +111,102 @@ interface TransactionDao {
     suspend fun insertAll(transactions: List<TransactionEntity>)
 
     /**
-     * Sum of expenses (negative amounts only, negated back to positive) for one category in
-     * one calendar month — exactly the number [com.financio.core.budget.BudgetEvaluator] compares
-     * against a budget's limit. `date` is stored as ISO "yyyy-MM-dd", so a "yyyy-MM" prefix match
-     * is enough to scope it to the month.
+     * Sum of expenses (negative amounts only, negated back to positive) for one category in one
+     * calendar month, folding in any split allocations to that category alongside whole
+     * transactions categorized directly — exactly the number
+     * [com.financio.core.budget.BudgetEvaluator] compares against a budget's limit. A split
+     * transaction's own `categoryId` is null (see [setSplits]), so it never double-counts here:
+     * the first branch only matches whole, non-split transactions.
      */
     @Query(
         """
-        SELECT COALESCE(-SUM(amountCents), 0) FROM transactions
-        WHERE categoryId = :categoryId AND date LIKE :yearMonth || '-%' AND amountCents < 0
+        SELECT COALESCE(-SUM(amt), 0) FROM (
+            SELECT amountCents AS amt, date AS d FROM transactions WHERE categoryId = :categoryId
+            UNION ALL
+            SELECT s.amountCents AS amt, t.date AS d FROM transaction_splits s
+                JOIN transactions t ON t.id = s.transactionId WHERE s.categoryId = :categoryId
+        ) WHERE d LIKE :yearMonth || '-%' AND amt < 0
         """
     )
     fun observeSpent(categoryId: Long, yearMonth: String): Flow<Long>
 
     /**
      * Sum of all activity (debit or credit, as an absolute amount) for one category in one
-     * calendar month — what Grafieken charts. [observeSpent] only sums debits, so a category
-     * that's all credits (e.g. "Inkomsten") always summed to zero there and its chart looked
-     * empty even though Transacties showed a full list of matching rows for the same filter.
+     * calendar month, splits included — what Grafieken charts. [observeSpent] only sums debits,
+     * so a category that's all credits (e.g. "Inkomsten") always summed to zero there even though
+     * Transacties showed a full list of matching rows for the same filter.
      */
     @Query(
         """
-        SELECT COALESCE(SUM(ABS(amountCents)), 0) FROM transactions
-        WHERE categoryId = :categoryId AND date LIKE :yearMonth || '-%'
+        SELECT COALESCE(SUM(ABS(amt)), 0) FROM (
+            SELECT amountCents AS amt, date AS d FROM transactions WHERE categoryId = :categoryId
+            UNION ALL
+            SELECT s.amountCents AS amt, t.date AS d FROM transaction_splits s
+                JOIN transactions t ON t.id = s.transactionId WHERE s.categoryId = :categoryId
+        ) WHERE d LIKE :yearMonth || '-%'
         """
     )
     fun observeCategoryTotal(categoryId: Long, yearMonth: String): Flow<Long>
 
-    @Query("UPDATE transactions SET categoryId = :categoryId WHERE id = :transactionId")
-    suspend fun updateCategory(transactionId: Long, categoryId: Long)
+    /** Same shape as [observeSpent] but unscoped by month — a savings goal's all-time progress. */
+    @Query(
+        """
+        SELECT COALESCE(-SUM(amt), 0) FROM (
+            SELECT amountCents AS amt FROM transactions WHERE categoryId = :categoryId
+            UNION ALL
+            SELECT s.amountCents AS amt FROM transaction_splits s WHERE s.categoryId = :categoryId
+        )
+        """
+    )
+    fun observeCategoryNetAllTime(categoryId: Long): Flow<Long>
 
-    /** Bulk "categorize all the rest of this merchant's transactions the same way" from the transaction list. */
+    @Query("UPDATE transactions SET categoryId = :categoryId WHERE id = :transactionId")
+    suspend fun setCategoryColumn(transactionId: Long, categoryId: Long?)
+
     @Query("UPDATE transactions SET categoryId = :categoryId WHERE accountId = :accountId AND counterpartyName = :counterpartyName")
-    suspend fun updateCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int
+    suspend fun setCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int
+
+    @Query("DELETE FROM transaction_splits WHERE transactionId = :transactionId")
+    suspend fun clearSplits(transactionId: Long)
+
+    @Query(
+        """
+        DELETE FROM transaction_splits WHERE transactionId IN (
+            SELECT id FROM transactions WHERE accountId = :accountId AND counterpartyName = :counterpartyName
+        )
+        """
+    )
+    suspend fun clearSplitsForCounterparty(accountId: Long, counterpartyName: String)
+
+    @Query("SELECT * FROM transaction_splits WHERE transactionId = :transactionId")
+    fun observeSplits(transactionId: Long): Flow<List<TransactionSplitEntity>>
+
+    @Insert
+    suspend fun insertSplits(splits: List<TransactionSplitEntity>)
+
+    /** Manual categorization of an already-persisted transaction. Also clears any existing splits: picking one category un-splits it. */
+    @androidx.room.Transaction
+    suspend fun updateCategory(transactionId: Long, categoryId: Long) {
+        clearSplits(transactionId)
+        setCategoryColumn(transactionId, categoryId)
+    }
+
+    /** Bulk "categorize all the rest of this merchant's transactions the same way" from the transaction list. Also clears their splits, if any. */
+    @androidx.room.Transaction
+    suspend fun updateCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int {
+        clearSplitsForCounterparty(accountId, counterpartyName)
+        return setCategoryForCounterparty(accountId, counterpartyName, categoryId)
+    }
+
+    /** Replaces a transaction's splits entirely. An empty list un-splits it back to [fallbackCategoryId] (nullable — leaves it uncategorized). */
+    @androidx.room.Transaction
+    suspend fun setSplits(transactionId: Long, splits: List<TransactionSplitEntity>, fallbackCategoryId: Long?) {
+        clearSplits(transactionId)
+        if (splits.isNotEmpty()) {
+            insertSplits(splits)
+            setCategoryColumn(transactionId, null)
+        } else {
+            setCategoryColumn(transactionId, fallbackCategoryId)
+        }
+    }
 }

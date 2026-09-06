@@ -1,10 +1,13 @@
 package com.financio.core.repository
 
+import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
 import com.financio.core.model.Money
+import com.financio.core.model.SavingsGoal
 import com.financio.core.model.Transaction
+import com.financio.core.model.TransactionSplit
 import kotlinx.coroutines.flow.Flow
 import java.time.YearMonth
 
@@ -16,25 +19,37 @@ import java.time.YearMonth
  */
 interface TransactionRepository {
     fun observeTransactions(accountId: Long): Flow<List<Transaction>>
+
+    /** Every transaction across every account — categorization/budgets/charts are account-agnostic on purpose. */
+    fun observeAllTransactions(): Flow<List<Transaction>>
     suspend fun existingDedupHashes(accountId: Long): Set<String>
     suspend fun insertAll(transactions: List<Transaction>)
 
-    /** Money spent (debits only) in a category for a month — what a budget limit is compared against. */
+    /** Money spent (debits only) in a category for a month, including any split allocations — what a budget limit is compared against. */
     fun observeSpent(categoryId: Long, yearMonth: YearMonth): Flow<Money>
 
     /**
-     * Total activity (sum of absolute amounts, debit or credit) in a category for a month — what
-     * the Grafieken screen charts. Deliberately not [observeSpent]: that one only sums debits, so
-     * an income category (all credits) always summed to zero and its chart looked empty even
-     * though Transacties showed plenty of matching rows.
+     * Total activity (sum of absolute amounts, debit or credit) in a category for a month,
+     * including any split allocations — what the Grafieken screen charts. Deliberately not
+     * [observeSpent]: that one only sums debits, so an income category (all credits) always
+     * summed to zero and its chart looked empty even though Transacties showed plenty of
+     * matching rows.
      */
     fun observeCategoryTotal(categoryId: Long, yearMonth: YearMonth): Flow<Money>
 
-    /** Manual categorization of an already-persisted transaction — from the transaction list's "Te categoriseren" state. */
+    /** Net amount ever "spent" (debits minus credits) into a category, unscoped by month — a savings goal's progress. */
+    fun observeCategoryNetAllTime(categoryId: Long): Flow<Money>
+
+    /** Manual categorization of an already-persisted transaction — from the transaction list's "Te categoriseren" state. Also clears any existing splits on it. */
     suspend fun updateCategory(transactionId: Long, categoryId: Long)
 
     /** Applies [categoryId] to every transaction sharing [counterpartyName] on this account. Returns the number of rows changed. */
     suspend fun updateCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int
+
+    fun observeSplits(transactionId: Long): Flow<List<TransactionSplit>>
+
+    /** Replaces the transaction's splits entirely and nulls its own categoryId — the splits become authoritative. Pass an empty list to un-split it back to a single [categoryId]. */
+    suspend fun setSplits(transactionId: Long, splits: List<TransactionSplit>, fallbackCategoryId: Long?)
 }
 
 interface CategoryRepository {
@@ -54,4 +69,18 @@ interface CategoryRepository {
 interface BudgetRepository {
     fun observeBudgets(yearMonth: YearMonth): Flow<List<Budget>>
     suspend fun setLimit(categoryId: Long, yearMonth: YearMonth, limit: Money)
+    suspend fun setRollover(categoryId: Long, yearMonth: YearMonth, rollover: Boolean)
+}
+
+interface AccountRepository {
+    fun observeAccounts(): Flow<List<Account>>
+
+    /** Returns the new account's id. */
+    suspend fun addAccount(name: String, ibanMasked: String): Long
+}
+
+interface SavingsGoalRepository {
+    fun observeGoals(): Flow<List<SavingsGoal>>
+    suspend fun addGoal(name: String, targetAmount: Money, categoryId: Long): Long
+    suspend fun deleteGoal(goalId: Long)
 }
