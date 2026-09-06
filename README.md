@@ -351,6 +351,18 @@ vinden. Nog te controleren:
     en dus zoals altijd niet in deze sandbox te bouwen — hier komt bovenop dat zelfs de
     afhankelijkheidsversie niet extern te bevestigen was, dus dit stuk verdient bij het eerste
     echte bouwen in Android Studio extra aandacht.
+- **`:app:compileDebugKotlin` faalde: "'when' expression must be exhaustive" (4×).** De eerste
+  echte build-fout die deze batch functionaliteit opleverde. `ChartMode` kreeg er met
+  Saldoverloop een derde waarde (`BALANCE_HISTORY`) bij, maar vier `when (m)`-expressies in
+  `ChartsViewModel` — `shift`, `periodsFor`, `referenceLabelFor`, `labelFor`, allemaal alleen
+  gebruikt door het maand-op-maand/jaar-op-jaar-staafdiagram-pad — dekten nog maar twee van de
+  drie waardes. Deze sandbox kan `:app` niet compileren, dus dit soort exhaustiveness-fouten is
+  precies waar zorgvuldig lezen niet tegenop kan — echt door Android Studio gevonden. Opgelost met
+  een expliciete `BALANCE_HISTORY`-tak per functie: `shift` is een onschadelijke no-op (Saldoverloop
+  toont de ‹›-periodenavigator toch niet), de andere drie `error(...)` (ze worden vanuit de
+  Saldoverloop-tak van `uiState` nooit aangeroepen — zie `balanceHistoryState()` — dus een duidelijke
+  crash bij een toekomstige verkeerde aanroep is beter dan een stil verkeerd getal). `:core` hier
+  niet door geraakt (96 tests, ongewijzigd).
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`);
