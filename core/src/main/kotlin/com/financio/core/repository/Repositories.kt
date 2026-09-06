@@ -50,6 +50,9 @@ interface TransactionRepository {
 
     /** Replaces the transaction's splits entirely and nulls its own categoryId — the splits become authoritative. Pass an empty list to un-split it back to a single [categoryId]. */
     suspend fun setSplits(transactionId: Long, splits: List<TransactionSplit>, fallbackCategoryId: Long?)
+
+    /** Ids of every transaction that currently has at least one split — lets the transaction list show "Gesplitst" instead of "Tik om te categoriseren" for one, without loading every row's splits individually. */
+    fun observeSplitTransactionIds(): Flow<Set<Long>>
 }
 
 interface CategoryRepository {

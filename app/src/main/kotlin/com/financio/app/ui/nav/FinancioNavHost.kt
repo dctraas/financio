@@ -15,11 +15,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.financio.app.ui.accounts.AccountsScreen
 import com.financio.app.ui.budgets.BudgetsScreen
 import com.financio.app.ui.categories.CategoryManagementScreen
 import com.financio.app.ui.charts.ChartsScreen
 import com.financio.app.ui.importing.ImportScreen
+import com.financio.app.ui.savings.SavingsGoalsScreen
 import com.financio.app.ui.settings.SettingsScreen
+import com.financio.app.ui.subscriptions.SubscriptionsScreen
 import com.financio.app.ui.transactions.TransactionsScreen
 
 private const val ARG_CATEGORY_ID = "categoryId"
@@ -33,6 +36,9 @@ private sealed class Destination(val route: String, val label: String) {
     data object Settings : Destination("settings", "Instellingen")
     data object Import : Destination("import", "Importeren")
     data object CategoryManagement : Destination("categories", "Categorieën & regels")
+    data object Subscriptions : Destination("subscriptions", "Abonnementen")
+    data object SavingsGoals : Destination("savings-goals", "Spaardoelen")
+    data object Accounts : Destination("accounts", "Rekeningen")
 }
 
 private val bottomTabs = listOf(Destination.Transactions, Destination.Budgets, Destination.Charts, Destination.Settings)
@@ -89,10 +95,18 @@ fun FinancioNavHost() {
                 ChartsScreen(initialCategoryId = categoryId)
             }
             composable(Destination.Settings.route) {
-                SettingsScreen(onManageCategoriesClick = { navController.navigate(Destination.CategoryManagement.route) })
+                SettingsScreen(
+                    onManageCategoriesClick = { navController.navigate(Destination.CategoryManagement.route) },
+                    onSubscriptionsClick = { navController.navigate(Destination.Subscriptions.route) },
+                    onSavingsGoalsClick = { navController.navigate(Destination.SavingsGoals.route) },
+                    onAccountsClick = { navController.navigate(Destination.Accounts.route) },
+                )
             }
             composable(Destination.Import.route) { ImportScreen(onDone = { navController.popBackStack() }) }
             composable(Destination.CategoryManagement.route) { CategoryManagementScreen() }
+            composable(Destination.Subscriptions.route) { SubscriptionsScreen() }
+            composable(Destination.SavingsGoals.route) { SavingsGoalsScreen() }
+            composable(Destination.Accounts.route) { AccountsScreen() }
         }
     }
 }
@@ -106,5 +120,8 @@ private fun NavIcon(destination: Destination) {
         Destination.Settings -> SettingsIcon()
         Destination.Import -> Unit
         Destination.CategoryManagement -> Unit
+        Destination.Subscriptions -> Unit
+        Destination.SavingsGoals -> Unit
+        Destination.Accounts -> Unit
     }
 }

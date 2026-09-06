@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.toShortDisplayString
+import com.financio.core.model.Account
 import com.financio.core.model.Category
 import com.financio.core.usecase.UncategorizedGroup
 import java.io.BufferedReader
@@ -42,6 +43,8 @@ import java.io.InputStreamReader
 fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val categories by viewModel.categories.collectAsState()
+    val accounts by viewModel.accounts.collectAsState()
+    val selectedAccountId by viewModel.selectedAccountId.collectAsState()
     val context = LocalContext.current
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -60,6 +63,15 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
     Scaffold(topBar = { TopAppBar(title = { Text("Importeren") }) }) { padding ->
         when (val current = state) {
             is ImportUiState.PickFile -> Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
+                // Only surfaced once a second account actually exists - a single-account install
+                // (still the common case) never sees this and always imports into DefaultAccount.
+                if (accounts.size > 1) {
+                    AccountPicker(
+                        accounts = accounts,
+                        selectedAccountId = selectedAccountId,
+                        onSelect = viewModel::selectAccount,
+                    )
+                }
                 Text("Kies een CSV- of MT940-export uit Mijn ING.", style = MaterialTheme.typography.bodyLarge)
                 Button(
                     onClick = { filePicker.launch(arrayOf("text/*", "application/octet-stream")) },
@@ -79,6 +91,30 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
 
             is ImportUiState.Imported -> Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
                 Text("Geïmporteerd.")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountPicker(accounts: List<Account>, selectedAccountId: Long, onSelect: (Long) -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val selectedName = accounts.firstOrNull { it.id == selectedAccountId }?.name ?: "Kies rekening"
+
+    Column(modifier = Modifier.padding(bottom = 16.dp)) {
+        Text("Importeren naar", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "$selectedName ▾",
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable { menuOpen = true }.padding(vertical = 4.dp),
+        )
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            accounts.forEach { account ->
+                DropdownMenuItem(
+                    text = { Text(account.name) },
+                    onClick = { onSelect(account.id); menuOpen = false },
+                )
             }
         }
     }
