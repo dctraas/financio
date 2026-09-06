@@ -71,6 +71,9 @@ class RoomTransactionRepository @Inject constructor(
     override suspend fun setSplits(transactionId: Long, splits: List<TransactionSplit>, fallbackCategoryId: Long?) {
         dao.setSplits(transactionId, splits.map { it.toEntity() }, fallbackCategoryId)
     }
+
+    override fun observeSplitTransactionIds(): Flow<Set<Long>> =
+        dao.observeSplitTransactionIds().map { it.toSet() }
 }
 
 class RoomCategoryRepository @Inject constructor(

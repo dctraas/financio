@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.DefaultAccount
 import com.financio.core.categorize.LearnedRule
+import com.financio.core.model.Account
 import com.financio.core.model.Category
+import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.usecase.ImportPreview
 import com.financio.core.usecase.ImportStatementUseCase
@@ -43,6 +45,7 @@ sealed interface ImportUiState {
 class ImportViewModel @Inject constructor(
     private val importStatementUseCase: ImportStatementUseCase,
     private val categoryRepository: CategoryRepository,
+    accountRepository: AccountRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ImportUiState>(ImportUiState.PickFile)
@@ -51,11 +54,22 @@ class ImportViewModel @Inject constructor(
     val categories: StateFlow<List<Category>> = categoryRepository.observeCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val accounts: StateFlow<List<Account>> = accountRepository.observeAccounts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Which account the next import goes into — only ever surfaced in the UI once a second account exists. */
+    private val _selectedAccountId = MutableStateFlow(DefaultAccount.ID)
+    val selectedAccountId: StateFlow<Long> = _selectedAccountId.asStateFlow()
+
+    fun selectAccount(accountId: Long) {
+        _selectedAccountId.value = accountId
+    }
+
     fun onFilePicked(fileName: String, content: String) {
         _uiState.value = ImportUiState.Loading
         viewModelScope.launch {
             _uiState.value = try {
-                val preview = importStatementUseCase.preview(content, DefaultAccount.ID)
+                val preview = importStatementUseCase.preview(content, _selectedAccountId.value)
                 ImportUiState.Ready(fileName, preview)
             } catch (e: Exception) {
                 ImportUiState.Failed(e.message ?: "Kon het bestand niet lezen.")

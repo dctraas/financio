@@ -32,14 +32,20 @@ traject.
   *elke* transactie, ook een al gecategoriseerde, om de categorie te wijzigen — daarna wordt
   gevraagd of dezelfde categorie ook toegepast moet worden op de andere transacties van diezelfde
   tegenpartij die al in de lijst staan (scheelt tijd bij bijvoorbeeld 40 Albert Heijn-regels).
-  Ook ING's eigen "Tag"-label (indien aanwezig) wordt getoond en is doorzoekbaar.
+  Ook ING's eigen "Tag"-label (indien aanwezig) wordt getoond en is doorzoekbaar. Een transactie
+  kan ook **gesplitst** worden over meerdere categorieën (bijv. één Albert Heijn-bon half
+  boodschappen, half drogisterij) — "Veilig te besteden deze maand" bovenaan het scherm laat zien
+  hoeveel er, gegeven het huidige saldo en verwachte abonnementsafschrijvingen, nog uitgegeven kan
+  worden. Zodra er meer dan één rekening bestaat verschijnt hier ook een rekeningfilter
+  ("Alle rekeningen" of één specifieke).
 - **Budgetten** — limieten per categorie met groen/amber/rood, tik op een categorie voor de grafiek.
   Optionele rollover per categorie (in te stellen in Instellingen): onbenut budget van vorige
   maand telt als bonusruimte bij deze maand op.
 - **Grafieken** — maand-op-maand en jaar-op-jaar per categorie, met de budgetlimiet als lijn in de
   grafiek en een ‹ ›-navigator om het weergegeven venster naar eerdere maanden/jaren te schuiven
   (voorheen alleen een vast venster eindigend op vandaag, met geen manier om terug te bladeren).
-  Een derde modus, Saldoverloop, toont het banksaldo zelf als lijngrafiek in de tijd.
+  Een derde modus, Saldoverloop, toont het banksaldo zelf als lijngrafiek in de tijd (per
+  rekening, met een rekeningkiezer zodra er meer dan één bestaat).
 - **Importeren** — CSV/MT940 inlezen, dedupliceren, automatisch categoriseren; wat overblijft
   wordt **per tegenpartij gegroepeerd** (één keuze voor alle 40 Albert Heijn-transacties samen,
   in plaats van 40 losse keuzes), gesorteerd op grootste totaalbedrag eerst, met aantal/bedrag/
@@ -63,8 +69,21 @@ traject.
   importbestand-formaat volstaat voor zowel "alles" als "losse onderdelen": het bestand beschrijft
   zelf wat erin zit, dus is er maar één "Bestand importeren"-knop nodig. Zie `BackupSerializer`,
   `CategoryImport` en `RuleImport` in `:core`.
-- **Instellingen** — budgetlimieten instellen, link naar categorie-/regelbeheer, import/export,
-  biometrische vergrendeling aan/uit.
+- **Instellingen** — budgetlimieten (met optionele rollover) instellen, links naar rekeningen-,
+  categorie-/regel- en spaardoelenbeheer en Abonnementen, import/export, biometrische
+  vergrendeling aan/uit.
+- **Abonnementen** — herkent terugkerende afschrijvingen (Netflix, Spotify, verzekeringen, etc.)
+  puur uit je eigen transactiehistorie: geregeld qua timing (ongeveer maandelijks) én qua bedrag
+  (max. 15% afwijking). Geen bankkoppeling, geen merchant-database — zie `SubscriptionDetector`
+  in `:core`. Toont de geschatte totale maandlast en, per abonnement, wanneer de volgende
+  afschrijving verwacht wordt.
+- **Spaardoelen** — een doelbedrag koppelen aan een categorie; de voortgang is simpelweg hoeveel
+  er ooit netto naar die categorie is overgeboekt (dezelfde `debits - credits`-conventie als
+  Budgetten, alleen niet per maand) — een latere opname (een bijschrijving in die categorie)
+  verlaagt de voortgang dus vanzelf weer, zonder een aparte boekhouding daarvoor nodig te hebben.
+- **Meerdere rekeningen** — nog steeds volledig lokaal: elke rekening krijgt zijn eigen,
+  losse CSV-/MT940-import (geen bankkoppeling, geen aggregator — dat blijft de bewust uitgestelde
+  architectuurstap). Categorieën, budgetten en spaardoelen gelden over alle rekeningen heen.
 - **App-vergrendeling** — `BiometricPrompt` (vingerafdruk/gezicht/schermbeveiliging) vóór de
   content, aan te zetten in Instellingen; staat standaard aan.
 
@@ -267,6 +286,22 @@ vinden. Nog te controleren:
   transacties op dezelfde dag is er dus geen waterdicht signaal voor de volgorde binnen die dag;
   gekozen voor een gedocumenteerde, deterministische benadering (de laatst-ingevoerde transactie
   van die dag) in plaats van te gokken.
+- **Abonnementendetectie, spaardoelen, gesplitste transacties, veilig-te-besteden, meerdere
+  rekeningen.** De rest van dezelfde functionaliteitenbatch als de schemamigratie hierboven — vier
+  nieuwe, zichtbare features op dezelfde v1→v2-fundering. `SplitValidation` en
+  `SubscriptionDetector`/`SafeToSpendCalculator` waren al `:core`-zijdig klaar en getest; dit
+  koppelt ze aan de UI, plus twee nieuwe `:core`-methodes (`observeSplitTransactionIds`,
+  ongewijzigd verder qua logica — puur interface-uitbreiding, geen nieuwe tests nodig) om een
+  gesplitste transactie in Transacties als "Gesplitst" te tonen in plaats van als "niet
+  gecategoriseerd" (haar eigen `categoryId` is null, per ontwerp — zie de vorige migratie-entry).
+  Meerdere rekeningen relaxt de eerder overal hardgecodeerde `DefaultAccount.ID`: een
+  rekeningkiezer in Importeren (alleen zichtbaar zodra een tweede rekening bestaat), een nieuw
+  "Rekeningen"-scherm om ze te beheren, en rekeningfilters in Transacties en Grafieken (Grafieken
+  telt bewust nooit de saldi van twee rekeningen bij elkaar op — dat is geen zinvol getal).
+  `applyCategoryToCounterparty`'s "toepassen op de rest"-actie is nu ook expliciet per rekening
+  gescopet in plaats van altijd op `DefaultAccount.ID`. Alles hier is `:app`-laag (UI/ViewModels)
+  en dus zoals gebruikelijk niet in deze sandbox te bouwen; `:core` blijft ongewijzigd qua
+  gedrag en dus nog steeds 88 tests groen.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`);

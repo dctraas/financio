@@ -181,6 +181,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transaction_splits WHERE transactionId = :transactionId")
     fun observeSplits(transactionId: Long): Flow<List<TransactionSplitEntity>>
 
+    @Query("SELECT DISTINCT transactionId FROM transaction_splits")
+    fun observeSplitTransactionIds(): Flow<List<Long>>
+
     @Insert
     suspend fun insertSplits(splits: List<TransactionSplitEntity>)
 

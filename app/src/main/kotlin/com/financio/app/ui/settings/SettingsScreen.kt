@@ -45,7 +45,13 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 @Composable
-fun SettingsScreen(onManageCategoriesClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    onManageCategoriesClick: () -> Unit,
+    onSubscriptionsClick: () -> Unit,
+    onSavingsGoalsClick: () -> Unit,
+    onAccountsClick: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
     val importResult by viewModel.importResult.collectAsState()
     val context = LocalContext.current
@@ -109,6 +115,55 @@ fun SettingsScreen(onManageCategoriesClick: () -> Unit, viewModel: SettingsViewM
                         onRolloverChange = { enabled -> viewModel.setRollover(category.id, enabled) },
                     )
                 }
+            }
+
+            item { SectionHeader("Abonnementen") }
+            item {
+                Text(
+                    "Terugkerende afschrijvingen die Financio zelf herkent in je transactiehistorie " +
+                        "— geen bankkoppeling nodig.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Text(
+                    "Bekijken →",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 8.dp).clickable(onClick = onSubscriptionsClick),
+                )
+            }
+
+            item { SectionHeader("Rekeningen") }
+            item {
+                Text(
+                    "Meerdere rekeningen beheren — elk met een eigen CSV-/MT940-import.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Text(
+                    "Beheren →",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 8.dp).clickable(onClick = onAccountsClick),
+                )
+            }
+
+            item { SectionHeader("Spaardoelen") }
+            item {
+                Text(
+                    "Doelbedrag koppelen aan een categorie en de voortgang volgen.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Text(
+                    "Bekijken →",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 8.dp).clickable(onClick = onSavingsGoalsClick),
+                )
             }
 
             item { SectionHeader("Categorieën & regels") }

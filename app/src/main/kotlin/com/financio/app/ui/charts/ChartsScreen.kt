@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
+import com.financio.core.model.Account
 import com.financio.core.model.Money
 
 @Composable
@@ -78,6 +79,13 @@ fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = h
                     ModeSwitch(mode = state.mode, onModeChange = viewModel::selectMode)
 
                     if (state.mode == ChartMode.BALANCE_HISTORY) {
+                        if (state.accounts.size > 1) {
+                            AccountPicker(
+                                accounts = state.accounts,
+                                selectedAccountId = state.selectedAccountId,
+                                onSelect = viewModel::selectAccount,
+                            )
+                        }
                         BalanceHistorySection(state.balancePoints)
                     } else {
                         PeriodNavigator(
@@ -178,6 +186,19 @@ private fun ModeSwitch(mode: ChartMode, onModeChange: (ChartMode) -> Unit) {
                 selected = mode == ChartMode.BALANCE_HISTORY,
                 onClick = { onModeChange(ChartMode.BALANCE_HISTORY) },
                 label = { Text("Saldoverloop") },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccountPicker(accounts: List<Account>, selectedAccountId: Long?, onSelect: (Long) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
+        items(accounts, key = { it.id }) { account ->
+            FilterChip(
+                selected = account.id == selectedAccountId,
+                onClick = { onSelect(account.id) },
+                label = { Text(account.name) },
             )
         }
     }

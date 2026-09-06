@@ -3,8 +3,10 @@ package com.financio.app.ui.charts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.DefaultAccount
+import com.financio.core.model.Account
 import com.financio.core.model.Category
 import com.financio.core.model.Money
+import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.BudgetRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.TransactionRepository
@@ -45,6 +47,10 @@ data class ChartsUiState(
     val canGoToNextPeriod: Boolean = false,
     /** Only populated in [ChartMode.BALANCE_HISTORY] — the rest of the state above is unused there. */
     val balancePoints: List<BalancePoint> = emptyList(),
+    /** Every account — only relevant (and only shown) in [ChartMode.BALANCE_HISTORY] once there's more than one. */
+    val accounts: List<Account> = emptyList(),
+    /** The account [balancePoints] is for — never null once accounts exist, unlike Transacties' "alle rekeningen": summing two accounts' balances into one line isn't a number that means anything. */
+    val selectedAccountId: Long? = null,
 )
 
 @HiltViewModel
@@ -52,6 +58,7 @@ class ChartsViewModel @Inject constructor(
     categoryRepository: CategoryRepository,
     private val budgetRepository: BudgetRepository,
     private val transactionRepository: TransactionRepository,
+    accountRepository: AccountRepository,
 ) : ViewModel() {
 
     private val selectedCategoryId = MutableStateFlow<Long?>(null)
@@ -61,6 +68,11 @@ class ChartsViewModel @Inject constructor(
     // the fixed trailing window this screen used to show with no way to move it.
     private val referenceMonth = MutableStateFlow(YearMonth.now())
     private val categories = categoryRepository.observeCategories()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Only used by Saldoverloop. null = not chosen yet, resolved to the first account. */
+    private val selectedAccountId = MutableStateFlow<Long?>(null)
+    private val accounts = accountRepository.observeAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val uiState: StateFlow<ChartsUiState> = combine(
@@ -86,6 +98,10 @@ class ChartsViewModel @Inject constructor(
 
     fun selectMode(newMode: ChartMode) {
         mode.value = newMode
+    }
+
+    fun selectAccount(accountId: Long) {
+        selectedAccountId.value = accountId
     }
 
     fun goToPreviousPeriod() {
@@ -132,24 +148,32 @@ class ChartsViewModel @Inject constructor(
      * per date deterministically picks the most-recently-inserted transaction for that day as an
      * approximation of its closing balance.
      *
-     * Scoped to [DefaultAccount.ID] like the rest of the app for now — becomes per-account once
-     * multiple accounts (a separate feature) reach the UI.
+     * One account's balance at a time, never "all accounts" combined (unlike Transacties) — two
+     * accounts' balances added together isn't a meaningful line to draw. Defaults to the first
+     * account ([DefaultAccount.ID] on a single-account install, since that's the only one there
+     * is) until the user picks a different one.
      */
     private fun balanceHistoryState(cats: List<Category>): Flow<ChartsUiState> =
-        transactionRepository.observeTransactions(DefaultAccount.ID).map { transactions ->
-            val seenDates = mutableSetOf<LocalDate>()
-            val points = transactions
-                .filter { it.balanceAfter != null }
-                .filter { seenDates.add(it.date) }
-                .map { BalancePoint(it.date, it.balanceAfter!!) }
-                .reversed() // back to chronological ascending for the chart
-                .takeLast(60)
-            ChartsUiState(
-                categories = cats,
-                mode = ChartMode.BALANCE_HISTORY,
-                balancePoints = points,
-                currentTotal = points.lastOrNull()?.balance ?: Money.ZERO,
-            )
+        combine(selectedAccountId, accounts) { selected, accountList ->
+            (selected ?: accountList.firstOrNull()?.id ?: DefaultAccount.ID) to accountList
+        }.flatMapLatest { (resolvedAccountId, accountList) ->
+            transactionRepository.observeTransactions(resolvedAccountId).map { transactions ->
+                val seenDates = mutableSetOf<LocalDate>()
+                val points = transactions
+                    .filter { it.balanceAfter != null }
+                    .filter { seenDates.add(it.date) }
+                    .map { BalancePoint(it.date, it.balanceAfter!!) }
+                    .reversed() // back to chronological ascending for the chart
+                    .takeLast(60)
+                ChartsUiState(
+                    categories = cats,
+                    mode = ChartMode.BALANCE_HISTORY,
+                    balancePoints = points,
+                    currentTotal = points.lastOrNull()?.balance ?: Money.ZERO,
+                    accounts = accountList,
+                    selectedAccountId = resolvedAccountId,
+                )
+            }
         }
 
     private fun periodsFor(m: ChartMode, anchor: YearMonth): List<YearMonth> = when (m) {
