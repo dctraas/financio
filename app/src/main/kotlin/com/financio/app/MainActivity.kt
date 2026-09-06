@@ -31,11 +31,13 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            FinancioTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    val settingsViewModel: SettingsViewModel = hiltViewModel()
-                    val settingsState by settingsViewModel.uiState.collectAsState()
+            // Read outside FinancioTheme, not inside: the theme mode decides what FinancioTheme
+            // itself renders with, so it can't wait for a ViewModel created inside its own content.
+            val settingsViewModel: SettingsViewModel = hiltViewModel()
+            val settingsState by settingsViewModel.uiState.collectAsState()
 
+            FinancioTheme(themeMode = settingsState.themeMode) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     AppLockGate(
                         biometricLockEnabled = settingsState.biometricLockEnabled,
                         onRequestAuth = ::requestBiometricAuth,

@@ -56,6 +56,14 @@ data class TransactionsUiState(
     val accounts: List<Account> = emptyList(),
     /** null = alle rekeningen. */
     val selectedAccountId: Long? = null,
+    /**
+     * Counts shown on each filter chip. Computed against the search-matched list but *before*
+     * the category filter itself is applied, so picking "Boodschappen" doesn't zero out every
+     * other chip's count — the whole point is seeing how many transactions each option has.
+     */
+    val totalCount: Int = 0,
+    val uncategorizedCount: Int = 0,
+    val categoryCounts: Map<Long, Int> = emptyMap(),
 )
 
 @HiltViewModel
@@ -89,8 +97,8 @@ class TransactionsViewModel @Inject constructor(
         categoryFilter,
         sort,
     ) { transactions, categories, query, filter, sortOrder ->
-        val filtered = transactions
-            .filter { matchesSearch(it, query) }
+        val searchMatched = transactions.filter { matchesSearch(it, query) }
+        val filtered = searchMatched
             .filter { matchesCategoryFilter(it, filter) }
             .sortedWith(comparatorFor(sortOrder))
 
@@ -104,6 +112,9 @@ class TransactionsViewModel @Inject constructor(
             hasUnfilteredTransactions = transactions.isNotEmpty(),
             safeToSpend = safeToSpendFor(transactions, accounts.value.size),
             selectedAccountId = selectedAccountId.value,
+            totalCount = searchMatched.size,
+            uncategorizedCount = searchMatched.count { it.categoryId == null },
+            categoryCounts = searchMatched.mapNotNull { it.categoryId }.groupingBy { it }.eachCount(),
         )
     }
 

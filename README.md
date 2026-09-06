@@ -69,9 +69,9 @@ traject.
   importbestand-formaat volstaat voor zowel "alles" als "losse onderdelen": het bestand beschrijft
   zelf wat erin zit, dus is er maar één "Bestand importeren"-knop nodig. Zie `BackupSerializer`,
   `CategoryImport` en `RuleImport` in `:core`.
-- **Instellingen** — budgetlimieten (met optionele rollover) instellen, links naar rekeningen-,
-  categorie-/regel- en spaardoelenbeheer en Abonnementen, import/export, biometrische
-  vergrendeling aan/uit, meldingen aan/uit.
+- **Instellingen** — licht/donker/systeem-weergave, budgetlimieten (met optionele rollover)
+  instellen, links naar rekeningen-, categorie-/regel- en spaardoelenbeheer en Abonnementen,
+  import/export, biometrische vergrendeling aan/uit, meldingen aan/uit.
 - **Meldingen** — volledig lokaal, geen server of pushtoken: een melding zodra een budget net over
   de 80%- of 100%-grens gaat (direct na categoriseren of importeren, niet pas bij de eerstvolgende
   keer dat de app open is), en een wekelijkse samenvatting (totaal besteed deze week, aantal
@@ -363,6 +363,41 @@ vinden. Nog te controleren:
   Saldoverloop-tak van `uiState` nooit aangeroepen — zie `balanceHistoryState()` — dus een duidelijke
   crash bij een toekomstige verkeerde aanroep is beter dan een stil verkeerd getal). `:core` hier
   niet door geraakt (96 tests, ongewijzigd).
+- **Vijf usability-terugkoppelingen na het eerste echte gebruik.** Vier daarvan zijn opgelost:
+  - **Bodemnavigatie-icoontjes veel te klein.** Echte oorzaak: `NavIcons.kt` tekende met
+    hardgecodeerde pixelcoördinaten (bijv. `Offset(5f, 7f)`) direct tegen `DrawScope.size`, dat in
+    *echte* pixels is (24dp × schermdichtheid — 72px of meer op de meeste telefoons, niet 24). Elk
+    icoontje kwam dus in een piepklein hoekje van een veel grotere canvas terecht. Opgelost door
+    alle coördinaten in een vast 24×24-ontwerprooster te tekenen en dat rooster via
+    `DrawScope.scale()` één keer te herschalen naar de daadwerkelijke pixelgrootte — inclusief de
+    lijndikte, die nu ook in ontwerpeenheden staat in plaats van al vooraf naar px omgerekend
+    (anders zou de schaal 'm dubbel toepassen).
+  - **Categorielijst niet te scrollen bij veel categorieën (Transacties).** De categoriekeuze-
+    dialoog (bij het tikken op een transactie) gebruikte een gewone `Column` zonder scrollmodifier
+    — Material3's `AlertDialog` scrollt zijn `text`-inhoud niet automatisch, dus een lijst die niet
+    meer op het scherm past liep gewoon door zonder dat je bij de rest kon komen.
+    `Modifier.verticalScroll(rememberScrollState())` toegevoegd.
+  - **Aantal per filter tonen (Transacties).** Elke filterchip ("Alle", "Niet gecategoriseerd",
+    per categorie) toont nu het aantal transacties erachter, berekend over de zoekterm-gefilterde
+    maar nog niet categorie-gefilterde lijst — zo blijft elk aantal zichtbaar ongeacht welk filter
+    net actief is.
+  - **Licht/donker/systeem-keuze (Instellingen).** `FinancioTheme` volgde tot nu toe altijd
+    automatisch het systeemthema, zonder eigen keuze. Nieuwe `ThemeMode`-instelling (Licht/Donker/
+    Systeem) in `AppPreferences`, met drie chips in een nieuwe "Weergave"-sectie in Instellingen.
+  - **Grafiekbalk aantikken om naar die periode te springen.** `ChartPoint` kreeg er een `period:
+    YearMonth`-veld bij; de balkjesgrafiek herkent nu een tik via `pointerInput`/`detectTapGestures`
+    (de getikte x-positie gedeeld door de celbreedte per balk geeft de index), en centreert het
+    hele 6-maands/4-jaars-venster opnieuw op die periode (dezelfde `referenceMonth`-mechaniek als
+    de ‹›-navigator).
+  - **"Budgetten"-knop doet niets meer, geen crash.** Niet opgelost — de navigatielogica bleek
+    byte-voor-byte ongewijzigd ten opzichte van vóór deze hele functionaliteitenbatch (vergeleken
+    met git history), en Hilt's dependency-graph wordt al bij het compileren gevalideerd, dus een
+    ontbrekende binding zou een build-fout zijn geweest, geen stille runtime no-op. Kon niet
+    gereproduceerd worden vanuit codereview alleen; eerst een schone rebuild proberen
+    (`./gradlew clean assembleDebug`, of Build → Clean/Rebuild Project in Android Studio) — een
+    verouderde incrementele build is de meest voor de hand liggende verklaring voor "een tik die
+    niets doet, zonder enige foutmelding" na een reeks opeenvolgende dependency-wijzigingen zoals
+    in deze batch.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`);

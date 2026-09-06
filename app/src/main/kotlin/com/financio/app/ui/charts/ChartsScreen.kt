@@ -2,6 +2,7 @@ package com.financio.app.ui.charts
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,6 +39,7 @@ import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.core.model.Account
 import com.financio.core.model.Money
+import java.time.YearMonth
 
 @Composable
 fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = hiltViewModel()) {
@@ -114,6 +117,7 @@ fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = h
                         BarChart(
                             points = state.points,
                             limit = state.limit,
+                            onBarClick = { period -> viewModel.goToPeriod(period) },
                             modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 20.dp),
                         )
                         state.limit?.let {
@@ -291,7 +295,7 @@ private fun BalanceLineChart(points: List<BalancePoint>, modifier: Modifier = Mo
 }
 
 @Composable
-private fun BarChart(points: List<ChartPoint>, limit: Money?, modifier: Modifier = Modifier) {
+private fun BarChart(points: List<ChartPoint>, limit: Money?, onBarClick: (YearMonth) -> Unit, modifier: Modifier = Modifier) {
     if (points.isEmpty()) return
     val statusColors = LocalBudgetStatusColors.current
     val barColor = MaterialTheme.colorScheme.outline
@@ -301,7 +305,18 @@ private fun BarChart(points: List<ChartPoint>, limit: Money?, modifier: Modifier
 
     val maxValue = (points.maxOf { it.amount.cents } .coerceAtLeast(limit?.cents ?: 0L)).coerceAtLeast(1L)
 
-    Canvas(modifier) {
+    // Bars are laid out in equal-width cells (bar + its share of the gap, see barWidth/gap
+    // below), so a tap just needs its x-position divided by that cell width to land on a bar
+    // index — no need to hit-test each bar's rounded rect individually.
+    val tapModifier = Modifier.pointerInput(points) {
+        detectTapGestures { offset ->
+            val cellWidth = size.width.toFloat() / points.size
+            val index = (offset.x / cellWidth).toInt().coerceIn(0, points.lastIndex)
+            onBarClick(points[index].period)
+        }
+    }
+
+    Canvas(modifier.then(tapModifier)) {
         val labelHeight = 28.dp.toPx()
         val chartHeight = size.height - labelHeight
         val barWidth = size.width / (points.size * 2f)

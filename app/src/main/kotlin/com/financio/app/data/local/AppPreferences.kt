@@ -5,6 +5,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/** Light/dark follows the device by default (SYSTEM); LIGHT/DARK pin it regardless of the device setting. */
+enum class ThemeMode { LIGHT, DARK, SYSTEM }
+
 /**
  * Device-local app settings — not synced, not part of the encrypted transaction database.
  * SharedPreferences is fine here: there's a handful of booleans, all read once at startup.
@@ -37,12 +40,26 @@ class AppPreferences(context: Context) {
         _notificationsEnabled.value = enabled
     }
 
+    private val _themeMode = MutableStateFlow(
+        prefs.getString(KEY_THEME_MODE, null)?.let { stored ->
+            runCatching { ThemeMode.valueOf(stored) }.getOrNull()
+        } ?: DEFAULT_THEME_MODE,
+    )
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+        _themeMode.value = mode
+    }
+
     companion object {
         private const val PREFS_NAME = "financio_settings"
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
+        private const val KEY_THEME_MODE = "theme_mode"
         // On by default for a finance app — matches the architecture doc's security section.
         private const val DEFAULT_BIOMETRIC_LOCK = true
         private const val DEFAULT_NOTIFICATIONS = false
+        private val DEFAULT_THEME_MODE = ThemeMode.SYSTEM
     }
 }

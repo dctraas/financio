@@ -28,7 +28,7 @@ import javax.inject.Inject
 
 enum class ChartMode { MONTH_OVER_MONTH, YEAR_OVER_YEAR, BALANCE_HISTORY }
 
-data class ChartPoint(val label: String, val amount: Money, val isCurrent: Boolean)
+data class ChartPoint(val label: String, val amount: Money, val isCurrent: Boolean, val period: YearMonth)
 
 /** One day's closing balance, for the Saldoverloop line chart. */
 data class BalancePoint(val date: LocalDate, val balance: Money)
@@ -109,7 +109,16 @@ class ChartsViewModel @Inject constructor(
     }
 
     fun goToNextPeriod() {
-        val candidate = shift(referenceMonth.value, mode.value, +1)
+        moveTo(shift(referenceMonth.value, mode.value, +1))
+    }
+
+    /** Tapping a bar re-centers the whole trailing window on that bar's own period, making it the new rightmost one. */
+    fun goToPeriod(period: YearMonth) {
+        moveTo(period)
+    }
+
+    /** Never lets the anchor move past "now" — a tapped bar is already ≤ now, but goToNextPeriod's step might not be. */
+    private fun moveTo(candidate: YearMonth) {
         if (!candidate.isAfter(YearMonth.now())) referenceMonth.value = candidate
     }
 
@@ -196,7 +205,7 @@ class ChartsViewModel @Inject constructor(
         amounts: List<Money>,
     ): ChartsUiState {
         val points = periods.zip(amounts).mapIndexed { index, (period, amount) ->
-            ChartPoint(label = labelFor(period, m), amount = amount, isCurrent = index == periods.lastIndex)
+            ChartPoint(label = labelFor(period, m), amount = amount, isCurrent = index == periods.lastIndex, period = period)
         }
         val current = amounts.lastOrNull() ?: Money.ZERO
         val previous = amounts.getOrNull(amounts.lastIndex - 1)
