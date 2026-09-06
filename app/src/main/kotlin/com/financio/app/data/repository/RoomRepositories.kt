@@ -41,9 +41,15 @@ class RoomTransactionRepository @Inject constructor(
     override fun observeSpent(categoryId: Long, yearMonth: YearMonth): Flow<Money> =
         dao.observeSpent(categoryId, yearMonth.toString()).map { Money(it) }
 
+    override fun observeCategoryTotal(categoryId: Long, yearMonth: YearMonth): Flow<Money> =
+        dao.observeCategoryTotal(categoryId, yearMonth.toString()).map { Money(it) }
+
     override suspend fun updateCategory(transactionId: Long, categoryId: Long) {
         dao.updateCategory(transactionId, categoryId)
     }
+
+    override suspend fun updateCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int =
+        dao.updateCategoryForCounterparty(accountId, counterpartyName, categoryId)
 }
 
 class RoomCategoryRepository @Inject constructor(
@@ -59,6 +65,10 @@ class RoomCategoryRepository @Inject constructor(
 
     override suspend fun addRule(rule: CategoryRule) {
         ruleDao.insert(rule.toRuleEntity())
+    }
+
+    override suspend fun addRules(rules: List<CategoryRule>) {
+        ruleDao.insertAll(rules.map { it.toRuleEntity() })
     }
 
     override suspend fun addCategory(name: String, colorHex: String): Long =
@@ -89,6 +99,17 @@ class RoomBudgetRepository @Inject constructor(
         dao.observeForMonth(yearMonth.toString()).map { entities -> entities.map { it.toDomain() } }
 
     override suspend fun setLimit(categoryId: Long, yearMonth: YearMonth, limit: Money) {
-        dao.upsert(Budget(categoryId = categoryId, yearMonth = yearMonth, limit = limit).toEntity())
+        // Reuse the existing row's id (if any) so REPLACE actually replaces it in place, instead
+        // of always inserting id=0 - which, with no unique constraint on categoryId+yearMonth,
+        // just created a brand-new row every time and left the same category listed twice.
+        val existing = dao.find(categoryId, yearMonth.toString())
+        val budget = Budget(
+            id = existing?.id ?: 0,
+            categoryId = categoryId,
+            yearMonth = yearMonth,
+            limit = limit,
+            rollover = existing?.rollover ?: false,
+        )
+        dao.upsert(budget.toEntity())
     }
 }

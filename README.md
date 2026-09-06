@@ -29,7 +29,9 @@ traject.
   controles die bunq/YNAB/Buddy ook boven hun transactielijst zetten. Een niet-gecategoriseerde
   transactie is nu duidelijk te onderscheiden (omlijnde amberkleurige stip + "Tik om te
   categoriseren" in plaats van de neutrale kleur van een echte categorie als "Overig"). Tik op
-  *elke* transactie, ook een al gecategoriseerde, om de categorie te wijzigen.
+  *elke* transactie, ook een al gecategoriseerde, om de categorie te wijzigen — daarna wordt
+  gevraagd of dezelfde categorie ook toegepast moet worden op de andere transacties van diezelfde
+  tegenpartij die al in de lijst staan (scheelt tijd bij bijvoorbeeld 40 Albert Heijn-regels).
 - **Budgetten** — limieten per categorie met groen/amber/rood, tik op een categorie voor de grafiek.
 - **Grafieken** — maand-op-maand en jaar-op-jaar per categorie, met de budgetlimiet als lijn in de
   grafiek en een ‹ ›-navigator om het weergegeven venster naar eerdere maanden/jaren te schuiven
@@ -50,8 +52,15 @@ traject.
   toevoegen/verwijderen, en regels handmatig toevoegen/verwijderen (trefwoord of exacte
   tegenrekening/IBAN). Een handmatig toegevoegde regel (`ManualRule`, prioriteit 10) wint altijd
   van zowel een standaardregel (20) als een geleerde regel uit import (50).
-- **Instellingen** — budgetlimieten instellen, link naar categorie-/regelbeheer, biometrische
-  vergrendeling aan/uit.
+- **Categorieën & regels importeren/exporteren** — vanuit Instellingen: alles in één bestand, of
+  losse categorieën/regels apart — allemaal als leesbare JSON. Categorieën worden op naam
+  gematcht, regels op categorienaam + type + patroon; bestaat iets al lokaal, dan blijft dat
+  ongewijzigd staan (nooit een bestaande kleur of regel-prioriteit overschrijven). Eén gedeeld
+  importbestand-formaat volstaat voor zowel "alles" als "losse onderdelen": het bestand beschrijft
+  zelf wat erin zit, dus is er maar één "Bestand importeren"-knop nodig. Zie `BackupSerializer`,
+  `CategoryImport` en `RuleImport` in `:core`.
+- **Instellingen** — budgetlimieten instellen, link naar categorie-/regelbeheer, import/export,
+  biometrische vergrendeling aan/uit.
 - **App-vergrendeling** — `BiometricPrompt` (vingerafdruk/gezicht/schermbeveiliging) vóór de
   content, aan te zetten in Instellingen; staat standaard aan.
 
@@ -189,6 +198,37 @@ vinden. Nog te controleren:
   kon niet verifiëren of die iconen in de meegeleverde `material-icons-core` zitten (versus de
   niet-meegeleverde `material-icons-extended`) zonder een build, dus liever hetzelfde
   platte-tekst-linkpatroon dat de rest van de app al gebruikt (bijv. "Beheren →").
+- **Budgetten toonde dezelfde categorie twee keer.** Echte oorzaak: `BudgetEntity` had geen
+  unique constraint op (categoryId, yearMonth), en `setLimit()` gaf bij elke aanroep `id=0` mee
+  aan een `@Insert(onConflict=REPLACE)` — zonder een bestaande rij met dat exacte id om te
+  vervangen, betekende dat gewoon "voeg een nieuwe rij toe", elke keer weer. Geen schemamigratie
+  gebruikt om dit te repareren (dat zou een `Migration(1,2)` vereisen die ik zonder een build om
+  tegen te testen niet veilig genoeg vertrouwde — een subtiele fout daarin kan bestaande data
+  stukmaken). In plaats daarvan: `setLimit()` zoekt nu eerst de bestaande rij op en hergebruikt
+  diens id (dus REPLACE vervangt 'm daadwerkelijk), plus een onschadelijke, bij elke opstart
+  uitgevoerde opruimquery (`BudgetDao.deleteDuplicates()`) die jouw al-bestaande dubbele rijen
+  voor dezelfde categorie+maand samenvoegt tot de meest recente.
+- **Sommige grafieken (bijv. Inkomsten) toonden niets.** `ChartsViewModel` gebruikte
+  `observeSpent()` — dezelfde query als Budgetten, die bewust alléén negatieve bedragen (uitgaven)
+  optelt. Voor een categorie die uitsluitend bijschrijvingen bevat (Inkomsten) is dat altijd nul,
+  terwijl Transacties' filter op diezelfde categorie gewoon alle bijpassende rijen toont. Nieuwe,
+  aparte query `observeCategoryTotal()` (som van absolute bedragen, ongeacht teken) toegevoegd
+  specifiek voor Grafieken; `observeSpent()` blijft ongewijzigd voor Budgetten, waar "uitgaven
+  tegen een limiet" wél de juiste betekenis is.
+- **Categorieën & regels importeren/exporteren.** Nieuwe `kotlinx-serialization-json`
+  afhankelijkheid (1.11.0, geverifieerd als nieuwste stabiele release op Maven Central) en de
+  bijbehorende `org.jetbrains.kotlin.plugin.serialization`-plugin (versie gelijk aan de
+  Kotlin-compiler, zoals `kotlin.compose` dat ook al deed) toegevoegd aan `:core`. Alle
+  export/import-logica zelf is volledig unit-getest (64 tests groen, was 49); de Android-laag
+  (SAF-bestandskiezers, de daadwerkelijke DB-writes) is zoals altijd niet in deze sandbox te
+  bouwen.
+- **Nieuw app-icoon.** Een afgeronde vierkant in het bestaande accentgroen met een simpel wit
+  oplopend staafdiagram — "je financiën, stijgende lijn". Bewust opgebouwd uit rechte lijnen en
+  één standaard rounded-rect-boogformule in plaats van freehand curves, en vooraf gerenderd via
+  een SVG-equivalent in een headless Chromium in deze sandbox om het uiterlijk te controleren
+  (zowel als afgerond vierkant als cirkel-uitgesneden, ter simulatie van hoe verschillende
+  launchers adaptieve iconen bijsnijden) — het enige stuk van deze hele lijst dat wél visueel
+  geverifieerd kon worden vóórdat het jouw toestel bereikt.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`);
@@ -219,6 +259,15 @@ vinden. Nog te controleren:
 - Filteren/sorteren in Transacties werkt alleen op wat al geladen is in het geheugen (client-side);
   bij een zeer lange transactiehistorie (jaren) zou dit ooit naar een database-query verplaatst
   moeten worden, maar voor fase 1 is dat verre toekomstmuziek.
+- Importeren van categorieën/regels overschrijft nooit iets bestaands (zelfde ontwerpkeuze als
+  Categorieën & regels beheren) — een categorie waarvan je lokaal de kleur hebt veranderd, of een
+  regel waarvan je de prioriteit hebt aangepast, blijft dus ongewijzigd staan bij een hernieuwde
+  import van hetzelfde bestand. Bewuste keuze (nooit stilzwijgend een bestaande instelling
+  overschrijven), geen bug, maar wel iets om te weten als je verwacht dat importeren ook bestaande
+  items bijwerkt.
+- "Ook toepassen op de rest?" na het categoriseren van één transactie kijkt alleen naar transacties
+  die al in de lijst staan (dus al geïmporteerd zijn) — het is geen vervanging voor de
+  regel-gebaseerde automatische categorisatie bij een volgende import, die blijft apart bestaan.
 
 ## Ontwerpdocumenten
 

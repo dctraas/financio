@@ -52,8 +52,32 @@ interface BudgetDao {
     @Query("SELECT * FROM budgets WHERE yearMonth = :yearMonth")
     fun observeForMonth(yearMonth: String): Flow<List<BudgetEntity>>
 
+    /**
+     * Looked up by [com.financio.app.data.repository.RoomBudgetRepository.setLimit] so it can
+     * pass the existing row's id along to [upsert] instead of always passing id=0. Without this,
+     * every "set the limit" call inserted a brand-new row (there's no unique constraint on
+     * categoryId+yearMonth), and REPLACE never had a real conflict to replace — hence the same
+     * category showing up twice for the same month in Budgetten.
+     */
+    @Query("SELECT * FROM budgets WHERE categoryId = :categoryId AND yearMonth = :yearMonth LIMIT 1")
+    suspend fun find(categoryId: Long, yearMonth: String): BudgetEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(budget: BudgetEntity)
+
+    /**
+     * One-time repair for rows already duplicated by the bug [find] fixes going forward: keeps
+     * only the most recently written (highest id) row per categoryId+yearMonth. Safe to run on
+     * every startup — a no-op once no duplicates remain. Run from [DatabaseSeeder].
+     */
+    @Query(
+        """
+        DELETE FROM budgets WHERE id NOT IN (
+            SELECT MAX(id) FROM budgets GROUP BY categoryId, yearMonth
+        )
+        """
+    )
+    suspend fun deleteDuplicates()
 }
 
 @Dao
@@ -81,6 +105,24 @@ interface TransactionDao {
     )
     fun observeSpent(categoryId: Long, yearMonth: String): Flow<Long>
 
+    /**
+     * Sum of all activity (debit or credit, as an absolute amount) for one category in one
+     * calendar month — what Grafieken charts. [observeSpent] only sums debits, so a category
+     * that's all credits (e.g. "Inkomsten") always summed to zero there and its chart looked
+     * empty even though Transacties showed a full list of matching rows for the same filter.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(ABS(amountCents)), 0) FROM transactions
+        WHERE categoryId = :categoryId AND date LIKE :yearMonth || '-%'
+        """
+    )
+    fun observeCategoryTotal(categoryId: Long, yearMonth: String): Flow<Long>
+
     @Query("UPDATE transactions SET categoryId = :categoryId WHERE id = :transactionId")
     suspend fun updateCategory(transactionId: Long, categoryId: Long)
+
+    /** Bulk "categorize all the rest of this merchant's transactions the same way" from the transaction list. */
+    @Query("UPDATE transactions SET categoryId = :categoryId WHERE accountId = :accountId AND counterpartyName = :counterpartyName")
+    suspend fun updateCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int
 }
