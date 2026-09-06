@@ -76,4 +76,27 @@ class BudgetEvaluatorTest {
         )
         assertEquals(Money(45000), effective)
     }
+
+    @ParameterizedTest(name = "€{0} -> €{1} of €{2} limit crosses = {3}")
+    @CsvSource(
+        "30,45,50,true",    // OK (60%) -> WARNING (90%)
+        "30,55,50,true",    // OK -> OVER
+        "42,55,50,true",    // WARNING (84%) -> OVER
+        "10,20,50,false",   // OK -> OK, still well under
+        "42,44,50,false",   // WARNING -> WARNING, still under 100%
+        "55,60,50,false",   // OVER -> OVER, more of the same isn't news
+        "55,42,50,false",   // OVER -> WARNING is an improvement, not a crossing
+        "45,10,50,false",   // WARNING -> OK is an improvement, not a crossing
+    )
+    fun `crossedIntoWorseStatus fires only on OK-to-WARNING-to-OVER, not on improvements or repeats`(
+        previousSpent: Long,
+        newSpent: Long,
+        limit: Long,
+        expected: Boolean,
+    ) {
+        assertEquals(
+            expected,
+            BudgetEvaluator.crossedIntoWorseStatus(Money(previousSpent * 100), Money(newSpent * 100), Money(limit * 100)),
+        )
+    }
 }

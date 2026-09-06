@@ -33,6 +33,11 @@ room = "2.8.4"
 coroutines = "1.9.0"
 biometric = "1.1.0"
 fragmentKtx = "1.8.3"
+# NOT independently verified against Google's Maven — this sandbox has never had access to it
+# (see the "Bouwen" section below), so unlike every other version in this file this one is a
+# best-effort pin from training-time knowledge only. Please confirm this is still current (or
+# let Android Studio suggest the actual latest) before relying on it.
+workManager = "2.10.0"
 sqlcipher = "4.18.0"
 junit5 = "5.11.0"
 # Platform artifacts version independently of Jupiter (5.11.0 <-> platform 1.11.0) — Gradle 9
@@ -69,6 +74,7 @@ coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-
 coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragmentKtx" }
+work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
 junit5-api = { group = "org.junit.jupiter", name = "junit-jupiter-api", version.ref = "junit5" }
 junit5-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junit5" }
 junit5-params = { group = "org.junit.jupiter", name = "junit-jupiter-params", version.ref = "junit5" }

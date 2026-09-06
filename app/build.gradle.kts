@@ -88,4 +88,10 @@ dependencies {
 
     implementation(libs.biometric)
     implementation(libs.fragment.ktx) // FragmentActivity host for BiometricPrompt
+
+    // Weekly digest notification: a periodic CoroutineWorker (WeeklyDigestWorker) with only the
+    // standard (Context, WorkerParameters) constructor, so WorkManager's own default factory can
+    // instantiate it - no androidx.hilt:hilt-work / HiltWorkerFactory / Configuration.Provider
+    // plumbing needed. It reaches Hilt-provided repositories via EntryPointAccessors instead.
+    implementation(libs.work.runtime.ktx)
 }

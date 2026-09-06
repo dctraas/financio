@@ -36,4 +36,18 @@ object BudgetEvaluator {
         val leftover = (previousLimit.cents - previousSpent.cents).coerceAtLeast(0)
         return Money(baseLimit.cents + leftover)
     }
+
+    /**
+     * True only the moment spending pushes a category into a *more* severe [BudgetStatus] than it
+     * was in before (OK→WARNING, OK→OVER, WARNING→OVER) — what a budget-threshold notification
+     * should fire on. Relies on [BudgetStatus]'s declaration order (OK, WARNING, OVER) matching
+     * severity, so an *improvement* (e.g. un-splitting a transaction moves spending back to OK)
+     * never reports a crossing, and repeatedly overspending an already-OVER category doesn't
+     * either — there's nothing new to say once the worst status is already showing.
+     */
+    fun crossedIntoWorseStatus(previousSpent: Money, newSpent: Money, limit: Money): Boolean {
+        val previousStatus = evaluate(previousSpent, limit)
+        val newStatus = evaluate(newSpent, limit)
+        return newStatus.ordinal > previousStatus.ordinal
+    }
 }

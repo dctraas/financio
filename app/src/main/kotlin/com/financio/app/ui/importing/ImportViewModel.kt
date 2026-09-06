@@ -3,6 +3,7 @@ package com.financio.app.ui.importing
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.DefaultAccount
+import com.financio.app.notifications.BudgetThresholdNotifier
 import com.financio.core.categorize.LearnedRule
 import com.financio.core.model.Account
 import com.financio.core.model.Category
@@ -45,6 +46,7 @@ sealed interface ImportUiState {
 class ImportViewModel @Inject constructor(
     private val importStatementUseCase: ImportStatementUseCase,
     private val categoryRepository: CategoryRepository,
+    private val budgetThresholdNotifier: BudgetThresholdNotifier,
     accountRepository: AccountRepository,
 ) : ViewModel() {
 
@@ -102,10 +104,22 @@ class ImportViewModel @Inject constructor(
                     transaction.copy(categoryId = categoryId)
                 } ?: transaction
             }
-            importStatementUseCase.confirm(current.preview.ready + manuallyCategorized)
+            val toImport = current.preview.ready + manuallyCategorized
+
+            // Snapshotted before the import itself: an import is exactly the moment a budget is
+            // most likely to newly cross a threshold, since it can add many transactions to a
+            // category at once instead of the one-at-a-time changes Transacties makes.
+            val affectedCategoryIds = toImport.mapNotNull { it.categoryId }.distinct()
+            val previousSpentByCategory = affectedCategoryIds.associateWith { budgetThresholdNotifier.currentSpent(it) }
+
+            importStatementUseCase.confirm(toImport)
 
             current.manualCategoryChoices.forEach { (counterpartyName, categoryId) ->
                 categoryRepository.addRule(LearnedRule.from(categoryId, counterpartyName))
+            }
+
+            affectedCategoryIds.forEach { categoryId ->
+                budgetThresholdNotifier.checkAndNotify(categoryId, previousSpentByCategory.getValue(categoryId))
             }
 
             _uiState.value = ImportUiState.Imported

@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Device-local app settings — not synced, not part of the encrypted transaction database.
- * SharedPreferences is fine here: there's exactly one boolean, and it's read once at startup.
+ * SharedPreferences is fine here: there's a handful of booleans, all read once at startup.
  */
 class AppPreferences(context: Context) {
 
@@ -21,10 +21,28 @@ class AppPreferences(context: Context) {
         _biometricLockEnabled.value = enabled
     }
 
+    /**
+     * Off by default, unlike the biometric lock: showing a notification needs the POST_NOTIFICATIONS
+     * runtime permission from Android 13 onward, so the Instellingen toggle drives both this flag
+     * and that permission request together (see `SettingsScreen`) — turning this on without ever
+     * asking the user would either crash (pre-13's `NotificationManagerCompat.notify` is fine, but
+     * the permission check in `NotificationHelper` would just silently no-op) or, done wrong, skip
+     * the OS prompt entirely.
+     */
+    private val _notificationsEnabled = MutableStateFlow(prefs.getBoolean(KEY_NOTIFICATIONS, DEFAULT_NOTIFICATIONS))
+    val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
+
+    fun setNotificationsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_NOTIFICATIONS, enabled).apply()
+        _notificationsEnabled.value = enabled
+    }
+
     companion object {
         private const val PREFS_NAME = "financio_settings"
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
+        private const val KEY_NOTIFICATIONS = "notifications_enabled"
         // On by default for a finance app — matches the architecture doc's security section.
         private const val DEFAULT_BIOMETRIC_LOCK = true
+        private const val DEFAULT_NOTIFICATIONS = false
     }
 }
