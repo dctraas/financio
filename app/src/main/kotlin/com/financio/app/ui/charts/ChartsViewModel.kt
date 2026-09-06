@@ -116,6 +116,9 @@ class ChartsViewModel @Inject constructor(
     private fun shift(anchor: YearMonth, m: ChartMode, steps: Long): YearMonth = when (m) {
         ChartMode.MONTH_OVER_MONTH -> anchor.plusMonths(steps)
         ChartMode.YEAR_OVER_YEAR -> anchor.plusYears(steps)
+        // goToPreviousPeriod/goToNextPeriod are only wired to the ‹›-navigator, which Saldoverloop
+        // doesn't show (see ChartsScreen) - referenceMonth simply never moves in that mode.
+        ChartMode.BALANCE_HISTORY -> anchor
     }
 
     private data class ChartQuery(
@@ -179,6 +182,9 @@ class ChartsViewModel @Inject constructor(
     private fun periodsFor(m: ChartMode, anchor: YearMonth): List<YearMonth> = when (m) {
         ChartMode.MONTH_OVER_MONTH -> (5 downTo 0).map { anchor.minusMonths(it.toLong()) }
         ChartMode.YEAR_OVER_YEAR -> (3 downTo 0).map { anchor.minusYears(it.toLong()) }
+        // Only ever called from seriesFor(), which the BALANCE_HISTORY branch in uiState's
+        // flatMapLatest routes around entirely (see balanceHistoryState() instead).
+        ChartMode.BALANCE_HISTORY -> error("periodsFor is not used for Saldoverloop")
     }
 
     private fun buildState(
@@ -216,11 +222,15 @@ class ChartsViewModel @Inject constructor(
         ChartMode.MONTH_OVER_MONTH ->
             "${anchor.month.getDisplayName(TextStyle.FULL, Locale("nl")).replaceFirstChar { it.uppercase() }} ${anchor.year}"
         ChartMode.YEAR_OVER_YEAR -> anchor.year.toString()
+        // Only ever called from buildState(), never reached for Saldoverloop - see periodsFor().
+        ChartMode.BALANCE_HISTORY -> error("referenceLabelFor is not used for Saldoverloop")
     }
 
     private fun labelFor(period: YearMonth, m: ChartMode): String = when (m) {
         ChartMode.MONTH_OVER_MONTH -> period.month.getDisplayName(TextStyle.SHORT, Locale("nl")).replace(".", "")
         ChartMode.YEAR_OVER_YEAR -> period.year.toString()
+        // Only ever called from buildState(), never reached for Saldoverloop - see periodsFor().
+        ChartMode.BALANCE_HISTORY -> error("labelFor is not used for Saldoverloop")
     }
 }
 
