@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Deliberately no <uses-permission> at all: fase 1 has no backend and no network path
-    for data to leave the device (see the architecture doc's security section). Do not add
-    android.permission.INTERNET here without first revisiting that decision.
+    Deliberately no android.permission.INTERNET, and no other network permission: fase 1 has no
+    backend and no network path for data to leave the device (see the architecture doc's security
+    section). Do not add one without first revisiting that decision.
+
+    POST_NOTIFICATIONS below is the one exception, and doesn't touch that boundary: it only lets
+    the app show notifications it generates itself, entirely on-device (weekly digest, budget
+    threshold), the same way the app already reads its own local database. Required at runtime
+    from Android 13 (API 33) onward; a no-op permission before that.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".FinancioApplication"

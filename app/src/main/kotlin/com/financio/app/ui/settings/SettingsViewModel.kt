@@ -25,6 +25,7 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val biometricLockEnabled: Boolean = true,
+    val notificationsEnabled: Boolean = false,
     val categories: List<Category> = emptyList(),
     val rules: List<CategoryRule> = emptyList(),
     val limitsByCategory: Map<Long, Money> = emptyMap(),
@@ -50,19 +51,26 @@ class SettingsViewModel @Inject constructor(
 
     private val currentMonth = YearMonth.now()
 
+    // A 5th input flow would need the vararg combine() overload's less readable Array<T>
+    // callback, so instead the usual 4-arg combine() is chained with one more via the 2-arg one.
     val uiState: StateFlow<SettingsUiState> = combine(
-        appPreferences.biometricLockEnabled,
-        categoryRepository.observeCategories(),
-        categoryRepository.observeRules(),
-        budgetRepository.observeBudgets(currentMonth),
-    ) { lockEnabled, categories, rules, budgets ->
-        SettingsUiState(
-            biometricLockEnabled = lockEnabled,
-            categories = categories,
-            rules = rules,
-            limitsByCategory = budgets.associate { it.categoryId to it.limit },
-            rolloverByCategory = budgets.associate { it.categoryId to it.rollover },
-        )
+        combine(
+            appPreferences.biometricLockEnabled,
+            categoryRepository.observeCategories(),
+            categoryRepository.observeRules(),
+            budgetRepository.observeBudgets(currentMonth),
+        ) { lockEnabled, categories, rules, budgets ->
+            SettingsUiState(
+                biometricLockEnabled = lockEnabled,
+                categories = categories,
+                rules = rules,
+                limitsByCategory = budgets.associate { it.categoryId to it.limit },
+                rolloverByCategory = budgets.associate { it.categoryId to it.rollover },
+            )
+        },
+        appPreferences.notificationsEnabled,
+    ) { snapshot, notificationsEnabled ->
+        snapshot.copy(notificationsEnabled = notificationsEnabled)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     private val _importResult = MutableStateFlow<ImportResult?>(null)
@@ -70,6 +78,18 @@ class SettingsViewModel @Inject constructor(
 
     fun setBiometricLockEnabled(enabled: Boolean) {
         appPreferences.setBiometricLockEnabled(enabled)
+    }
+
+    /**
+     * Only the local preference — the OS permission prompt itself (needed on Android 13+ before
+     * a notification can actually show) is a `SettingsScreen`-level concern, since it needs an
+     * Activity to launch from. This flag can end up `true` with the permission still denied (the
+     * user said no, or hasn't been asked yet); [com.financio.app.notifications.NotificationHelper]
+     * checks the real permission itself before ever posting, so that combination just stays silent
+     * rather than crashing.
+     */
+    fun setNotificationsEnabled(enabled: Boolean) {
+        appPreferences.setNotificationsEnabled(enabled)
     }
 
     /** Called once the user finishes editing a limit field — not on every keystroke. */

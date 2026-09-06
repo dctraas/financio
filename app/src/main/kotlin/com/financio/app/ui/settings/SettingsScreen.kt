@@ -1,6 +1,8 @@
 package com.financio.app.ui.settings
 
+import android.Manifest
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -76,6 +78,23 @@ fun SettingsScreen(
         if (content != null) viewModel.importBackup(content)
     }
 
+    // Whatever the OS decides, the preference reflects what the user asked for - a denial just
+    // means NotificationHelper's own permission check keeps everything silent from here on,
+    // rather than the toggle looking "on" while nothing the user does ever shows a notification.
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> viewModel.setNotificationsEnabled(granted) }
+
+    fun onNotificationsToggle(enabled: Boolean) {
+        // Only Android 13+ (API 33) needs a runtime prompt for POST_NOTIFICATIONS at all - on
+        // older versions the permission is granted at install time, so there's nothing to launch.
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.setNotificationsEnabled(enabled)
+        }
+    }
+
     Scaffold(topBar = { TopAppBar(title = { Text("Instellingen") }) }) { padding ->
         LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             item { SectionHeader("Vergrendeling") }
@@ -93,6 +112,25 @@ fun SettingsScreen(
                         )
                     }
                     Switch(checked = state.biometricLockEnabled, onCheckedChange = viewModel::setBiometricLockEnabled)
+                }
+            }
+
+            item { SectionHeader("Meldingen") }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Meldingen", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Een wekelijkse samenvatting, en een melding zodra een budget over de " +
+                                "limiet dreigt te gaan. Alles blijft lokaal op je toestel.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = state.notificationsEnabled, onCheckedChange = ::onNotificationsToggle)
                 }
             }
 

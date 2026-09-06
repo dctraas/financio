@@ -71,7 +71,12 @@ traject.
   `CategoryImport` en `RuleImport` in `:core`.
 - **Instellingen** — budgetlimieten (met optionele rollover) instellen, links naar rekeningen-,
   categorie-/regel- en spaardoelenbeheer en Abonnementen, import/export, biometrische
-  vergrendeling aan/uit.
+  vergrendeling aan/uit, meldingen aan/uit.
+- **Meldingen** — volledig lokaal, geen server of pushtoken: een melding zodra een budget net over
+  de 80%- of 100%-grens gaat (direct na categoriseren of importeren, niet pas bij de eerstvolgende
+  keer dat de app open is), en een wekelijkse samenvatting (totaal besteed deze week, aantal
+  budgetten over de limiet). Staat standaard uit; het aanzetten vraagt op Android 13+ meteen om de
+  systeemtoestemming.
 - **Abonnementen** — herkent terugkerende afschrijvingen (Netflix, Spotify, verzekeringen, etc.)
   puur uit je eigen transactiehistorie: geregeld qua timing (ongeveer maandelijks) én qua bedrag
   (max. 15% afwijking). Geen bankkoppeling, geen merchant-database — zie `SubscriptionDetector`
@@ -302,6 +307,50 @@ vinden. Nog te controleren:
   gescopet in plaats van altijd op `DefaultAccount.ID`. Alles hier is `:app`-laag (UI/ViewModels)
   en dus zoals gebruikelijk niet in deze sandbox te bouwen; `:core` blijft ongewijzigd qua
   gedrag en dus nog steeds 88 tests groen.
+- **Lokale meldingen (budgetdrempel + wekelijkse samenvatting).** Laatste feature van deze batch,
+  en de enige die een nieuwe afhankelijkheid nodig had (`androidx.work:work-runtime-ktx`, voor de
+  wekelijkse samenvatting) en een manifest-wijziging (`POST_NOTIFICATIONS`, vereist vanaf
+  Android 13 — puur voor meldingen die de app zelf en alleen lokaal genereert, dus geen inbreuk op
+  de bewuste "geen netwerkpermissie"-keuze bovenin het manifest; het bestand is bijgewerkt om dat
+  expliciet te maken).
+  - **Budgetdrempel**: `BudgetEvaluator.crossedIntoWorseStatus()` (nieuw, `:core`, 8
+    parametrisatie-tests) bepaalt of een categorie net erger is geworden (OK→WARNING,
+    OK→OVER, WARNING→OVER) — niet bij een verbetering, en niet opnieuw bij een al-OVER categorie
+    die nog verder over gaat. `BudgetThresholdNotifier` (`:app`) neemt vóór elke categorisatie-
+    schrijfactie (`TransactionsViewModel.categorize`/`applyCategoryToCounterparty`,
+    `ImportViewModel.confirm`) een momentopname van het besteedde bedrag, en vergelijkt die na de
+    schrijfactie.
+  - **Wekelijkse samenvatting**: `WeeklyDigestWorker`, een `CoroutineWorker` met bewust alléén de
+    standaard `(Context, WorkerParameters)`-constructor — WorkManager's eigen standaard-factory
+    kan die zonder verdere hulp bouwen, dus is er geen `androidx.hilt:hilt-work`,
+    `HiltWorkerFactory` of `Configuration.Provider`-gedoe nodig; Hilt-repositories worden in plaats
+    daarvan via een `@EntryPoint` (`EntryPointAccessors.fromApplication`) opgehaald, een
+    standaard-Hilt-feature die geen extra afhankelijkheid vereist. Elke 7 dagen, geregistreerd
+    (idempotent) bij elke app-start; controleert zelf `AppPreferences.notificationsEnabled` bij
+    elke run in plaats van bij het aan/uit zetten van de instelling geannuleerd/opnieuw ingepland
+    te worden.
+  - **Instellingen** kreeg een "Meldingen"-schakelaar (uit by default); aanzetten vraagt op
+    Android 13+ meteen de systeemtoestemming aan via `ActivityResultContracts.RequestPermission()`
+    — een weigering laat de schakelaar gewoon aan staan, `NotificationHelper` controleert de
+    daadwerkelijke toestemming zelf vlak vóór elke melding en doet dan stilzwijgend niets in plaats
+    van te crashen.
+  - **Niet onafhankelijk geverifieerd, in tegenstelling tot elke andere versie in dit bestand**:
+    `androidx.work:work-runtime-ktx`'s versienummer (`2.10.0`) staat op AndroidX's eigen
+    Maven-repository (`dl.google.com`), die — net als voor Room, Compose en Navigation eerder in
+    dit traject — vanuit deze sandbox niet bereikbaar is; in tegenstelling tot de eerdere
+    Hilt/Room/Kotlin-versiebumps kon dit dus dit keer niet eens achteraf met een losse `curl`
+    tegen Maven Central bevestigd worden (Dagger/Hilt staat daar wél op, AndroidX-artefacten
+    principieel niet). Controleer dit nummer in Android Studio (of laat het gewoon de nieuwste
+    stabiele versie voorstellen) vóór je hierop vertrouwt.
+  - De meldingsiconen hergebruiken `ic_launcher` (net als het launcher-icoon zelf) in plaats van
+    een apart, voor de statusbalk geoptimaliseerd monochroom icoon — functioneel correct (Android
+    negeert kleur toch en toont alleen het alfakanaal als silhouet vanaf API 21), maar niet
+    visueel geverifieerd, om dezelfde reden als de rest van deze `:app`-laag.
+  - `:core`: 96 tests groen (was 88). De rest (`NotificationHelper`, `BudgetThresholdNotifier`,
+    `WeeklyDigestWorker`, de Instellingen-toggle, de manifest-/Gradle-wijzigingen) is `:app`-laag
+    en dus zoals altijd niet in deze sandbox te bouwen — hier komt bovenop dat zelfs de
+    afhankelijkheidsversie niet extern te bevestigen was, dus dit stuk verdient bij het eerste
+    echte bouwen in Android Studio extra aandacht.
 - of de overige versies in `gradle/libs.versions.toml` nog de gewenste keuze zijn tegen die tijd;
 - of `BiometricPrompt.PromptInfo` met `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` op een testtoestel
   het verwachte systeemscherm toont (`app/MainActivity.kt`);
@@ -341,6 +390,14 @@ vinden. Nog te controleren:
 - "Ook toepassen op de rest?" na het categoriseren van één transactie kijkt alleen naar transacties
   die al in de lijst staan (dus al geïmporteerd zijn) — het is geen vervanging voor de
   regel-gebaseerde automatische categorisatie bij een volgende import, die blijft apart bestaan.
+- De budgetdrempel-melding kijkt alleen naar categorisatie-momenten (handmatig categoriseren,
+  "toepassen op de rest", importeren) — niet naar het wijzigen van een budgetlimiet zelf. Een
+  limiet verlagen tot ver onder wat al besteed is, geeft dus pas bij de eerstvolgende
+  categorisatie een melding, niet meteen.
+- De wekelijkse samenvatting-melding is een vast interval vanaf het moment van de eerste
+  app-start (via `WorkManager`s `PeriodicWorkRequest`), niet gekoppeld aan een vaste dag/tijd
+  (bijv. altijd zondagavond) — dat zou een `Constraints`/tijdvenster-berekening vereisen die de
+  moeite niet waard leek voor fase 1.
 
 ## Ontwerpdocumenten
 

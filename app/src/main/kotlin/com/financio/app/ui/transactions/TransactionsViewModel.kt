@@ -2,6 +2,7 @@ package com.financio.app.ui.transactions
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financio.app.notifications.BudgetThresholdNotifier
 import com.financio.core.categorize.LearnedRule
 import com.financio.core.model.Account
 import com.financio.core.model.Category
@@ -61,6 +62,7 @@ data class TransactionsUiState(
 class TransactionsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val categoryRepository: CategoryRepository,
+    private val budgetThresholdNotifier: BudgetThresholdNotifier,
     accountRepository: AccountRepository,
 ) : ViewModel() {
 
@@ -157,8 +159,10 @@ class TransactionsViewModel @Inject constructor(
     /** Same "remember the choice as a rule" behavior as the import screen's manual categorization. */
     fun categorize(transaction: Transaction, categoryId: Long) {
         viewModelScope.launch {
+            val previousSpent = budgetThresholdNotifier.currentSpent(categoryId)
             transactionRepository.updateCategory(transaction.id, categoryId)
             categoryRepository.addRule(LearnedRule.from(categoryId, transaction.counterpartyName))
+            budgetThresholdNotifier.checkAndNotify(categoryId, previousSpent)
         }
     }
 
@@ -173,7 +177,9 @@ class TransactionsViewModel @Inject constructor(
      */
     fun applyCategoryToCounterparty(accountId: Long, counterpartyName: String, categoryId: Long) {
         viewModelScope.launch {
+            val previousSpent = budgetThresholdNotifier.currentSpent(categoryId)
             transactionRepository.updateCategoryForCounterparty(accountId, counterpartyName, categoryId)
+            budgetThresholdNotifier.checkAndNotify(categoryId, previousSpent)
         }
     }
 
