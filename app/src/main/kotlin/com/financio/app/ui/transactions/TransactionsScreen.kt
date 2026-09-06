@@ -2,6 +2,8 @@ package com.financio.app.ui.transactions
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -169,7 +171,9 @@ private fun CategoryPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text("Categorie voor $transactionName") },
         text = {
-            Column {
+            // AlertDialog doesn't scroll its content on its own — without this, a category list
+            // longer than fits on screen just got cut off with no way to reach the rest.
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 categories.forEach { category ->
                     val isCurrent = category.id == currentCategoryId
                     Text(
@@ -316,21 +320,21 @@ private fun TransactionFilters(state: TransactionsUiState, viewModel: Transactio
                 FilterChip(
                     selected = state.categoryFilter == CategoryFilter.All,
                     onClick = { viewModel.setCategoryFilter(CategoryFilter.All) },
-                    label = { Text("Alle") },
+                    label = { Text("Alle (${state.totalCount})") },
                 )
             }
             item {
                 FilterChip(
                     selected = state.categoryFilter == CategoryFilter.Uncategorized,
                     onClick = { viewModel.setCategoryFilter(CategoryFilter.Uncategorized) },
-                    label = { Text("Niet gecategoriseerd") },
+                    label = { Text("Niet gecategoriseerd (${state.uncategorizedCount})") },
                 )
             }
             items(state.categories, key = { it.id }) { category ->
                 FilterChip(
                     selected = state.categoryFilter == CategoryFilter.Specific(category.id),
                     onClick = { viewModel.setCategoryFilter(CategoryFilter.Specific(category.id)) },
-                    label = { Text(category.name) },
+                    label = { Text("${category.name} (${state.categoryCounts[category.id] ?: 0})") },
                 )
             }
         }

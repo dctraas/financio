@@ -3,6 +3,7 @@ package com.financio.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.data.local.AppPreferences
+import com.financio.app.data.local.ThemeMode
 import com.financio.core.backup.BackupSerializer
 import com.financio.core.backup.CategoryImport
 import com.financio.core.backup.RuleImport
@@ -26,6 +27,7 @@ import javax.inject.Inject
 data class SettingsUiState(
     val biometricLockEnabled: Boolean = true,
     val notificationsEnabled: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val categories: List<Category> = emptyList(),
     val rules: List<CategoryRule> = emptyList(),
     val limitsByCategory: Map<Long, Money> = emptyMap(),
@@ -51,8 +53,9 @@ class SettingsViewModel @Inject constructor(
 
     private val currentMonth = YearMonth.now()
 
-    // A 5th input flow would need the vararg combine() overload's less readable Array<T>
-    // callback, so instead the usual 4-arg combine() is chained with one more via the 2-arg one.
+    // A 5th (let alone 6th) input flow would need the vararg combine() overload's less readable
+    // Array<T> callback, so instead the usual 4-arg combine() is chained with two more via the
+    // 3-arg one.
     val uiState: StateFlow<SettingsUiState> = combine(
         combine(
             appPreferences.biometricLockEnabled,
@@ -69,8 +72,9 @@ class SettingsViewModel @Inject constructor(
             )
         },
         appPreferences.notificationsEnabled,
-    ) { snapshot, notificationsEnabled ->
-        snapshot.copy(notificationsEnabled = notificationsEnabled)
+        appPreferences.themeMode,
+    ) { snapshot, notificationsEnabled, themeMode ->
+        snapshot.copy(notificationsEnabled = notificationsEnabled, themeMode = themeMode)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     private val _importResult = MutableStateFlow<ImportResult?>(null)
@@ -90,6 +94,10 @@ class SettingsViewModel @Inject constructor(
      */
     fun setNotificationsEnabled(enabled: Boolean) {
         appPreferences.setNotificationsEnabled(enabled)
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        appPreferences.setThemeMode(mode)
     }
 
     /** Called once the user finishes editing a limit field — not on every keystroke. */

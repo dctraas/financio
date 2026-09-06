@@ -11,13 +11,19 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
+import com.financio.app.data.local.ThemeMode
 
 /** Semantic budget-status colors — kept separate from Material's color scheme so "over budget"
  * always means the same literal color everywhere it's used, light or dark theme. */
 data class BudgetStatusColors(val ok: Color, val warning: Color, val over: Color)
 
 @Composable
-fun FinancioTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun FinancioTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+    val darkTheme = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
     val tokens: FinancioColorTokens = if (darkTheme) FinancioColorsDark else FinancioColorsLight
 
     val colorScheme = if (darkTheme) {

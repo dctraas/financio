@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.data.local.ThemeMode
 import com.financio.core.backup.BackupSerializer
 import com.financio.core.model.Category
 import com.financio.core.model.Money
@@ -97,6 +100,18 @@ fun SettingsScreen(
 
     Scaffold(topBar = { TopAppBar(title = { Text("Instellingen") }) }) { padding ->
         LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+            item { SectionHeader("Weergave") }
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
+                ) {
+                    ThemeModeChip("Licht", ThemeMode.LIGHT, state.themeMode, viewModel::setThemeMode)
+                    ThemeModeChip("Donker", ThemeMode.DARK, state.themeMode, viewModel::setThemeMode)
+                    ThemeModeChip("Systeem", ThemeMode.SYSTEM, state.themeMode, viewModel::setThemeMode)
+                }
+            }
+
             item { SectionHeader("Vergrendeling") }
             item {
                 Row(
@@ -278,6 +293,15 @@ private fun ImportResultDialog(result: ImportResult, onDismiss: () -> Unit) {
             )
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+    )
+}
+
+@Composable
+private fun ThemeModeChip(label: String, mode: ThemeMode, selectedMode: ThemeMode, onSelect: (ThemeMode) -> Unit) {
+    FilterChip(
+        selected = selectedMode == mode,
+        onClick = { onSelect(mode) },
+        label = { Text(label) },
     )
 }
 
