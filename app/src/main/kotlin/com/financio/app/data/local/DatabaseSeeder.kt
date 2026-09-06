@@ -8,7 +8,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Seeds one-time defaults into an empty database:
+ * Runs one-time seeding and repair steps against the database, every app startup:
  * - the single fase-1 account ([DefaultAccount]) that every transaction's `accountId` foreign
  *   key points at — without this, the very first import's insert fails with a
  *   `FOREIGN KEY constraint failed`, since `accounts` never gets a row otherwise. `AccountDao`
@@ -16,12 +16,17 @@ import javax.inject.Singleton
  * - the default categories and keyword rules, so a first import has something sensible to
  *   auto-categorize against instead of showing every transaction as "te controleren" against an
  *   empty category list — see the README's categorization UX notes for the full reasoning.
+ * - a repair pass for budget rows already duplicated by a bug in how limits were saved (see
+ *   [BudgetDao.deleteDuplicates]) — fixed going forward, but an install that already hit it needs
+ *   its existing duplicate rows cleaned up too, not just the bug stopped.
  *
- * Both are guarded by an existence/emptiness check rather than a uniqueness constraint: this is
+ * Seeding is guarded by an existence/emptiness check rather than a uniqueness constraint: this is
  * a single local database with no concurrent writers, so "no account/categories yet" is a
  * reliable signal this has never run, and simpler than adding a migration for a one-time seed.
- * Both run in one transaction so a process death mid-seed can't leave things half-seeded — a
- * retried [seedIfEmpty] would otherwise see a non-empty table and skip the rest.
+ * The repair pass has no guard at all — it's a no-op once no duplicates remain, so it's fine to
+ * run on every startup rather than track whether it "already ran". Everything runs in one
+ * transaction so a process death partway through can't leave things half-done — a retried
+ * [seedIfEmpty] would otherwise see a non-empty table and skip the rest.
  */
 @Singleton
 class DatabaseSeeder @Inject constructor(
@@ -29,11 +34,13 @@ class DatabaseSeeder @Inject constructor(
     private val accountDao: AccountDao,
     private val categoryDao: CategoryDao,
     private val categoryRuleDao: CategoryRuleDao,
+    private val budgetDao: BudgetDao,
 ) {
     suspend fun seedIfEmpty() {
         database.withTransaction {
             seedDefaultAccount()
             seedDefaultCategories()
+            budgetDao.deleteDuplicates()
         }
     }
 

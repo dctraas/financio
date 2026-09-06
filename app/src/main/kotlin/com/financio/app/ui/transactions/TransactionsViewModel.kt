@@ -100,6 +100,18 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Applies [categoryId] to every other already-persisted transaction from [counterpartyName]
+     * too — the follow-up prompt after [categorize] offers this so fixing one Albert Heijn line
+     * doesn't mean fixing all of them one at a time. No separate rule needed: [categorize]
+     * already added one, which is what made this category the "one" in the first place.
+     */
+    fun applyCategoryToCounterparty(counterpartyName: String, categoryId: Long) {
+        viewModelScope.launch {
+            transactionRepository.updateCategoryForCounterparty(DefaultAccount.ID, counterpartyName, categoryId)
+        }
+    }
+
     private fun matchesSearch(transaction: Transaction, query: String): Boolean =
         query.isBlank() ||
             transaction.counterpartyName.contains(query, ignoreCase = true) ||

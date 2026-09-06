@@ -46,10 +46,13 @@ import com.financio.core.model.Category
 import com.financio.core.model.Money
 import com.financio.core.model.Transaction
 
+private data class BulkApplyPrompt(val counterpartyName: String, val categoryId: Long, val otherCount: Int)
+
 @Composable
 fun TransactionsScreen(onImportClick: () -> Unit, viewModel: TransactionsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var categorizing by remember { mutableStateOf<Transaction?>(null) }
+    var bulkApplyPrompt by remember { mutableStateOf<BulkApplyPrompt?>(null) }
 
     Scaffold(
         topBar = {
@@ -95,7 +98,26 @@ fun TransactionsScreen(onImportClick: () -> Unit, viewModel: TransactionsViewMod
             onSelect = { categoryId ->
                 viewModel.categorize(transaction, categoryId)
                 categorizing = null
+                // Computed from what's already loaded, not a fresh query: good enough to decide
+                // whether the follow-up prompt is worth showing at all.
+                val otherCount = state.transactions.count {
+                    it.counterpartyName == transaction.counterpartyName && it.id != transaction.id
+                }
+                if (otherCount > 0) {
+                    bulkApplyPrompt = BulkApplyPrompt(transaction.counterpartyName, categoryId, otherCount)
+                }
             },
+        )
+    }
+
+    bulkApplyPrompt?.let { prompt ->
+        BulkApplyDialog(
+            prompt = prompt,
+            onConfirm = {
+                viewModel.applyCategoryToCounterparty(prompt.counterpartyName, prompt.categoryId)
+                bulkApplyPrompt = null
+            },
+            onDismiss = { bulkApplyPrompt = null },
         )
     }
 }
@@ -126,6 +148,22 @@ private fun CategoryPickerDialog(
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },
+    )
+}
+
+@Composable
+private fun BulkApplyDialog(prompt: BulkApplyPrompt, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ook toepassen op de rest?") },
+        text = {
+            Text(
+                "${prompt.otherCount} andere transacties van '${prompt.counterpartyName}' krijgen dan " +
+                    "dezelfde categorie.",
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Toepassen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Nee, alleen deze") } },
     )
 }
 

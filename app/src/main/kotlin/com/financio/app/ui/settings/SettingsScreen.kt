@@ -1,5 +1,8 @@
 package com.financio.app.ui.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -28,16 +33,42 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.core.backup.BackupSerializer
 import com.financio.core.model.Category
 import com.financio.core.model.Money
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 @Composable
 fun SettingsScreen(onManageCategoriesClick: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+    val importResult by viewModel.importResult.collectAsState()
+    val context = LocalContext.current
+
+    // Set right before launching an export picker, read back in its callback once the user picks
+    // a location — CreateDocument's contract only gives us the Uri, not a way to pass content in.
+    var pendingExportContent by remember { mutableStateOf("") }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        context.contentResolver.openOutputStream(uri)?.use { it.write(pendingExportContent.toByteArray()) }
+    }
+    fun export(content: String, suggestedName: String) {
+        pendingExportContent = content
+        exportLauncher.launch(suggestedName)
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val content = context.contentResolver.openInputStream(uri)?.use { stream ->
+            BufferedReader(InputStreamReader(stream)).readText()
+        }
+        if (content != null) viewModel.importBackup(content)
+    }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Instellingen") }) }) { padding ->
         LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
@@ -94,8 +125,65 @@ fun SettingsScreen(onManageCategoriesClick: () -> Unit, viewModel: SettingsViewM
                     modifier = Modifier.padding(vertical = 8.dp).clickable(onClick = onManageCategoriesClick),
                 )
             }
+
+            item { SectionHeader("Importeren & exporteren") }
+            item {
+                Text(
+                    "Categorieën en regels als bestand bewaren of overzetten. Categorieën worden " +
+                        "op naam gematcht, regels op categorienaam + patroon — bestaat iets al " +
+                        "lokaal, dan blijft dat ongewijzigd staan; er wordt alleen toegevoegd.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                ExportLink("Alles exporteren") {
+                    export(BackupSerializer.exportAll(state.categories, state.rules), "financio-alles.json")
+                }
+                ExportLink("Alleen categorieën exporteren") {
+                    export(BackupSerializer.exportCategories(state.categories), "financio-categorieen.json")
+                }
+                ExportLink("Alleen regels exporteren") {
+                    export(BackupSerializer.exportRules(state.rules, state.categories.associateBy { it.id }), "financio-regels.json")
+                }
+                ExportLink("Bestand importeren →") {
+                    importLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
+                }
+            }
         }
     }
+
+    importResult?.let { result ->
+        ImportResultDialog(result = result, onDismiss = viewModel::clearImportResult)
+    }
+}
+
+@Composable
+private fun ExportLink(label: String, onClick: () -> Unit) {
+    Text(
+        label,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun ImportResultDialog(result: ImportResult, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (result is ImportResult.Failed) "Importeren mislukt" else "Importeren voltooid") },
+        text = {
+            Text(
+                when (result) {
+                    is ImportResult.Failed -> result.message
+                    is ImportResult.Success -> "${result.categoriesAdded} categorieën toegevoegd " +
+                        "(${result.categoriesSkipped} bestonden al), ${result.rulesAdded} regels " +
+                        "toegevoegd (${result.rulesSkipped} overgeslagen — bestonden al of onbekende categorie)."
+                },
+            )
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+    )
 }
 
 @Composable

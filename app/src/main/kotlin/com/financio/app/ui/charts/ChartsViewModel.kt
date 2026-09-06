@@ -99,7 +99,11 @@ class ChartsViewModel @Inject constructor(
 
     private fun seriesFor(cats: List<Category>, categoryId: Long, m: ChartMode, anchor: YearMonth) = run {
         val periods = periodsFor(m, anchor)
-        combine(periods.map { period -> transactionRepository.observeSpent(categoryId, period) }) { amounts ->
+        // observeCategoryTotal, not observeSpent: the latter only sums debits (it's "money spent
+        // against a budget"), so a category that's all credits - Inkomsten, say - always summed
+        // to zero here and its chart looked empty, even though Transacties' filter on that same
+        // category showed a full list of matching rows.
+        combine(periods.map { period -> transactionRepository.observeCategoryTotal(categoryId, period) }) { amounts ->
             buildState(cats, categoryId, m, anchor, periods, amounts.toList())
         }.flatMapLatest { partial ->
             budgetRepository.observeBudgets(anchor).map { budgets ->

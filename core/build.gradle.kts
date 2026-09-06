@@ -3,6 +3,7 @@
 // parsing, dedup, categorization, budget thresholds — kept framework-free on purpose.
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 java {
@@ -18,6 +19,9 @@ kotlin {
 
 dependencies {
     api(libs.coroutines.core)
+    // Backing the categories/regels import-export format (BackupSerializer) — plain-Kotlin JSON,
+    // no Android dependency, so :core stays framework-free.
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit5.api)
     testImplementation(libs.junit5.params)
