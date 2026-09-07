@@ -29,11 +29,14 @@ import com.financio.app.ui.settings.LockPrivacyScreen
 import com.financio.app.ui.settings.MonthStartScreen
 import com.financio.app.ui.settings.NotificationsScreen
 import com.financio.app.ui.subscriptions.SubscriptionsScreen
+import com.financio.app.ui.transactions.TransactionDetailScreen
 import com.financio.app.ui.transactions.TransactionsScreen
 import com.financio.app.ui.vandaag.VandaagScreen
 
 private const val ARG_CATEGORY_ID = "categoryId"
+private const val ARG_TRANSACTION_ID = "transactionId"
 private const val CHARTS_ROUTE = "charts?categoryId={categoryId}"
+private const val TRANSACTION_DETAIL_ROUTE = "transaction/{transactionId}"
 
 private sealed class Destination(val route: String, val label: String) {
     // Vandaag is the start destination - "het antwoord, niet de data" - so it's first both here
@@ -45,6 +48,8 @@ private sealed class Destination(val route: String, val label: String) {
     data object Charts : Destination(CHARTS_ROUTE, "Inzicht")
     data object Meer : Destination("meer", "Meer")
     data object Import : Destination("import", "Importeren")
+    /** Registered with a required `transactionId` — what a tap on a transaction row now opens (R3). */
+    data object TransactionDetail : Destination(TRANSACTION_DETAIL_ROUTE, "Transactie")
     data object CategoryManagement : Destination("categories", "Categorieën & regels")
     data object Subscriptions : Destination("subscriptions", "Abonnementen")
     data object SavingsGoals : Destination("savings-goals", "Spaardoelen")
@@ -105,10 +110,14 @@ fun FinancioNavHost() {
                         }
                     },
                     onImportClick = { navController.navigate(Destination.Import.route) },
+                    onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
                 )
             }
             composable(Destination.Transactions.route) {
-                TransactionsScreen(onImportClick = { navController.navigate(Destination.Import.route) })
+                TransactionsScreen(
+                    onImportClick = { navController.navigate(Destination.Import.route) },
+                    onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
+                )
             }
             composable(Destination.Budgets.route) {
                 BudgetsScreen(onCategoryClick = { categoryId ->
@@ -138,6 +147,15 @@ fun FinancioNavHost() {
                 )
             }
             composable(Destination.Import.route) { ImportScreen(onDone = { navController.popBackStack() }) }
+            composable(
+                route = Destination.TransactionDetail.route,
+                arguments = listOf(navArgument(ARG_TRANSACTION_ID) { type = NavType.LongType }),
+            ) {
+                TransactionDetailScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onManageRulesClick = { navController.navigate(Destination.CategoryManagement.route) },
+                )
+            }
             composable(Destination.CategoryManagement.route) { CategoryManagementScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.Subscriptions.route) { SubscriptionsScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.SavingsGoals.route) { SavingsGoalsScreen(onBackClick = { navController.popBackStack() }) }
@@ -161,6 +179,7 @@ private fun NavIcon(destination: Destination) {
         Destination.Charts -> ChartsIcon()
         Destination.Meer -> MeerIcon()
         Destination.Import -> Unit
+        Destination.TransactionDetail -> Unit
         Destination.CategoryManagement -> Unit
         Destination.Subscriptions -> Unit
         Destination.SavingsGoals -> Unit

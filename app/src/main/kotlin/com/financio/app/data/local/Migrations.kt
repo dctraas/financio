@@ -51,3 +51,13 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_savings_goals_categoryId ON savings_goals(categoryId)")
     }
 }
+
+/**
+ * v2 -> v3: one new nullable column, same "purely additive, no existing data touched" shape as
+ * [MIGRATION_1_2] — the new transaction-detail screen's free-text note field.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE transactions ADD COLUMN note TEXT DEFAULT NULL")
+    }
+}

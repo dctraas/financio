@@ -26,6 +26,7 @@ fun TransactionEntity.toDomain() = Transaction(
     dedupHash = dedupHash,
     balanceAfter = balanceCents?.let { Money(it) },
     tag = tag,
+    note = note,
 )
 
 fun Transaction.toEntity() = TransactionEntity(
@@ -41,6 +42,7 @@ fun Transaction.toEntity() = TransactionEntity(
     dedupHash = dedupHash,
     balanceCents = balanceAfter?.cents,
     tag = tag,
+    note = note,
 )
 
 fun AccountEntity.toDomain() = Account(id = id, name = name, ibanMasked = ibanMasked)

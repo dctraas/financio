@@ -53,6 +53,12 @@ interface TransactionRepository {
 
     /** Ids of every transaction that currently has at least one split — lets the transaction list show "Gesplitst" instead of "Tik om te categoriseren" for one, without loading every row's splits individually. */
     fun observeSplitTransactionIds(): Flow<Set<Long>>
+
+    /** Every stored split, keyed by transactionId — the redesigned transaction list shows a split row's actual parts inline ("Verzorging €14,95 · Vakantie €10,00"), which needs the amounts, not just [observeSplitTransactionIds]'s membership. */
+    fun observeAllSplits(): Flow<Map<Long, List<TransactionSplit>>>
+
+    /** The transaction detail screen's free-text note field. Pass null to clear it. */
+    suspend fun setNote(transactionId: Long, note: String?)
 }
 
 interface CategoryRepository {

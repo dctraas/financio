@@ -48,8 +48,10 @@ data class TransactionsUiState(
     /** True when the account has transactions at all but the current filter/search hides all of them. */
     val hasUnfilteredTransactions: Boolean = false,
     val safeToSpend: SafeToSpendCalculator.Result? = null,
-    /** Ids of transactions that are currently split — see [TransactionRow]'s "Gesplitst" label. */
+    /** Ids of transactions that are currently split — see [splitsByTransaction] for the actual parts. */
     val splitTransactionIds: Set<Long> = emptySet(),
+    /** A split transaction's actual parts, keyed by its id — shown inline instead of just "Gesplitst". */
+    val splitsByTransaction: Map<Long, List<TransactionSplit>> = emptyMap(),
     /** Every account that exists — the account filter row is only shown once there's more than one. */
     val accounts: List<Account> = emptyList(),
     /** null = alle rekeningen. */
@@ -120,8 +122,9 @@ class TransactionsViewModel @Inject constructor(
         filteredSnapshot,
         transactionRepository.observeSplitTransactionIds(),
         accounts,
-    ) { snapshot, splitIds, accountList ->
-        snapshot.copy(splitTransactionIds = splitIds, accounts = accountList)
+        transactionRepository.observeAllSplits(),
+    ) { snapshot, splitIds, accountList, splitsByTransaction ->
+        snapshot.copy(splitTransactionIds = splitIds, accounts = accountList, splitsByTransaction = splitsByTransaction)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionsUiState())
 
     fun selectAccount(accountId: Long?) {

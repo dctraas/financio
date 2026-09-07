@@ -74,6 +74,13 @@ class RoomTransactionRepository @Inject constructor(
 
     override fun observeSplitTransactionIds(): Flow<Set<Long>> =
         dao.observeSplitTransactionIds().map { it.toSet() }
+
+    override fun observeAllSplits(): Flow<Map<Long, List<TransactionSplit>>> =
+        dao.observeAllSplits().map { entities -> entities.map { it.toDomain() }.groupBy { it.transactionId } }
+
+    override suspend fun setNote(transactionId: Long, note: String?) {
+        dao.setNote(transactionId, note)
+    }
 }
 
 class RoomCategoryRepository @Inject constructor(

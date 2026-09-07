@@ -42,7 +42,12 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 @Composable
-fun VandaagScreen(onSeeAllClick: () -> Unit, onImportClick: () -> Unit, viewModel: VandaagViewModel = hiltViewModel()) {
+fun VandaagScreen(
+    onSeeAllClick: () -> Unit,
+    onImportClick: () -> Unit,
+    onOpenDetail: (Long) -> Unit,
+    viewModel: VandaagViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
     if (!state.loaded) return
 
@@ -82,7 +87,7 @@ fun VandaagScreen(onSeeAllClick: () -> Unit, onImportClick: () -> Unit, viewMode
             }
         } else {
             items(state.thisWeekTransactions, key = { it.id }) { transaction ->
-                WeekRow(transaction, state.categoriesById[transaction.categoryId]?.name)
+                WeekRow(transaction, state.categoriesById[transaction.categoryId]?.name, onClick = { onOpenDetail(transaction.id) })
             }
             item { androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp)) }
         }
@@ -310,9 +315,9 @@ private fun TaskTiles(state: VandaagUiState, onSeeAllClick: () -> Unit) {
 }
 
 @Composable
-private fun WeekRow(transaction: Transaction, categoryName: String?) {
+private fun WeekRow(transaction: Transaction, categoryName: String?, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
