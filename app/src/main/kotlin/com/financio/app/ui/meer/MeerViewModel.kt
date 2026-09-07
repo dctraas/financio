@@ -7,6 +7,7 @@ import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.SavingsGoalRepository
 import com.financio.core.repository.TransactionRepository
+import com.financio.core.usecase.SubscriptionCadence
 import com.financio.core.usecase.SubscriptionDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -53,9 +54,16 @@ class MeerViewModel @Inject constructor(
         combine(categoryRepository.observeCategories(), categoryRepository.observeRules()) { cats, rules -> cats.size to rules.size },
     ) { transactions, savings, accounts, categoryCounts ->
         val subscriptions = SubscriptionDetector.detect(transactions)
+        // Amortized to a monthly-equivalent figure per subscription (÷12 for a yearly one) - since
+        // SubscriptionDetector now also confirms yearly subscriptions, summing their full
+        // averageAmount here would badly overstate this tile's "€X/mnd" for anyone with one.
+        val monthlyEquivalentTotal = subscriptions.sumOf { subscription ->
+            val cents = kotlin.math.abs(subscription.averageAmount.cents)
+            if (subscription.cadence == SubscriptionCadence.YEARLY) cents / 12 else cents
+        }
         MeerUiState(
             subscriptionCount = subscriptions.size,
-            subscriptionMonthlyTotal = Money(subscriptions.sumOf { kotlin.math.abs(it.averageAmount.cents) }),
+            subscriptionMonthlyTotal = Money(monthlyEquivalentTotal),
             savingsGoalCount = savings.first,
             savingsTotalSaved = savings.second,
             accountCount = accounts.first,

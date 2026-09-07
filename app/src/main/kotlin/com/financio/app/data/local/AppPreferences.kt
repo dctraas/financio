@@ -69,12 +69,45 @@ class AppPreferences(context: Context) {
         _monthStartDay.value = clamped
     }
 
+    /**
+     * The Vaste lasten screen's "twijfelgeval" yes/no answers, keyed by counterparty name — kept
+     * here as two plain string sets rather than a new Room table/migration, since this is a
+     * lightweight per-device preference (not transaction data) closer in spirit to
+     * [themeMode] than to anything in the encrypted database.
+     */
+    private val _confirmedSubscriptionNames = MutableStateFlow(prefs.getStringSet(KEY_CONFIRMED_SUBSCRIPTIONS, emptySet()).orEmpty())
+    val confirmedSubscriptionNames: StateFlow<Set<String>> = _confirmedSubscriptionNames.asStateFlow()
+
+    private val _dismissedSubscriptionNames = MutableStateFlow(prefs.getStringSet(KEY_DISMISSED_SUBSCRIPTIONS, emptySet()).orEmpty())
+    val dismissedSubscriptionNames: StateFlow<Set<String>> = _dismissedSubscriptionNames.asStateFlow()
+
+    /** "Ja, dit is een vast lastje" — moves [counterpartyName] out of "twijfelgeval" for good. */
+    fun confirmSubscription(counterpartyName: String) {
+        val updated = _confirmedSubscriptionNames.value + counterpartyName
+        prefs.edit().putStringSet(KEY_CONFIRMED_SUBSCRIPTIONS, updated).apply()
+        _confirmedSubscriptionNames.value = updated
+        if (counterpartyName in _dismissedSubscriptionNames.value) {
+            val updatedDismissed = _dismissedSubscriptionNames.value - counterpartyName
+            prefs.edit().putStringSet(KEY_DISMISSED_SUBSCRIPTIONS, updatedDismissed).apply()
+            _dismissedSubscriptionNames.value = updatedDismissed
+        }
+    }
+
+    /** "Nee, dit is geen abonnement" — stops asking about [counterpartyName] again. */
+    fun dismissSubscription(counterpartyName: String) {
+        val updated = _dismissedSubscriptionNames.value + counterpartyName
+        prefs.edit().putStringSet(KEY_DISMISSED_SUBSCRIPTIONS, updated).apply()
+        _dismissedSubscriptionNames.value = updated
+    }
+
     companion object {
         private const val PREFS_NAME = "financio_settings"
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_MONTH_START_DAY = "month_start_day"
+        private const val KEY_CONFIRMED_SUBSCRIPTIONS = "confirmed_subscription_names"
+        private const val KEY_DISMISSED_SUBSCRIPTIONS = "dismissed_subscription_names"
         // On by default for a finance app — matches the architecture doc's security section.
         private const val DEFAULT_BIOMETRIC_LOCK = true
         private const val DEFAULT_NOTIFICATIONS = false
