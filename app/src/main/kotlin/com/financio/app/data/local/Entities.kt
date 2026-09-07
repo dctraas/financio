@@ -77,6 +77,8 @@ data class TransactionEntity(
     @ColumnInfo(defaultValue = "NULL") val balanceCents: Long? = null,
     /** ING's own CSV "Tag" column. Added in schema v2. */
     @ColumnInfo(defaultValue = "NULL") val tag: String? = null,
+    /** Free-text note typed on the transaction detail screen. Added in schema v3. */
+    @ColumnInfo(defaultValue = "NULL") val note: String? = null,
 )
 
 /**

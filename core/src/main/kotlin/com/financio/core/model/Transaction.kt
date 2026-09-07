@@ -41,4 +41,6 @@ data class Transaction(
     /** Account balance right after this transaction, if the export included one — powers the saldoverloop chart. */
     val balanceAfter: Money? = null,
     val tag: String? = null,
+    /** A free-text note the user typed on the transaction detail screen — never imported, never touched by categorization. Added in schema v3. */
+    val note: String? = null,
 )

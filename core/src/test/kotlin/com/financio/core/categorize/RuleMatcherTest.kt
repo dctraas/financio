@@ -5,6 +5,7 @@ import com.financio.core.model.MatchType
 import com.financio.core.model.Money
 import com.financio.core.model.ParsedTransaction
 import com.financio.core.model.SourceFormat
+import com.financio.core.model.Transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -56,5 +57,31 @@ class RuleMatcherTest {
     fun `no match returns null so the transaction lands in 'te categoriseren'`() {
         val txn = transactionFrom(name = "Bol.com")
         assertNull(RuleMatcher(rules).categorize(txn))
+    }
+
+    private fun persistedTransactionFrom(name: String, iban: String? = null) = Transaction(
+        id = 1,
+        accountId = 1,
+        date = LocalDate.of(2026, 9, 3),
+        amount = Money(-1000),
+        counterpartyIban = iban,
+        counterpartyName = name,
+        description = "",
+        categoryId = groceries,
+        sourceFormat = SourceFormat.CSV,
+        dedupHash = "hash",
+    )
+
+    @Test
+    fun `matchingRule(Transaction) returns the same rule the transaction was categorized with`() {
+        val txn = persistedTransactionFrom(name = "Albert Heijn 1354")
+        val rule = RuleMatcher(rules).matchingRule(txn)
+        assertEquals("Albert Heijn", rule?.pattern)
+    }
+
+    @Test
+    fun `matchingRule(Transaction) is null when no rule matches`() {
+        val txn = persistedTransactionFrom(name = "Bol.com")
+        assertNull(RuleMatcher(rules).matchingRule(txn))
     }
 }

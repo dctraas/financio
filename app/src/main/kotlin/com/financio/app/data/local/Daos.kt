@@ -166,6 +166,9 @@ interface TransactionDao {
     @Query("UPDATE transactions SET categoryId = :categoryId WHERE accountId = :accountId AND counterpartyName = :counterpartyName")
     suspend fun setCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int
 
+    @Query("UPDATE transactions SET note = :note WHERE id = :transactionId")
+    suspend fun setNote(transactionId: Long, note: String?)
+
     @Query("DELETE FROM transaction_splits WHERE transactionId = :transactionId")
     suspend fun clearSplits(transactionId: Long)
 
@@ -183,6 +186,10 @@ interface TransactionDao {
 
     @Query("SELECT DISTINCT transactionId FROM transaction_splits")
     fun observeSplitTransactionIds(): Flow<List<Long>>
+
+    /** Every stored split, across every transaction — Transacties' inline "Verzorging €14,95 · Vakantie €10,00" needs the actual parts, not just which rows are split. */
+    @Query("SELECT * FROM transaction_splits")
+    fun observeAllSplits(): Flow<List<TransactionSplitEntity>>
 
     @Insert
     suspend fun insertSplits(splits: List<TransactionSplitEntity>)

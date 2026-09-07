@@ -461,6 +461,39 @@ vinden. Nog te controleren:
     deze batch — de knop zelf bestaat straks niet meer in zijn oude vorm (het tabblad heet nu
     "Budget" en de navigatiecode eromheen is hier herschreven), dus dit is een goed moment om te
     controleren of het probleem daarmee vanzelf is verdwenen.
+- **Herontwerp deel 2: Transacties en transactiedetail.** Tweede fase van het herontwerp — de
+  compacte Transacties-lijst en het volledig nieuwe transactiedetailscherm (R2/R3).
+  - **Compacte chrome.** De altijd-zichtbare zoekbalk, filterchip-rij en sorteertekst zijn
+    vervangen door twee ronde icoonknoppen (zoeken, filteren — met een stipje zodra een filter
+    actief is). Zoeken klapt open tot een tekstveld op dezelfde plek; filteren/sorteren/rekening
+    kiezen zit nu in een `ModalBottomSheet`. Iconen zijn, net als de navigatie-iconen, met Canvas
+    getekend (`TransactionIcons.kt`) in plaats van `material-icons-extended` erbij te halen voor
+    twee glyphs.
+  - **Daggroepen met dagtotaal.** Bij de twee datum-sorteringen worden opeenvolgende transacties
+    van dezelfde dag onder één kop getoond (Vandaag/Gisteren/datum) met het nettototaal van die
+    dag ernaast — bij bedrag-sortering blijft de lijst plat, groeperen zou daar willekeurige
+    eenregelige "groepjes" opleveren.
+  - **Gesplitste transacties tonen hun eigen onderdelen inline** ("Verzorging €14,95 · Vakantie
+    €10,00 · 4 sep") in plaats van alleen het woord "Gesplitst". Nodig hiervoor: een nieuwe
+    `TransactionRepository.observeAllSplits()` (elke opgeslagen split, gegroepeerd per
+    transactie-id in één query in plaats van één losse `Flow` per rij).
+  - **Tik opent een nieuw transactiedetailscherm; lang indrukken geeft de snelle categoriewissel**
+    die voorheen achter een gewone tik zat. `combinedClickable` (Foundation, `ExperimentalFoundationApi`)
+    regelt beide op dezelfde rij.
+  - **Transactiedetail (nieuw scherm).** Volledige omschrijving, rekening, tegenrekening, een
+    "Bij Albert Heijn: N transacties, gemiddeld €X"-tegenpartijstatistiek (berekend over dezelfde
+    rekening), de bijbehorende categoriseerregel (met een link naar Categorieën & regels — er is
+    nog geen aparte regel-editor, dus dat scherm is voorlopig de "bewerken"-bestemming voor elke
+    regel), en een nieuw notitieveld per transactie. `RuleMatcher` (`:core`) kreeg er een
+    `matchingRule(Transaction)`-overload bij naast zijn bestaande `categorize(ParsedTransaction)`,
+    zodat "welke regel verklaart deze categorie" ook ná het importeren nog opgezocht kan worden
+    (2 nieuwe tests).
+  - **Schemamigratie v2 → v3**: één nieuwe nullable kolom (`transactions.note`) — verder puur
+    additief, zelfde vorm als de vorige twee migraties.
+  - `:core`: 111 tests groen (was 109). `:app`-laag (beide schermen, de Room-migratie, de DAO-
+    /repository-wijzigingen) zoals gebruikelijk alleen gereviewd, niet gebouwd, in deze sandbox —
+    een schemamigratie in het bijzonder verdient een eerste-opstart-test op een toestel met
+    bestaande v2-data vóór dit als vertrouwd geldt.
 
 ## Bekende beperkingen
 
