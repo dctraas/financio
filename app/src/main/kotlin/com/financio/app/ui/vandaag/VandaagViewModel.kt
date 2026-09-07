@@ -75,13 +75,19 @@ class VandaagViewModel @Inject constructor(
 
         val mostRecentDate = transactions.maxOfOrNull { it.date }
 
+        // Scoped to what's actually due before month-end, not every confirmed subscription's own
+        // average - since SubscriptionDetector now also confirms yearly ones, blindly summing
+        // every averageAmount here would count a whole year's charge as if it hit "this month".
+        val endOfMonth = today.withDayOfMonth(today.lengthOfMonth())
+        val dueThisMonth = subscriptions.filter { it.estimatedNextDate >= today && !it.estimatedNextDate.isAfter(endOfMonth) }
+
         return VandaagUiState(
             loaded = true,
             safeToSpend = safeToSpendFor(transactions, accountCount, singleAccountSelected = false),
             forecast = forecastFor(transactions, accountCount, today, subscriptions),
             uncategorizedCount = uncategorizedCount,
-            subscriptionCount = subscriptions.size,
-            subscriptionMonthlyTotal = Money(subscriptions.sumOf { kotlin.math.abs(it.averageAmount.cents) }),
+            subscriptionCount = dueThisMonth.size,
+            subscriptionMonthlyTotal = Money(dueThisMonth.sumOf { kotlin.math.abs(it.averageAmount.cents) }),
             nextSubscription = subscriptions.filter { it.estimatedNextDate >= today }.minByOrNull { it.estimatedNextDate },
             thisWeekTransactions = thisWeek,
             categoriesById = categories.associateBy { it.id },

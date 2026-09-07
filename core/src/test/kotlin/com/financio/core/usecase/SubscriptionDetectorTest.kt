@@ -110,4 +110,81 @@ class SubscriptionDetectorTest {
         )
         assertEquals(1, SubscriptionDetector.detect(withIncrease).size)
     }
+
+    @Test
+    fun `detects a price change from the price billed before the current run started`() {
+        val withIncrease = listOf(
+            txn("Ziggo", -4500, LocalDate.of(2026, 1, 1)),
+            txn("Ziggo", -4500, LocalDate.of(2026, 2, 1)),
+            txn("Ziggo", -4700, LocalDate.of(2026, 3, 1)),
+            txn("Ziggo", -4700, LocalDate.of(2026, 4, 1)),
+        )
+        val subscription = SubscriptionDetector.detect(withIncrease).single()
+        val priceChange = subscription.priceChange
+        assertEquals(Money(-4500), priceChange?.previousAmount)
+        assertEquals(Money(-4700), priceChange?.newAmount)
+        assertEquals(Money(-2400), priceChange?.yearlyDifference(SubscriptionCadence.MONTHLY))
+    }
+
+    @Test
+    fun `no price change reported when every charge is the same amount`() {
+        val netflix = monthly("Netflix", -1299, LocalDate.of(2026, 1, 15), 4)
+        assertEquals(null, SubscriptionDetector.detect(netflix).single().priceChange)
+    }
+
+    @Test
+    fun `detects a yearly subscription with only two occurrences a year apart`() {
+        val domainRenewal = listOf(
+            txn("Hostingbedrijf", -1499, LocalDate.of(2025, 6, 1)),
+            txn("Hostingbedrijf", -1499, LocalDate.of(2026, 6, 1)),
+        )
+        val result = SubscriptionDetector.detect(domainRenewal)
+        assertEquals(1, result.size)
+        assertEquals(SubscriptionCadence.YEARLY, result.single().cadence)
+    }
+
+    @Test
+    fun `an uncertain subscription reports amount inconsistency as its reason`() {
+        val variable = listOf(
+            txn("Energieleverancier", -8000, LocalDate.of(2026, 1, 1)),
+            txn("Energieleverancier", -9500, LocalDate.of(2026, 2, 1)),
+            txn("Energieleverancier", -7200, LocalDate.of(2026, 3, 1)),
+            txn("Energieleverancier", -9900, LocalDate.of(2026, 4, 1)),
+        )
+        assertTrue(SubscriptionDetector.detect(variable).isEmpty())
+        val uncertain = SubscriptionDetector.detectUncertain(variable)
+        assertEquals(1, uncertain.size)
+        assertTrue(uncertain.single().reason.contains("bedragen wisselen"))
+    }
+
+    @Test
+    fun `an uncertain subscription reports irregular timing as its reason`() {
+        val driftingDay = listOf(
+            txn("Wasserette", -1500, LocalDate.of(2026, 1, 1)),
+            txn("Wasserette", -1500, LocalDate.of(2026, 2, 8)),
+            txn("Wasserette", -1500, LocalDate.of(2026, 3, 15)),
+            txn("Wasserette", -1500, LocalDate.of(2026, 4, 22)),
+        )
+        val uncertain = SubscriptionDetector.detectUncertain(driftingDay)
+        assertEquals(1, uncertain.size)
+        assertTrue(uncertain.single().reason.contains("dag varieert"))
+    }
+
+    @Test
+    fun `a confirmed subscription never also appears as uncertain`() {
+        val netflix = monthly("Netflix", -1299, LocalDate.of(2026, 1, 15), 4)
+        assertTrue(SubscriptionDetector.detectUncertain(netflix).isEmpty())
+    }
+
+    @Test
+    fun `a genuinely irregular merchant is neither confirmed nor uncertain`() {
+        val groceries = listOf(
+            txn("Albert Heijn", -1200, LocalDate.of(2026, 1, 5)),
+            txn("Albert Heijn", -4500, LocalDate.of(2026, 2, 5)),
+            txn("Albert Heijn", -800, LocalDate.of(2026, 3, 5)),
+            txn("Albert Heijn", -6000, LocalDate.of(2026, 4, 5)),
+        )
+        assertTrue(SubscriptionDetector.detect(groceries).isEmpty())
+        assertTrue(SubscriptionDetector.detectUncertain(groceries).isEmpty())
+    }
 }

@@ -548,6 +548,41 @@ vinden. Nog te controleren:
   - `:core`: 111 tests groen, ongewijzigd (de nieuwe `observeCategorySpent`-query zelf is
     `:app`-laag/Room-SQL, niet in deze sandbox te bouwen — wel met de hand nagerekend tegen de
     twee query's die hij vervangt).
+- **Herontwerp deel 5: Vaste lasten (voorheen Abonnementen).** Vijfde fase (R6) — de grootste
+  `:core`-uitbreiding van het hele herontwerp: `SubscriptionDetector` kon voorheen alleen "wel of
+  niet een abonnement" zeggen, met een strikte 3-maanden/15%-drempel en alleen maandelijkse
+  herhaling. Dat dekte niet wat het scherm nu vraagt.
+  - **Jaarlijkse abonnementen.** Naast de bestaande maandelijkse herkenning (25-35 dagen, ≥3
+    keer gezien) nu ook een jaarlijkse (350-380 dagen, ≥2 keer gezien — met een jaar aan historie
+    zie je een jaarlijkse renewal soms maar twee keer). Elke herkenning draagt nu een
+    `cadence`-veld.
+  - **Prijsstijgingen.** `priceChangeFor()` loopt vanaf de laatste afschrijving terug tot de
+    prijs verandert, en meldt die overgang — "Ging van €45,00 naar €47,00, €24 extra per jaar"
+    (`PriceChange.yearlyDifference()` schaalt de stap naar maandelijks×12 of jaarlijks×1, al naar
+    gelang de cadans).
+  - **"Twijfelgeval"-detectie.** Een nieuwe, losse `detectUncertain()`-functie met verruimde
+    drempels (20-40 dagen, 30% i.p.v. 15%) vangt net-niet-strikte patronen op (een energieleverancier
+    met wisselende bedragen, een wasserette waarvan de dag opschuift) i.p.v. ze stilzwijgend te
+    laten vallen. Blijft strikt gescheiden van `detect()`'s bevestigde lijst — de rest van de app
+    (Vandaag, Meer, veilig-te-besteden) gebruikt alleen die laatste, dus een twijfelgeval telt
+    nergens automatisch mee tot de gebruiker "Ja" heeft getikt.
+  - **Ja/Nee-antwoorden opgeslagen** als twee stringsets in `AppPreferences` (SharedPreferences,
+    geen nieuwe Room-migratie voor iets wat dichter bij een instelling dan bij transactiedata
+    staat). "Ja" verplaatst een naam blijvend naar een eigen "Handmatig bevestigd"-lijstje; "Nee"
+    laat 'm voortaan met rust.
+  - **Chronologisch, niet op bedrag gesorteerd.** "Deze maand nog: €67,57" bovenaan (som van wat
+    nog moet komen, niet alles bij elkaar), dan de resterende afschrijvingen van deze maand op
+    datum, dan een "Later"-sectie per kalendermaand — een jaarlijks abonnement verschijnt daar
+    op zijn eigen, echte factuurmaand in plaats van ergens willekeurig.
+  - **Cross-cutting fix.** Doordat `detect()` nu ook jaarlijkse abonnementen teruggeeft, zouden
+    Vandaag's en Meer's "vaste lasten"-tegels een heel jaarbedrag als "deze maand" of "/mnd"
+    getoond hebben als hun sommen niet waren aangepast — Vandaag telt nu alleen wat daadwerkelijk
+    deze maand verwacht wordt, Meer deelt een jaarlijks bedrag door 12 voor een eerlijk
+    maandgemiddelde.
+  - `:core`: 118 tests groen (was 111) — 7 nieuwe, dekken jaarcadans, prijsstijging (met en
+    zonder wijziging), beide twijfelgeval-redenen, en dat een bevestigd abonnement nooit ook als
+    twijfelgeval verschijnt. `:app`-laag (beide schermen, de nieuwe `AppPreferences`-velden)
+    zoals gebruikelijk alleen gereviewd, niet gebouwd, in deze sandbox.
 
 ## Bekende beperkingen
 
