@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -57,53 +55,58 @@ fun MeerScreen(
             )
         }
 
+        // Just four tiles, always - a plain 2x2 grid of Rows, not LazyVerticalGrid: nesting a
+        // second lazy/scrollable container as an item{} inside this LazyColumn measures it with
+        // an infinite height constraint and crashes ("Vertically scrollable component was
+        // measured with an infinity maximum height constraints").
         item {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MeerTile(
+                    title = "Vaste lasten",
+                    summary = if (state.subscriptionCount > 0) {
+                        "${state.subscriptionCount} · ${state.subscriptionMonthlyTotal.toDisplayString()}/mnd"
+                    } else {
+                        "Nog niets herkend"
+                    },
+                    onClick = onSubscriptionsClick,
+                    modifier = Modifier.weight(1f),
+                )
+                MeerTile(
+                    title = "Spaardoelen",
+                    summary = if (state.savingsGoalCount > 0) {
+                        "${state.savingsGoalCount} · ${state.savingsTotalSaved.toDisplayString()} gespaard"
+                    } else {
+                        "Nog geen doelen"
+                    },
+                    onClick = onSavingsGoalsClick,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        item {
+            Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                item {
-                    MeerTile(
-                        title = "Vaste lasten",
-                        summary = if (state.subscriptionCount > 0) {
-                            "${state.subscriptionCount} · ${state.subscriptionMonthlyTotal.toDisplayString()}/mnd"
-                        } else {
-                            "Nog niets herkend"
-                        },
-                        onClick = onSubscriptionsClick,
-                    )
-                }
-                item {
-                    MeerTile(
-                        title = "Spaardoelen",
-                        summary = if (state.savingsGoalCount > 0) {
-                            "${state.savingsGoalCount} · ${state.savingsTotalSaved.toDisplayString()} gespaard"
-                        } else {
-                            "Nog geen doelen"
-                        },
-                        onClick = onSavingsGoalsClick,
-                    )
-                }
-                item {
-                    MeerTile(
-                        title = "Rekeningen",
-                        summary = if (state.accountCount > 0) {
-                            "${state.accountCount} · ${state.accountsTotalBalance.toDisplayString()}"
-                        } else {
-                            "Nog geen rekeningen"
-                        },
-                        onClick = onAccountsClick,
-                    )
-                }
-                item {
-                    MeerTile(
-                        title = "Categorieën",
-                        summary = "${state.categoryCount} categorieën · ${state.ruleCount} regels",
-                        onClick = onManageCategoriesClick,
-                    )
-                }
+                MeerTile(
+                    title = "Rekeningen",
+                    summary = if (state.accountCount > 0) {
+                        "${state.accountCount} · ${state.accountsTotalBalance.toDisplayString()}"
+                    } else {
+                        "Nog geen rekeningen"
+                    },
+                    onClick = onAccountsClick,
+                    modifier = Modifier.weight(1f),
+                )
+                MeerTile(
+                    title = "Categorieën",
+                    summary = "${state.categoryCount} categorieën · ${state.ruleCount} regels",
+                    onClick = onManageCategoriesClick,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
 
@@ -151,9 +154,9 @@ private fun freshnessCaption(mostRecentDate: LocalDate?): String =
     if (mostRecentDate == null) "Nog geen bestand geïmporteerd" else "laatst bijgewerkt t/m ${mostRecentDate.toShortDisplayString()}"
 
 @Composable
-private fun MeerTile(title: String, summary: String, onClick: () -> Unit) {
+private fun MeerTile(title: String, summary: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
