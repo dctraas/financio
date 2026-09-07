@@ -24,7 +24,6 @@ import com.financio.app.ui.meer.MeerScreen
 import com.financio.app.ui.savings.SavingsGoalsScreen
 import com.financio.app.ui.settings.AppearanceScreen
 import com.financio.app.ui.settings.BackupExportScreen
-import com.financio.app.ui.settings.BudgetLimitsScreen
 import com.financio.app.ui.settings.LockPrivacyScreen
 import com.financio.app.ui.settings.MonthStartScreen
 import com.financio.app.ui.settings.NotificationsScreen
@@ -58,7 +57,6 @@ private sealed class Destination(val route: String, val label: String) {
     data object LockPrivacy : Destination("settings/lock-privacy", "Vergrendeling & privacy")
     data object Notifications : Destination("settings/notifications", "Meldingen")
     data object MonthStart : Destination("settings/month-start", "Maand begint op")
-    data object BudgetLimits : Destination("settings/budget-limits", "Budgetlimieten")
     data object BackupExport : Destination("settings/backup-export", "Back-up & export")
 }
 
@@ -143,7 +141,6 @@ fun FinancioNavHost() {
                     onNotificationsClick = { navController.navigate(Destination.Notifications.route) },
                     onMonthStartClick = { navController.navigate(Destination.MonthStart.route) },
                     onBackupExportClick = { navController.navigate(Destination.BackupExport.route) },
-                    onBudgetLimitsClick = { navController.navigate(Destination.BudgetLimits.route) },
                 )
             }
             composable(Destination.Import.route) { ImportScreen(onDone = { navController.popBackStack() }) }
@@ -164,7 +161,6 @@ fun FinancioNavHost() {
             composable(Destination.LockPrivacy.route) { LockPrivacyScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.Notifications.route) { NotificationsScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.MonthStart.route) { MonthStartScreen(onBackClick = { navController.popBackStack() }) }
-            composable(Destination.BudgetLimits.route) { BudgetLimitsScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.BackupExport.route) { BackupExportScreen(onBackClick = { navController.popBackStack() }) }
         }
     }
@@ -188,7 +184,6 @@ private fun NavIcon(destination: Destination) {
         Destination.LockPrivacy -> Unit
         Destination.Notifications -> Unit
         Destination.MonthStart -> Unit
-        Destination.BudgetLimits -> Unit
         Destination.BackupExport -> Unit
     }
 }

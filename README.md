@@ -494,6 +494,30 @@ vinden. Nog te controleren:
     /repository-wijzigingen) zoals gebruikelijk alleen gereviewd, niet gebouwd, in deze sandbox —
     een schemamigratie in het bijzonder verdient een eerste-opstart-test op een toestel met
     bestaande v2-data vóór dit als vertrouwd geldt.
+- **Herontwerp deel 3: Budget.** Derde fase — het "Budgetten"-scherm wordt "Budget" (R4).
+  - **Eén topgetal + één gestapelde statusbalk** in plaats van los door 6 kaarten scrollen: het
+    totaal besteed/gelimiteerd bovenaan, en daaronder één balk waarin elke categorie zijn eigen
+    segment is (breedte naar rato van wat die categorie deze maand uitgaf, gekleurd in zijn eigen
+    status — groen/amber/rood) zodat de vorm van de hele maand in één oogopslag zichtbaar is.
+  - **Pace-streepje** op zowel die samenvattingsbalk als op elke individuele voortgangsbalk: een
+    verticaal streepje op de dag-van-de-maand-fractie (bijv. 60% op de 18e van een maand van 30
+    dagen) — alleen zichtbaar bij de huidige maand, waar "hoe ver ben ik" tegenover "hoe ver is de
+    maand" iets betekent.
+  - **Rijen gesorteerd op urgentie** (OVER eerst, dan WARNING, dan OK; bij gelijke status op
+    percentage) in plaats van op aanmaakvolgorde.
+  - **Categorieën met besteding maar zonder limiet** verschijnen als gestippelde chips onderaan
+    met een "+" erbij — tikken opent hetzelfde dialoogvenster als lang indrukken op een bestaande
+    rij, nu de ene plek om een limiet te zetten of te wijzigen (inclusief de rollover-toggle).
+    Het tijdelijke "Budgetlimieten"-scherm onder Meer (uit deel 1) is hiermee overbodig en
+    verwijderd — dat was altijd al bedoeld als tussenstap tot dit moment.
+  - **Dezelfde maandnavigatie** (‹ label ›) als Inzicht — Budget stond hiervoor vast op de huidige
+    maand.
+  - Tik op een rij springt nog steeds door naar de bijbehorende grafiek in Inzicht; lang indrukken
+    is nu de nieuwe weg naar de limiet-editor, dezelfde tik/lang-indrukken-tweedeling als
+    Transacties kreeg in deel 2.
+  - Geen `:core`-wijzigingen deze batch (bestaande `BudgetEvaluator`/`Budget`-modellen waren al
+    toereikend) — `:core` blijft op 111 tests groen. Alles hier is `:app`-laag en dus zoals
+    gebruikelijk alleen gereviewd, niet gebouwd, in deze sandbox.
 
 ## Bekende beperkingen
 
