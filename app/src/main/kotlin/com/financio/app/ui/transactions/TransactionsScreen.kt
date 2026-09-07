@@ -739,7 +739,7 @@ private fun SplitRowEditor(
             modifier = Modifier.width(110.dp),
         )
         if (onRemove != null) {
-            // Plain text, not an icon: same reasoning as the ‹›-period navigator in Grafieken —
+            // Plain text, not an icon: same reasoning as the ‹›-period navigator in Inzicht —
             // no build available here to verify an icon actually ships in the trimmed icon set.
             Text(
                 "✕",

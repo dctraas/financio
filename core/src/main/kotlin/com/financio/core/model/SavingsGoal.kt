@@ -1,9 +1,9 @@
 package com.financio.core.model
 
 /**
- * A savings target tied to one category — progress is the net amount ever "spent" into that
- * category (same sign convention as [com.financio.core.repository.TransactionRepository.observeSpent],
- * just unscoped by month): categorizing a transfer to your savings account under this goal's
+ * A savings target tied to one category — progress is
+ * [com.financio.core.repository.TransactionRepository.observeCategoryNetAllTime] for that
+ * category: categorizing a transfer to your savings account under this goal's
  * category counts as a contribution, and a later withdrawal categorized the same way reduces it
  * back down. No separate contribution-tracking mechanism — this reuses categorization entirely.
  */

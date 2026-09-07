@@ -82,8 +82,8 @@ class MeerViewModel @Inject constructor(
 
     /**
      * One account's balance is whatever its most recent transaction's [com.financio.core.model.Transaction.balanceAfter]
-     * says — the same "first hit walking date-DESC order" approximation Grafieken's Saldoverloop
-     * uses, since ING's CSV carries no time-of-day (see `ChartsViewModel.balanceHistoryState`).
+     * says — the same "first hit walking date-DESC order" approximation Vandaag's forecast uses
+     * (see `VandaagViewModel.forecastFor`), since ING's CSV carries no time-of-day.
      */
     private fun accountsTotalBalance(
         accountRepository: AccountRepository,

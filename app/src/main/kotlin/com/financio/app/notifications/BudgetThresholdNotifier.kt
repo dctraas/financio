@@ -32,7 +32,7 @@ class BudgetThresholdNotifier @Inject constructor(
 
         val currentMonth = YearMonth.now()
         val budget = budgetRepository.observeBudgets(currentMonth).first().firstOrNull { it.categoryId == categoryId } ?: return
-        val newSpent = transactionRepository.observeSpent(categoryId, currentMonth).first()
+        val newSpent = transactionRepository.observeCategorySpent(categoryId, currentMonth).first()
         if (!BudgetEvaluator.crossedIntoWorseStatus(previousSpent, newSpent, budget.limit)) return
 
         val categoryName = categoryRepository.observeCategories().first().firstOrNull { it.id == categoryId }?.name ?: return
@@ -42,5 +42,5 @@ class BudgetThresholdNotifier @Inject constructor(
 
     /** The snapshot [checkAndNotify] needs *before* the write that might change [categoryId]'s spend. */
     suspend fun currentSpent(categoryId: Long): Money =
-        transactionRepository.observeSpent(categoryId, YearMonth.now()).first()
+        transactionRepository.observeCategorySpent(categoryId, YearMonth.now()).first()
 }
