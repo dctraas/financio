@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -39,14 +38,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.ui.common.CategorySquare
 import com.financio.app.ui.common.toShortDisplayString
-import com.financio.app.ui.theme.CategoryColors
 import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.core.model.Category
 import com.financio.core.model.Money
@@ -382,7 +379,7 @@ private fun TransactionRow(transaction: Transaction, categoryName: String?, isSp
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CategoryDot(if (isSplit) "gesplitst" else categoryName, warningColor)
+        CategorySquare(categoryName, isSplit = isSplit)
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
@@ -427,39 +424,6 @@ private fun TagChip(tag: String) {
 private fun subtitleFor(categoryName: String?, transaction: Transaction): String {
     val label = categoryName ?: "Tik om te categoriseren"
     return "$label · ${transaction.date.toShortDisplayString()}"
-}
-
-/**
- * A filled dot for an actual category (including "Overig" in its own neutral gray) versus an
- * *outlined* dot in the budget-warning amber for "no category yet" — a plain gray fill would be
- * ambiguous with "Overig", which is a real, deliberately chosen category, not a missing one.
- */
-@Composable
-private fun CategoryDot(categoryName: String?, warningColor: Color) {
-    androidx.compose.foundation.Canvas(Modifier.size(11.dp)) {
-        if (categoryName == null) {
-            drawCircle(warningColor, style = Stroke(width = 1.5.dp.toPx()))
-        } else {
-            drawCircle(categoryColorFor(categoryName))
-        }
-    }
-}
-
-private fun categoryColorFor(categoryName: String?): Color = when (categoryName?.lowercase()) {
-    "boodschappen" -> CategoryColors.groceries
-    "abonnementen" -> CategoryColors.subscriptions
-    "uit eten" -> CategoryColors.dining
-    "vervoer" -> CategoryColors.transport
-    "kleding & verzorging" -> CategoryColors.clothing
-    "wonen & vaste lasten" -> CategoryColors.housing
-    "gezondheid & verzekering" -> CategoryColors.health
-    "vrije tijd & hobby's" -> CategoryColors.leisure
-    "vakantie & reizen" -> CategoryColors.travel
-    "cadeaus & giften" -> CategoryColors.gifts
-    "sparen & beleggen" -> CategoryColors.savings
-    "inkomsten" -> CategoryColors.income
-    // "Overig" and anything user-created falls through to the neutral dot on purpose.
-    else -> CategoryColors.fallback
 }
 
 /**

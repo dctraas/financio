@@ -13,8 +13,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Small hand-drawn nav icons, same shapes as the icon sprite in the schermontwerp artifact —
- * kept as Canvas draws instead of pulling in the material-icons-extended dependency for four
- * glyphs the app will only ever need these four of.
+ * kept as Canvas draws instead of pulling in the material-icons-extended dependency for five
+ * glyphs the app will only ever need these five of.
  *
  * All coordinates below are in a fixed 24×24 design-unit grid, regardless of the actual pixel
  * size of the Canvas they're drawn into. [DrawScope.size] is in real pixels (24.dp × device
@@ -25,6 +25,31 @@ import androidx.compose.ui.unit.dp
  */
 private const val DESIGN_SIZE = 24f
 private val iconStrokeWidth = 1.8f
+
+@Composable
+fun VandaagIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+    Canvas(modifier.size(24.dp)) {
+        scale(size.width / DESIGN_SIZE, size.height / DESIGN_SIZE, pivot = Offset.Zero) {
+            val center = Offset(DESIGN_SIZE / 2f, DESIGN_SIZE / 2f)
+            drawCircle(color, radius = 4.5f, center = center, style = Stroke(width = iconStrokeWidth))
+            val rayInner = 7.5f
+            val rayOuter = 10f
+            listOf(0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0).forEach { degrees ->
+                val radians = Math.toRadians(degrees)
+                val dx = kotlin.math.cos(radians).toFloat()
+                val dy = kotlin.math.sin(radians).toFloat()
+                drawLine(
+                    color,
+                    Offset(center.x + dx * rayInner, center.y + dy * rayInner),
+                    Offset(center.x + dx * rayOuter, center.y + dy * rayOuter),
+                    strokeWidth = iconStrokeWidth,
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun TransactionsIcon(modifier: Modifier = Modifier) {
@@ -65,16 +90,14 @@ fun ChartsIcon(modifier: Modifier = Modifier) {
     }
 }
 
+/** "Meer" catch-all tab — three dots, the usual overflow/"more" affordance, not a gear: this tab is
+ * mostly Vaste lasten/Spaardoelen/Rekeningen/Categorieën now, settings is just one row inside it. */
 @Composable
-fun SettingsIcon(modifier: Modifier = Modifier) {
+fun MeerIcon(modifier: Modifier = Modifier) {
     val color = LocalContentColor.current
     Canvas(modifier.size(24.dp)) {
         scale(size.width / DESIGN_SIZE, size.height / DESIGN_SIZE, pivot = Offset.Zero) {
-            val rows = listOf(6f to 9f, 12f to 16f, 18f to 8f)
-            rows.forEach { (y, knobX) ->
-                drawLine(color, Offset(4f, y), Offset(20f, y), strokeWidth = iconStrokeWidth, cap = StrokeCap.Round)
-                drawCircle(color, radius = 2.3f, center = Offset(knobX, y))
-            }
+            listOf(6f, 12f, 18f).forEach { x -> drawCircle(color, radius = 1.8f, center = Offset(x, 12f)) }
         }
     }
 }

@@ -406,6 +406,61 @@ vinden. Nog te controleren:
   coroutine op `Dispatchers.IO`) — de logica zelf (`DefaultCategorization` in `:core`) is
   volledig getest, maar de Hilt-injectie in `Application` en de Room-transactie eromheen zijn
   Android-specifiek en dus niet in deze sandbox te verifiëren.
+- **Herontwerp (deel 1 van meerdere): navigatie, "Vandaag" en "Meer".** De hele app wordt in
+  fases herbouwd op een nieuw ontwerp (nieuw kleur-/typesysteem, vijf tabbladen in plaats van
+  vier, een nieuwe startscreen "Vandaag"). Dit is de eerste fase: het navigatie-skelet plus twee
+  compleet nieuwe schermen. De rest van het herontwerp (Transacties, Budget, Inzicht, Vaste
+  lasten, Importeren) volgt in latere batches.
+  - **Kleursysteem.** Nieuwe warme kleurtokens (`FinancioColorTokens`: `background`/`surface`/
+    `ink`/`accent`/`amber`/`rose`, licht én donker) in `Color.kt`, en `Theme.kt` zet nu élke
+    klassieke Material3-`ColorScheme`-rol expliciet (`lightColorScheme()`/`darkColorScheme()`
+    vullen namelijk *niet* automatisch de rollen aan die je weglaat — elke rol heeft zijn eigen,
+    onafhankelijke paars getinte Material-standaardwaarde). Dat verklaart met terugwerkende
+    kracht ook een niet eerder opgeloste "waarom is dat lila?"-observatie in eerdere schermen.
+    Bewust nog niet aangepakt: de nieuwere `surfaceContainer*`-tonale rollen — welke
+    parameternamen die precies hebben verschilt per compose-material3-versie, en een verkeerde
+    naam is een echte compilerfout die in deze sandbox niet te verifiëren is.
+  - **Vandaag (nieuw scherm, nieuwe eerste tab).** "Het antwoord, niet de data": een grote
+    "vrij te besteden"-hero, een nieuwe saldoprognose-grafiek naar het einde van de maand
+    (`BalanceForecastCalculator`, `:core`, 8 tests) — een vlak gemiddelde per dag plus bekende
+    abonnementsbedragen op hun exacte datum, met een stippellijn voor de prognose en een oranje
+    lijn op de dag dat het (als eerste) krap dreigt te worden. Twee taak-tegels ("N nog te
+    categoriseren", "vaste lasten deze maand") en een "deze week"-lijst. `safeToSpendFor()` is nu
+    een gedeelde top-level functie (`usecase/SafeToSpendHelper.kt`) in plaats van een eigen kopie
+    in `TransactionsViewModel`, zodat Vandaag en Transacties nooit een verschillend antwoord
+    kunnen geven.
+  - **Categorie-icoon: gekleurd vierkant in plaats van stip.** Nieuwe `CategorySquare` (`ui/
+    common/CategoryVisuals.kt`, 34dp, afgeronde hoeken) vervangt de oude 11dp-stip overal:
+    gevuld met de categoriekleur, een gestippelde oranje rand voor "nog niet gecategoriseerd", of
+    een neutraal vierkant voor een gesplitste transactie (die toont haar onderdelen al in tekst).
+  - **Meer (nieuw scherm, vervangt de "Instellingen"-tab).** Vier tegels (Vaste lasten,
+    Spaardoelen, Rekeningen, Categorieën) met een live samenvatting erbij — vaak is een tik
+    niet eens meer nodig (`MeerViewModel` hergebruikt dezelfde repositories/use cases als de
+    schermen erachter). Eén "Bestand importeren"-rij met een "laatst bijgewerkt t/m"-onderschrift.
+    Instellingen zelf is nu vijf kleine deelschermen in plaats van één lange lijst:
+    Weergave, Vergrendeling & privacy (incl. de privacy-geruststellingstekst), Meldingen, de
+    nieuwe "Maand begint op"-instelling (1–28, opgeslagen in `AppPreferences.monthStartDay` —
+    bewust nog *niet* verwerkt in de Budget/Inzicht/Vaste lasten-maandberekeningen, dat is een
+    zorgvuldige aparte wijziging voor een latere batch) en Back-up & export. Budgetlimieten
+    staan voorlopig op een eigen (tijdelijk) scherm, bereikbaar vanuit Meer — de uiteindelijke
+    bedoeling uit het ontwerp is limieten rechtstreeks vanuit een categorie-chip op het nieuwe
+    Budget-scherm te zetten, maar dat scherm zelf is nog niet herontworpen.
+  - **Nieuw: transacties-CSV-export.** `TransactionCsvExporter` (`:core`, `backup`-package, 5
+    tests) — puntkomma-gescheiden, Nederlandse decimale komma, rondtrip-compatibel met de
+    bestaande CSV-parser. Dit was in een eerdere, losstaande batch bewust overgeslagen op
+    uitdrukkelijk verzoek; het herontwerp vraagt er nu expliciet om ("de export van je
+    transacties, die er nu niet is"), dus die eerdere beslissing is voor dít ene onderdeel
+    ingehaald door de nieuwe opdracht.
+  - Elk tweede-laags scherm (Categorieën & regels, Abonnementen, Spaardoelen, Rekeningen, en alle
+    nieuwe Instellingen-deelschermen) heeft nu een echte terugknop in de `TopAppBar` — voorheen
+    moest je op de systeem-terug-gebaar vertrouwen.
+  - `:core`: 109 tests groen (was 96) — 13 nieuwe (`BalanceForecastCalculator` +
+    `TransactionCsvExporter`). De rest is `:app`-laag (alle schermen, `Theme.kt`, navigatie) en
+    dus zoals gebruikelijk alleen zorgvuldig gereviewd, niet gebouwd, in deze sandbox.
+  - De al langer openstaande "Budgetten-knop doet niets"-melding is niet apart onderzocht in
+    deze batch — de knop zelf bestaat straks niet meer in zijn oude vorm (het tabblad heet nu
+    "Budget" en de navigatiecode eromheen is hier herschreven), dus dit is een goed moment om te
+    controleren of het probleem daarmee vanzelf is verdwenen.
 
 ## Bekende beperkingen
 
