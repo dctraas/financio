@@ -4,6 +4,7 @@ import com.financio.core.model.Money
 import com.financio.core.model.SourceFormat
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 
@@ -77,6 +78,33 @@ class CsvIngParserTest {
         val missingColumn = sampleCsv.replace("Tegenrekening;", "")
         assertThrows(UnrecognizedFormatException::class.java) {
             CsvIngParser().parse(missingColumn, accountId = 1)
+        }
+    }
+
+    @Test
+    fun `a missing-column failure carries the raw header and first lines for the error screen`() {
+        val missingDateColumn = sampleCsv.replace("Datum;", "")
+        val exception = assertThrows(UnrecognizedFormatException::class.java) {
+            CsvIngParser().parse(missingDateColumn, accountId = 1)
+        }
+        assertEquals(2, exception.rawLines.size)
+        assertTrue(exception.detectedColumns.contains("Naam / Omschrijving"))
+        assertTrue(!exception.detectedColumns.contains("Datum"))
+    }
+
+    @Test
+    fun `a manually picked date column index recovers from an unrecognized date column name`() {
+        val renamedDateColumn = sampleCsv.replace("Datum;", "Transactiedatum;")
+        // "Transactiedatum" is column 0, same position "Datum" would have been.
+        val txn = CsvIngParser().parse(renamedDateColumn, accountId = 1, dateColumnOverrideIndex = 0).single()
+        assertEquals(LocalDate.of(2026, 9, 3), txn.date)
+    }
+
+    @Test
+    fun `other missing columns still fail even with a date column override given`() {
+        val missingTwoColumns = sampleCsv.replace("Datum;", "Transactiedatum;").replace("Tegenrekening;", "")
+        assertThrows(UnrecognizedFormatException::class.java) {
+            CsvIngParser().parse(missingTwoColumns, accountId = 1, dateColumnOverrideIndex = 0)
         }
     }
 

@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.financio.app.DefaultAccount
 import com.financio.app.notifications.BudgetThresholdNotifier
 import com.financio.core.categorize.LearnedRule
+import com.financio.core.importer.UnrecognizedFormatException
 import com.financio.core.model.Account
 import com.financio.core.model.Category
 import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
+import com.financio.core.repository.TransactionRepository
 import com.financio.core.usecase.ImportPreview
 import com.financio.core.usecase.ImportStatementUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -27,18 +30,26 @@ sealed interface ImportUiState {
     /**
      * [manualCategoryChoices] maps a counterparty name — one of [ImportPreview.needsCategoryGrouped]'s
      * groups — to the category the user picked for it, applying to *every* transaction sharing
-     * that name in this batch. Kept here rather than mutating [preview] itself so the "X te
-     * controleren" count in the summary stays accurate as choices come in. Every transaction in
-     * [preview] ends up imported on confirm regardless of whether it got a manual category (see
-     * [ImportViewModel.confirm]), so [preview]'s own `total` is the number that will be imported.
+     * that name in this batch. [skippedGroups] tracks which groups the user explicitly moved past
+     * without a choice, purely so the card stack knows which one to show next - it changes nothing
+     * about what gets imported (see [ImportViewModel.confirm]: every transaction in [preview] is
+     * imported regardless, skipped or not, chosen or not).
      */
     data class Ready(
-        val fileName: String,
         val preview: ImportPreview,
+        val accountName: String,
         val manualCategoryChoices: Map<String, Long> = emptyMap(),
+        val skippedGroups: Set<String> = emptySet(),
+        /** How many already-imported transactions use each category — ranks the top-4 chips by the user's own habits instead of category-creation order. */
+        val categoryUsageFrequency: Map<Long, Int> = emptyMap(),
     ) : ImportUiState
 
-    data class Failed(val message: String) : ImportUiState
+    data class Failed(
+        val message: String,
+        val rawLines: List<String> = emptyList(),
+        val detectedColumns: List<String> = emptyList(),
+    ) : ImportUiState
+
     data object Imported : ImportUiState
 }
 
@@ -47,6 +58,7 @@ class ImportViewModel @Inject constructor(
     private val importStatementUseCase: ImportStatementUseCase,
     private val categoryRepository: CategoryRepository,
     private val budgetThresholdNotifier: BudgetThresholdNotifier,
+    private val transactionRepository: TransactionRepository,
     accountRepository: AccountRepository,
 ) : ViewModel() {
 
@@ -63,21 +75,49 @@ class ImportViewModel @Inject constructor(
     private val _selectedAccountId = MutableStateFlow(DefaultAccount.ID)
     val selectedAccountId: StateFlow<Long> = _selectedAccountId.asStateFlow()
 
+    // Kept so a "pick the date column yourself" retry after a Failed state doesn't need the file
+    // picker to run again - the file's own bytes are still right here.
+    private var pendingFileContent: String? = null
+    private var pendingAccountId: Long? = null
+
     fun selectAccount(accountId: Long) {
         _selectedAccountId.value = accountId
     }
 
-    fun onFilePicked(fileName: String, content: String) {
+    fun onFilePicked(content: String) {
+        pendingFileContent = content
+        pendingAccountId = _selectedAccountId.value
+        load(content, _selectedAccountId.value, dateColumnOverrideIndex = null)
+    }
+
+    /** The error screen's recovery action - "column N is actually the date column". */
+    fun retryWithDateColumn(columnIndex: Int) {
+        val content = pendingFileContent ?: return
+        val accountId = pendingAccountId ?: return
+        load(content, accountId, dateColumnOverrideIndex = columnIndex)
+    }
+
+    private fun load(content: String, accountId: Long, dateColumnOverrideIndex: Int?) {
         _uiState.value = ImportUiState.Loading
         viewModelScope.launch {
             _uiState.value = try {
-                val preview = importStatementUseCase.preview(content, _selectedAccountId.value)
-                ImportUiState.Ready(fileName, preview)
+                val preview = importStatementUseCase.preview(content, accountId, dateColumnOverrideIndex)
+                val accountName = accounts.value.firstOrNull { it.id == accountId }?.name ?: "Rekening"
+                ImportUiState.Ready(preview, accountName, categoryUsageFrequency = categoryUsageFrequency())
+            } catch (e: UnrecognizedFormatException) {
+                ImportUiState.Failed(e.message ?: "Kon het bestand niet lezen.", e.rawLines, e.detectedColumns)
             } catch (e: Exception) {
                 ImportUiState.Failed(e.message ?: "Kon het bestand niet lezen.")
             }
         }
     }
+
+    /** One tally across every already-imported transaction — a stand-in for "how often you've actually picked this category", since there's no separate usage-count column to read. */
+    private suspend fun categoryUsageFrequency(): Map<Long, Int> =
+        transactionRepository.observeAllTransactions().first()
+            .mapNotNull { it.categoryId }
+            .groupingBy { it }
+            .eachCount()
 
     /** [counterpartyName] is a group key from `preview.needsCategoryGrouped`, applying to every transaction that shares it. */
     fun assignCategory(counterpartyName: String, categoryId: Long) {
@@ -86,6 +126,13 @@ class ImportViewModel @Inject constructor(
         _uiState.value = current.copy(
             manualCategoryChoices = current.manualCategoryChoices + (counterpartyName to categoryId),
         )
+    }
+
+    /** Moves the card stack past this group without assigning it a category - it still gets imported uncategorized, same as if the user never saw this screen at all. */
+    fun skip(counterpartyName: String) {
+        val current = _uiState.value
+        if (current !is ImportUiState.Ready) return
+        _uiState.value = current.copy(skippedGroups = current.skippedGroups + counterpartyName)
     }
 
     /**
