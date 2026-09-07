@@ -25,17 +25,17 @@ interface TransactionRepository {
     suspend fun existingDedupHashes(accountId: Long): Set<String>
     suspend fun insertAll(transactions: List<Transaction>)
 
-    /** Money spent (debits only) in a category for a month, including any split allocations — what a budget limit is compared against. */
-    fun observeSpent(categoryId: Long, yearMonth: YearMonth): Flow<Money>
-
     /**
-     * Total activity (sum of absolute amounts, debit or credit) in a category for a month,
-     * including any split allocations — what the Grafieken screen charts. Deliberately not
-     * [observeSpent]: that one only sums debits, so an income category (all credits) always
-     * summed to zero and its chart looked empty even though Transacties showed plenty of
-     * matching rows.
+     * The one "how much did this category cost this month" number — shared by Budget's progress
+     * bars, Inzicht's charts, and the notification threshold checks, so the same category/month
+     * can no longer show three different totals depending on which screen you're looking at (the
+     * previous split between a debits-only `observeSpent` and an all-activity `observeCategoryTotal`
+     * meant an income category always showed €0 on Budget-style totals, and a category with an
+     * occasional refund overcounted on the debits-only one). Nets debits and credits together
+     * first, then takes the magnitude — see the Room DAO's doc comment for the exact reasoning.
+     * Splits are folded in alongside whole transactions categorized directly.
      */
-    fun observeCategoryTotal(categoryId: Long, yearMonth: YearMonth): Flow<Money>
+    fun observeCategorySpent(categoryId: Long, yearMonth: YearMonth): Flow<Money>
 
     /** Net amount ever "spent" (debits minus credits) into a category, unscoped by month — a savings goal's progress. */
     fun observeCategoryNetAllTime(categoryId: Long): Flow<Money>

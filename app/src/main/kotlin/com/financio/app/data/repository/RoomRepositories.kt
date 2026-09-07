@@ -49,11 +49,8 @@ class RoomTransactionRepository @Inject constructor(
         dao.insertAll(transactions.map { it.toEntity() })
     }
 
-    override fun observeSpent(categoryId: Long, yearMonth: YearMonth): Flow<Money> =
-        dao.observeSpent(categoryId, yearMonth.toString()).map { Money(it) }
-
-    override fun observeCategoryTotal(categoryId: Long, yearMonth: YearMonth): Flow<Money> =
-        dao.observeCategoryTotal(categoryId, yearMonth.toString()).map { Money(it) }
+    override fun observeCategorySpent(categoryId: Long, yearMonth: YearMonth): Flow<Money> =
+        dao.observeCategorySpent(categoryId, yearMonth.toString()).map { Money(it) }
 
     override fun observeCategoryNetAllTime(categoryId: Long): Flow<Money> =
         dao.observeCategoryNetAllTime(categoryId).map { Money(it) }

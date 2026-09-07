@@ -518,6 +518,36 @@ vinden. Nog te controleren:
   - Geen `:core`-wijzigingen deze batch (bestaande `BudgetEvaluator`/`Budget`-modellen waren al
     toereikend) — `:core` blijft op 111 tests groen. Alles hier is `:app`-laag en dus zoals
     gebruikelijk alleen gereviewd, niet gebouwd, in deze sandbox.
+- **Herontwerp deel 4: Inzicht (voorheen Grafieken).** Vierde fase (R5) — inclusief een
+  echte cross-cutting fix die dit scherm en Budget allebei raakt.
+  - **Eén "spent"-berekening voor de hele app.** `TransactionRepository` had twee losse
+    methodes die voor dezelfde categorie/maand verschillende getallen konden geven:
+    `observeSpent` (alleen debet, dus een inkomstencategorie toonde altijd €0) en
+    `observeCategoryTotal` (som van absolute bedragen, dus een terugstorting in een
+    uitgavencategorie werd juist opgeteld in plaats van verrekend). Vervangen door één
+    `observeCategorySpent`: eerst debet en credit netto bij elkaar optellen, dan pas de
+    absolute waarde nemen — hetzelfde resultaat als voorheen bij een categorie met maar één
+    richting activiteit, een eerlijker getal zodra beide voorkomen. Budget, Inzicht én de
+    meldingsdrempel-checks (`BudgetThresholdNotifier`, `WeeklyDigestWorker`) gebruiken 'm nu
+    alle drie.
+  - **Standaardweergave: donut + top-4** in plaats van automatisch de eerste categorie tonen.
+    Tikken op een donut-segment (of op een rij in de top-4) selecteert die categorie en toont
+    alsnog de vertrouwde maand-op-maand/jaar-op-jaar-trendgrafiek; een nieuwe "Overzicht"-chip
+    brengt je terug.
+  - **"62% van je inkomen"**: totale uitgaven (alle categorieën behalve "Inkomsten") gedeeld
+    door het "Inkomsten"-totaal van diezelfde maand — verborgen zodra er geen Inkomsten-
+    categorie of -bedrag is om door te delen.
+  - **Richtingsgevoelige delta-kleur.** Een stijging was voorheen altijd rood — nu groen voor
+    Inkomsten/Sparen (dezelfde naam-gebaseerde uitzondering die `categoryColorFor` al had) en
+    rood voor elke andere categorie, zoals eerst.
+  - **Staafdiagram**: elke staaf toont nu zijn eigen bedrag erboven, plus een gestippelde
+    gemiddelde-lijn naast de bestaande budgetlimiet-lijn.
+  - **Saldoverloop is hier weg** — die verhuisde in deel 1 al naar Vandaag's saldoprognose;
+    dit scherm, zijn rekeningkiezer en de bijbehorende lijngrafiek zijn nu verwijderd in plaats
+    van dubbel te bestaan.
+  - `:core`: 111 tests groen, ongewijzigd (de nieuwe `observeCategorySpent`-query zelf is
+    `:app`-laag/Room-SQL, niet in deze sandbox te bouwen — wel met de hand nagerekend tegen de
+    twee query's die hij vervangt).
 
 ## Bekende beperkingen
 

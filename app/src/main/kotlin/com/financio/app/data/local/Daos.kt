@@ -111,34 +111,22 @@ interface TransactionDao {
     suspend fun insertAll(transactions: List<TransactionEntity>)
 
     /**
-     * Sum of expenses (negative amounts only, negated back to positive) for one category in one
-     * calendar month, folding in any split allocations to that category alongside whole
-     * transactions categorized directly — exactly the number
-     * [com.financio.core.budget.BudgetEvaluator] compares against a budget's limit. A split
-     * transaction's own `categoryId` is null (see [setSplits]), so it never double-counts here:
-     * the first branch only matches whole, non-split transactions.
+     * The one "how much did this category cost this month" number, shared by Budget, Inzicht and
+     * the notification threshold checks — previously three different call sites could each get a
+     * different answer for the same category/month ([observeSpent] only ever summed debits, so an
+     * all-credit category like "Inkomsten" always showed €0 there even though Transacties' own
+     * filter on it showed a full list of rows; a debit category with an occasional refund summed
+     * to more in the old [observeSpent] than the net amount that actually left the account, since
+     * it ignored the refund credit entirely). `ABS(SUM(amt))` unifies both: it nets debits and
+     * credits together first, then takes the magnitude — same result [observeSpent] gave for a
+     * category with debits only, same result the old `observeCategoryTotal` gave for a category
+     * with credits only, and a more honest number than either gave for a category with both.
+     * Splits are folded in alongside whole transactions categorized directly; a split transaction's
+     * own `categoryId` is null (see [setSplits]), so it never double-counts here.
      */
     @Query(
         """
-        SELECT COALESCE(-SUM(amt), 0) FROM (
-            SELECT amountCents AS amt, date AS d FROM transactions WHERE categoryId = :categoryId
-            UNION ALL
-            SELECT s.amountCents AS amt, t.date AS d FROM transaction_splits s
-                JOIN transactions t ON t.id = s.transactionId WHERE s.categoryId = :categoryId
-        ) WHERE d LIKE :yearMonth || '-%' AND amt < 0
-        """
-    )
-    fun observeSpent(categoryId: Long, yearMonth: String): Flow<Long>
-
-    /**
-     * Sum of all activity (debit or credit, as an absolute amount) for one category in one
-     * calendar month, splits included — what Grafieken charts. [observeSpent] only sums debits,
-     * so a category that's all credits (e.g. "Inkomsten") always summed to zero there even though
-     * Transacties showed a full list of matching rows for the same filter.
-     */
-    @Query(
-        """
-        SELECT COALESCE(SUM(ABS(amt)), 0) FROM (
+        SELECT ABS(COALESCE(SUM(amt), 0)) FROM (
             SELECT amountCents AS amt, date AS d FROM transactions WHERE categoryId = :categoryId
             UNION ALL
             SELECT s.amountCents AS amt, t.date AS d FROM transaction_splits s
@@ -146,9 +134,9 @@ interface TransactionDao {
         ) WHERE d LIKE :yearMonth || '-%'
         """
     )
-    fun observeCategoryTotal(categoryId: Long, yearMonth: String): Flow<Long>
+    fun observeCategorySpent(categoryId: Long, yearMonth: String): Flow<Long>
 
-    /** Same shape as [observeSpent] but unscoped by month — a savings goal's all-time progress. */
+    /** Signed net (debits minus credits), unscoped by month — a savings goal's all-time progress, where the sign itself (not just the magnitude) matters. */
     @Query(
         """
         SELECT COALESCE(-SUM(amt), 0) FROM (

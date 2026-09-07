@@ -67,7 +67,7 @@ class WeeklyDigestWorker(context: Context, params: WorkerParameters) : Coroutine
         val currentMonth = YearMonth.now()
         val budgets = budgetRepository.observeBudgets(currentMonth).first()
         return budgets.count { budget ->
-            val spent = transactionRepository.observeSpent(budget.categoryId, currentMonth).first()
+            val spent = transactionRepository.observeCategorySpent(budget.categoryId, currentMonth).first()
             BudgetEvaluator.evaluate(spent, budget.limit) == BudgetStatus.OVER
         }
     }

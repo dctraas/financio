@@ -113,7 +113,7 @@ class BudgetsViewModel @Inject constructor(
     }
 
     private fun unlimitedSpendFlow(month: YearMonth, category: Category): Flow<UnlimitedCategorySpend> =
-        transactionRepository.observeSpent(category.id, month).map { spent -> UnlimitedCategorySpend(category, spent) }
+        transactionRepository.observeCategorySpent(category.id, month).map { spent -> UnlimitedCategorySpend(category, spent) }
 
     /**
      * Without rollover this is just spent-vs-own-limit. With it, also pulls last month's budget
@@ -121,7 +121,7 @@ class BudgetsViewModel @Inject constructor(
      * can add on whatever headroom was left unused — the whole point of the toggle.
      */
     private fun rowFlow(month: YearMonth, budget: Budget, category: Category?): Flow<BudgetRow> {
-        val spentFlow = transactionRepository.observeSpent(budget.categoryId, month)
+        val spentFlow = transactionRepository.observeCategorySpent(budget.categoryId, month)
         if (!budget.rollover) {
             return spentFlow.map { spent -> BudgetRow(category, budget, spent, budget.limit) }
         }
@@ -129,7 +129,7 @@ class BudgetsViewModel @Inject constructor(
         return combine(
             spentFlow,
             budgetRepository.observeBudgets(previousMonth),
-            transactionRepository.observeSpent(budget.categoryId, previousMonth),
+            transactionRepository.observeCategorySpent(budget.categoryId, previousMonth),
         ) { spent, previousBudgets, previousSpent ->
             val previousBudget = previousBudgets.find { it.categoryId == budget.categoryId }
             val effectiveLimit = BudgetEvaluator.effectiveLimit(
