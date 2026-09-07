@@ -11,9 +11,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -34,12 +36,19 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.core.model.Account
 
 @Composable
-fun AccountsScreen(viewModel: AccountsViewModel = hiltViewModel()) {
+fun AccountsScreen(onBackClick: () -> Unit, viewModel: AccountsViewModel = hiltViewModel()) {
     val accounts by viewModel.accounts.collectAsState()
     var adding by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Rekeningen") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Rekeningen") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = { adding = true }) {
                 Icon(Icons.Filled.Add, contentDescription = "Rekening toevoegen")

@@ -15,11 +15,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -44,13 +46,20 @@ import com.financio.core.model.Category
 import com.financio.core.model.Money
 
 @Composable
-fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
+fun SavingsGoalsScreen(onBackClick: () -> Unit, viewModel: SavingsGoalsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var addingGoal by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<SavingsGoalRow?>(null) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Spaardoelen") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Spaardoelen") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+                },
+            )
+        },
         floatingActionButton = {
             if (state.categories.isNotEmpty()) {
                 FloatingActionButton(onClick = { addingGoal = true }) {

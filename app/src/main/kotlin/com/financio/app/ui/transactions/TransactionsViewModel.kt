@@ -3,17 +3,16 @@ package com.financio.app.ui.transactions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.notifications.BudgetThresholdNotifier
+import com.financio.app.usecase.safeToSpendFor
 import com.financio.core.categorize.LearnedRule
 import com.financio.core.model.Account
 import com.financio.core.model.Category
-import com.financio.core.model.Money
 import com.financio.core.model.Transaction
 import com.financio.core.model.TransactionSplit
 import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.TransactionRepository
 import com.financio.core.usecase.SafeToSpendCalculator
-import com.financio.core.usecase.SubscriptionDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +22,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import javax.inject.Inject
 
 /** Mirrors the filter chips competing budgeting apps (bunq, YNAB, Buddy) put on their transaction list. */
@@ -110,7 +108,7 @@ class TransactionsViewModel @Inject constructor(
             categoryFilter = filter,
             sort = sortOrder,
             hasUnfilteredTransactions = transactions.isNotEmpty(),
-            safeToSpend = safeToSpendFor(transactions, accounts.value.size),
+            safeToSpend = safeToSpendFor(transactions, accounts.value.size, singleAccountSelected = selectedAccountId.value != null),
             selectedAccountId = selectedAccountId.value,
             totalCount = searchMatched.size,
             uncategorizedCount = searchMatched.count { it.categoryId == null },
@@ -125,26 +123,6 @@ class TransactionsViewModel @Inject constructor(
     ) { snapshot, splitIds, accountList ->
         snapshot.copy(splitTransactionIds = splitIds, accounts = accountList)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionsUiState())
-
-    /**
-     * Current balance minus subscriptions expected to bill before the month ends, spread over the
-     * days left — see [SafeToSpendCalculator]. `transactions` is already ordered "date DESC, id
-     * DESC" by the DAO, so the first row carrying a balance is the most recent one; `null` (no
-     * balance data at all, e.g. an MT940 import or a pre-migration transaction) hides the card
-     * entirely rather than showing a number computed from a stale or missing balance. Also hidden
-     * while viewing "alle rekeningen" with more than one account: adding two accounts' balances
-     * together isn't a number that means anything.
-     */
-    private fun safeToSpendFor(transactions: List<Transaction>, accountCount: Int): SafeToSpendCalculator.Result? {
-        if (selectedAccountId.value == null && accountCount > 1) return null
-        val currentBalance = transactions.firstNotNullOfOrNull { it.balanceAfter } ?: return null
-        val today = LocalDate.now()
-        val endOfMonth = today.withDayOfMonth(today.lengthOfMonth())
-        val upcomingCommitments = SubscriptionDetector.detect(transactions)
-            .filter { it.estimatedNextDate in today..endOfMonth }
-            .sumOf { kotlin.math.abs(it.averageAmount.cents) }
-        return SafeToSpendCalculator.calculate(currentBalance, Money(upcomingCommitments), today)
-    }
 
     fun selectAccount(accountId: Long?) {
         selectedAccountId.value = accountId

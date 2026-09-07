@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -44,7 +45,7 @@ import com.financio.core.model.CategoryRule
 import com.financio.core.model.MatchType
 
 @Composable
-fun CategoryManagementScreen(viewModel: CategoryManagementViewModel = hiltViewModel()) {
+fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagementViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var newCategoryName by remember { mutableStateOf("") }
     var categoryPendingDelete by remember { mutableStateOf<Category?>(null) }
@@ -52,7 +53,16 @@ fun CategoryManagementScreen(viewModel: CategoryManagementViewModel = hiltViewMo
     var showAddRuleDialog by remember { mutableStateOf(false) }
     val categoriesById = state.categories.associateBy { it.id }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Categorieën & regels") }) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Categorieën & regels") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+                },
+            )
+        },
+    ) { padding ->
         LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             item { SectionHeader("Categorieën") }
             items(state.categories, key = { "cat-${it.id}" }) { category ->
