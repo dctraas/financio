@@ -43,7 +43,6 @@ fun MeerScreen(
     onNotificationsClick: () -> Unit,
     onMonthStartClick: () -> Unit,
     onBackupExportClick: () -> Unit,
-    onBudgetLimitsClick: () -> Unit,
     viewModel: MeerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -134,7 +133,6 @@ fun MeerScreen(
         item { MeerRow("Vergrendeling & privacy", onLockPrivacyClick) }
         item { MeerRow("Meldingen", onNotificationsClick) }
         item { MeerRow("Maand begint op", onMonthStartClick) }
-        item { MeerRow("Budgetlimieten", onBudgetLimitsClick) }
         item { MeerRow("Back-up & export", onBackupExportClick, isLast = true) }
 
         item {
