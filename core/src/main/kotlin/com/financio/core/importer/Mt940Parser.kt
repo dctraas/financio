@@ -22,7 +22,9 @@ class Mt940Parser : BankStatementParser {
 
     override val format = SourceFormat.MT940
 
-    override fun parse(content: String, accountId: Long): List<ParsedTransaction> {
+    // dateColumnOverrideIndex is meaningless for a fixed-tag statement format like MT940 - only
+    // CsvIngParser, which identifies columns by name, ever reads it.
+    override fun parse(content: String, accountId: Long, dateColumnOverrideIndex: Int?): List<ParsedTransaction> {
         val lines = content.lines()
         val transactions = mutableListOf<ParsedTransaction>()
 

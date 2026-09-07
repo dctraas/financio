@@ -20,6 +20,9 @@ data class ImportPreview(
 ) {
     val total: Int get() = ready.size + needsCategory.size
 
+    /** Everything the file contained, duplicates included — the "gevonden" summary tile's number, as distinct from [total] (what actually gets imported). */
+    val foundInFile: Int get() = total + duplicateCount
+
     /** [needsCategory], grouped by merchant so the review screen asks once per merchant, not once per line. */
     val needsCategoryGrouped: List<UncategorizedGroup> get() = needsCategory.groupForReview()
 }
@@ -35,10 +38,10 @@ class ImportStatementUseCase(
     private val categoryRepository: CategoryRepository,
     private val parsers: List<BankStatementParser> = listOf(CsvIngParser(), Mt940Parser()),
 ) {
-    suspend fun preview(fileContent: String, accountId: Long): ImportPreview {
+    suspend fun preview(fileContent: String, accountId: Long, dateColumnOverrideIndex: Int? = null): ImportPreview {
         val format = FormatDetector.detect(fileContent)
         val parser = parsers.first { it.format == format }
-        val parsed = parser.parse(fileContent, accountId)
+        val parsed = parser.parse(fileContent, accountId, dateColumnOverrideIndex)
 
         val existingHashes = transactionRepository.existingDedupHashes(accountId)
         val deduped = parsed.filterNot { existingHashes.contains(Dedup.hashOf(it)) }

@@ -3,12 +3,29 @@ package com.financio.core.importer
 import com.financio.core.model.ParsedTransaction
 import com.financio.core.model.SourceFormat
 
-class UnrecognizedFormatException(message: String) : Exception(message)
+/**
+ * [rawLines] (the file's first few lines) and [detectedColumns] (the header actually found) are
+ * only ever populated for a missing-required-column CSV failure — the import screen's error state
+ * uses them to let the user manually point at "this is actually the date column" instead of just
+ * showing a dead-end message. Empty for every other failure (an unrecognized format entirely, an
+ * unparsable Af/Bij value, ...), where there's no single column to recover by picking.
+ */
+class UnrecognizedFormatException(
+    message: String,
+    val rawLines: List<String> = emptyList(),
+    val detectedColumns: List<String> = emptyList(),
+) : Exception(message)
 
 /** One adapter per bron-formaat. Everything above this interface is formaat-onafhankelijk. */
 interface BankStatementParser {
     val format: SourceFormat
-    fun parse(content: String, accountId: Long): List<ParsedTransaction>
+
+    /**
+     * [dateColumnOverrideIndex] lets the import screen's error-recovery flow say "column 3 is
+     * actually the date column" when the header's real name wasn't recognized — ignored by every
+     * parser except [CsvIngParser], which is the only one that identifies columns by name at all.
+     */
+    fun parse(content: String, accountId: Long, dateColumnOverrideIndex: Int? = null): List<ParsedTransaction>
 }
 
 /**

@@ -3,22 +3,31 @@ package com.financio.app.ui.importing
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,14 +36,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.toShortDisplayString
 import com.financio.core.model.Account
 import com.financio.core.model.Category
+import com.financio.core.model.SourceFormat
+import com.financio.core.usecase.ImportPreview
 import com.financio.core.usecase.UncategorizedGroup
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -52,8 +66,7 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
         val content = context.contentResolver.openInputStream(uri)?.use { stream ->
             BufferedReader(InputStreamReader(stream)).readText()
         }
-        val fileName = uri.lastPathSegment ?: "bestand"
-        if (content != null) viewModel.onFilePicked(fileName, content)
+        if (content != null) viewModel.onFilePicked(content)
     }
 
     LaunchedEffect(state) {
@@ -83,9 +96,7 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
                 Text("Bezig met inlezen…")
             }
 
-            is ImportUiState.Failed -> Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
-                Text(current.message, color = MaterialTheme.colorScheme.error)
-            }
+            is ImportUiState.Failed -> FailedContent(current, padding, onRetryWithDateColumn = viewModel::retryWithDateColumn)
 
             is ImportUiState.Ready -> ReadyContent(current, categories, padding, viewModel)
 
@@ -120,103 +131,270 @@ private fun AccountPicker(accounts: List<Account>, selectedAccountId: Long, onSe
     }
 }
 
+/**
+ * The improved error state (R7): instead of a dead-end message, a missing-date-column failure
+ * shows the file's own first lines and detected header so the user can point at the column
+ * themselves — see [com.financio.core.importer.UnrecognizedFormatException]'s doc comment for why
+ * only the date column gets this recovery path.
+ */
 @Composable
-private fun ReadyContent(
-    state: ImportUiState.Ready,
-    categories: List<Category>,
-    padding: androidx.compose.foundation.layout.PaddingValues,
-    viewModel: ImportViewModel,
-) {
-    val preview = state.preview
-    val groups = preview.needsCategoryGrouped
+private fun FailedContent(state: ImportUiState.Failed, padding: PaddingValues, onRetryWithDateColumn: (Int) -> Unit) {
+    Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
+        Text("Importeren mislukt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(state.message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
 
-    LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        item {
-            Text(state.fileName, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+        if (state.detectedColumns.isNotEmpty()) {
             Text(
-                "${preview.total} transacties gevonden — ${preview.ready.size} automatisch gecategoriseerd, " +
-                    "${preview.needsCategory.size} te controleren, ${preview.duplicateCount} duplicaten overgeslagen.",
-                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Is een van deze kolommen eigenlijk de datumkolom?",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
             )
-        }
-
-        if (groups.isNotEmpty()) {
-            item {
-                Text(
-                    "Te controleren — ${groups.size} tegenpartijen, één keuze per tegenpartij",
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    "Gesorteerd op grootste totaalbedrag eerst — je keuze geldt voor alle transacties van " +
-                        "deze tegenpartij, nu en bij toekomstige imports.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(state.detectedColumns.withIndex().toList(), key = { it.index }) { (index, column) ->
+                    FilterChip(selected = false, onClick = { onRetryWithDateColumn(index) }, label = { Text(column) })
+                }
             }
-            items(groups, key = { it.counterpartyName }) { group ->
-                UncategorizedGroupRow(
-                    group = group,
-                    categories = categories,
-                    selectedCategoryId = state.manualCategoryChoices[group.counterpartyName],
-                    onSelect = { categoryId -> viewModel.assignCategory(group.counterpartyName, categoryId) },
-                )
-            }
-        }
 
-        item {
-            Button(
-                onClick = viewModel::confirm,
-                enabled = preview.total > 0,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
-            ) { Text("${preview.total} transacties importeren") }
+            Text(
+                "Eerste regels van het bestand",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(12.dp),
+            ) {
+                state.rawLines.forEach { line ->
+                    Text(line, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun UncategorizedGroupRow(
-    group: UncategorizedGroup,
+private fun ReadyContent(
+    state: ImportUiState.Ready,
     categories: List<Category>,
-    selectedCategoryId: Long?,
-    onSelect: (Long) -> Unit,
+    padding: PaddingValues,
+    viewModel: ImportViewModel,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-    val selectedName = categories.firstOrNull { it.id == selectedCategoryId }?.name
+    val preview = state.preview
+    val groups = preview.needsCategoryGrouped
+    val topCategoryIds = state.categoryUsageFrequency.entries.sortedByDescending { it.value }.take(4).map { it.key }
+    val remainingGroups = groups.filter { it.counterpartyName !in state.manualCategoryChoices && it.counterpartyName !in state.skippedGroups }
+    var showDuplicateInfo by remember { mutableStateOf(false) }
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(group.counterpartyName, fontWeight = FontWeight.Bold)
-            Text(
-                groupSummary(group),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    Column(Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.padding(horizontal = 20.dp)) {
+            ImportHeader(preview, state.accountName)
+            SummaryTiles(preview, onDuplicateInfoClick = { showDuplicateInfo = true })
         }
-        Column {
-            Text(
-                selectedName ?: "Kies categorie ▾",
-                color = if (selectedName != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable { menuOpen = true },
-            )
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                categories.forEach { category ->
-                    DropdownMenuItem(
-                        text = { Text(category.name) },
-                        onClick = {
-                            onSelect(category.id)
-                            menuOpen = false
-                        },
+
+        Box(Modifier.weight(1f).padding(horizontal = 20.dp)) {
+            if (remainingGroups.isEmpty()) {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+                    Text(
+                        if (groups.isEmpty()) "Alles is automatisch gecategoriseerd." else "Alle tegenpartijen doorgenomen.",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            } else {
+                val current = remainingGroups.first()
+                Column(Modifier.fillMaxSize()) {
+                    Text(
+                        "Nog ${remainingGroups.size} tegenpartij${if (remainingGroups.size == 1) "" else "en"} te controleren",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    CounterpartyCard(
+                        group = current,
+                        categories = categories,
+                        topCategoryIds = topCategoryIds,
+                        onSelect = { categoryId -> viewModel.assignCategory(current.counterpartyName, categoryId) },
+                        onSkip = { viewModel.skip(current.counterpartyName) },
                     )
                 }
             }
         }
+
+        StickyImportBar(total = preview.total, onImport = viewModel::confirm)
+    }
+
+    if (showDuplicateInfo) {
+        AlertDialog(
+            onDismissRequest = { showDuplicateInfo = false },
+            title = { Text("Wat telt als dubbel?") },
+            text = {
+                Text(
+                    "Een transactie telt als dubbel wanneer datum, bedrag, tegenrekening én " +
+                        "omschrijving allemaal al bestaan op deze rekening — die wordt dan " +
+                        "overgeslagen in plaats van nogmaals geïmporteerd.",
+                )
+            },
+            confirmButton = { TextButton(onClick = { showDuplicateInfo = false }) { Text("Begrepen") } },
+        )
+    }
+}
+
+/** Period + account + format, replacing a raw filename that told you nothing about what's actually in the file. */
+@Composable
+private fun ImportHeader(preview: ImportPreview, accountName: String) {
+    val allTransactions = preview.ready + preview.needsCategory
+    val period = allTransactions.map { it.date }.let { dates ->
+        if (dates.isEmpty()) null else {
+            val first = dates.min()
+            val last = dates.max()
+            if (first == last) first.toShortDisplayString() else "${first.toShortDisplayString()} – ${last.toShortDisplayString()}"
+        }
+    }
+    val format = allTransactions.firstOrNull()?.sourceFormat?.let { if (it == SourceFormat.CSV) "CSV" else "MT940" }
+
+    Text(
+        listOfNotNull(period, accountName, format).joinToString(" · "),
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 12.dp, bottom = 12.dp),
+    )
+}
+
+@Composable
+private fun SummaryTiles(preview: ImportPreview, onDuplicateInfoClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SummaryTile("Gevonden", preview.foundInFile.toString(), modifier = Modifier.weight(1f))
+        SummaryTile("Automatisch", preview.ready.size.toString(), modifier = Modifier.weight(1f))
+        SummaryTile("Te kiezen", preview.needsCategoryGrouped.size.toString(), modifier = Modifier.weight(1f))
+        SummaryTile("Dubbel", preview.duplicateCount.toString(), modifier = Modifier.weight(1f), onInfoClick = onDuplicateInfoClick)
+    }
+}
+
+@Composable
+private fun SummaryTile(label: String, value: String, modifier: Modifier = Modifier, onInfoClick: (() -> Unit)? = null) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(12.dp),
+    ) {
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            onInfoClick?.let {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outline)
+                        .clickable(onClick = it),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("?", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.surface)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One counterparty at a time (R7) — a tap on a category chip both assigns it and (by removing
+ * this group from `remainingGroups`) advances to the next card, instead of the old scrollable
+ * list of dropdowns that asked all-at-once.
+ */
+@Composable
+private fun CounterpartyCard(
+    group: UncategorizedGroup,
+    categories: List<Category>,
+    topCategoryIds: List<Long>,
+    onSelect: (Long) -> Unit,
+    onSkip: () -> Unit,
+) {
+    var showAllCategories by remember(group.counterpartyName) { mutableStateOf(false) }
+    val rawDescription = group.transactions.firstOrNull()?.description
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            .padding(20.dp),
+    ) {
+        Text(group.counterpartyName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        // A cryptic SEPA-style name ("NL91INGB000012345 REF 88213...") doesn't tell you anything
+        // by itself - the raw description underneath at least gives you something to go on.
+        if (looksCryptic(group.counterpartyName) && rawDescription != null) {
+            Text(
+                rawDescription,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Text(
+            groupSummary(group),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+        )
+
+        val topCategories = categories.filter { it.id in topCategoryIds }
+            .sortedBy { topCategoryIds.indexOf(it.id) }
+        val shown = if (showAllCategories) categories else topCategories
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(shown, key = { it.id }) { category ->
+                FilterChip(selected = false, onClick = { onSelect(category.id) }, label = { Text(category.name) })
+            }
+        }
+        if (!showAllCategories && categories.size > topCategories.size) {
+            Text(
+                "Alle ${categories.size} →",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { showAllCategories = true }.padding(top = 10.dp),
+            )
+        }
+
+        Text(
+            "Overslaan →",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clickable(onClick = onSkip).padding(top = 16.dp),
+        )
+    }
+}
+
+/** A rough "does this look like machine-generated SEPA gibberish, not an actual merchant name" check. */
+private fun looksCryptic(name: String): Boolean {
+    val digitCount = name.count { it.isDigit() }
+    return name.length > 10 && digitCount.toFloat() / name.length > 0.3f
+}
+
+/**
+ * Always docked at the bottom, never scrolled away (R7) - importing doesn't require finishing
+ * the card stack first, and the reassurance text says so explicitly.
+ */
+@Composable
+private fun StickyImportBar(total: Int, onImport: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+        Button(onClick = onImport, enabled = total > 0, modifier = Modifier.fillMaxWidth()) {
+            Text("$total transacties importeren")
+        }
+        Text(
+            "Nog niet alles gekozen? Geen probleem — dat verschijnt straks op Vandaag als " +
+                "\"nog te categoriseren\".",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 

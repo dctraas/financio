@@ -29,19 +29,24 @@ class CsvIngParser : BankStatementParser {
 
     override val format = SourceFormat.CSV
 
-    override fun parse(content: String, accountId: Long): List<ParsedTransaction> {
+    override fun parse(content: String, accountId: Long, dateColumnOverrideIndex: Int?): List<ParsedTransaction> {
         val lines = content.lineSequence().filter { it.isNotBlank() }.toList()
         require(lines.isNotEmpty()) { "Leeg CSV-bestand." }
 
         val delimiter = detectDelimiter(lines.first())
         val header = splitCsvLine(lines.first(), delimiter).map { it.trim() }
         val columnIndex = REQUIRED_COLUMNS.associateWith { column ->
-            header.indexOf(column).also { index ->
-                if (index < 0) {
-                    throw UnrecognizedFormatException(
-                        "Kolom '$column' ontbreekt in de CSV-header — is het ING-exportformaat gewijzigd?"
-                    )
-                }
+            val autoIndex = header.indexOf(column)
+            when {
+                autoIndex >= 0 -> autoIndex
+                // Only the date column has a manual-override recovery path (see the interface's
+                // doc comment) - every other missing column still fails outright.
+                column == COL_DATE && dateColumnOverrideIndex != null -> dateColumnOverrideIndex
+                else -> throw UnrecognizedFormatException(
+                    "Kolom '$column' ontbreekt in de CSV-header — is het ING-exportformaat gewijzigd?",
+                    rawLines = lines.take(3),
+                    detectedColumns = header,
+                )
             }
         }
         // Optional, unlike the columns above: "Tag" is a real ING export column (set from within

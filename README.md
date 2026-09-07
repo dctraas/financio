@@ -583,6 +583,38 @@ vinden. Nog te controleren:
     zonder wijziging), beide twijfelgeval-redenen, en dat een bevestigd abonnement nooit ook als
     twijfelgeval verschijnt. `:app`-laag (beide schermen, de nieuwe `AppPreferences`-velden)
     zoals gebruikelijk alleen gereviewd, niet gebouwd, in deze sandbox.
+- **Herontwerp deel 6 (laatste fase): Importeren.** R7 — van een lijst met 18 losse dropdowns
+  (al eerder verbeterd tot één dropdown per tegenpartij) naar een kaartenstapel: één tegenpartij
+  tegelijk, tikken kiest én springt door naar de volgende.
+  - **Kop toont periode + rekening + formaat** in plaats van de bestandsnaam ("1 – 30 sep 2026 ·
+    Betaalrekening · CSV") — de bestandsnaam zei niets over wat er eigenlijk in zat.
+  - **Vier samenvattingstegels**: Gevonden (nieuwe `ImportPreview.foundInFile` — inclusief
+    duplicaten, dus anders dan `total`), Automatisch, Te kiezen, Dubbel — met een "?" op Dubbel
+    die uitlegt wanneer iets als dubbel telt (dezelfde regel als `Dedup.hashOf` al toepaste,
+    nu voor het eerst ook zichtbaar).
+  - **Kaartenstapel met top-4 categorieën, gerangschikt op eigen gebruiksfrequentie** (hoeveel
+    al geïmporteerde transacties elke categorie gebruiken — geen aparte telkolom nodig, gewoon
+    geteld over de bestaande transactielijst) plus een "Alle N →" om de rest te tonen. Eén tik =
+    keuze + automatisch door naar de volgende tegenpartij; "Overslaan →" doet hetzelfde zonder
+    keuze (verandert niets aan wat er geïmporteerd wordt — precies zoals voorheen komt alles
+    uiteindelijk binnen, gekozen of niet).
+  - **Rauwe SEPA-omschrijving zichtbaar bij een onherkenbare tegenpartijnaam** — een simpele
+    heuristiek (veel cijfers, lange naam) toont de eerste transactie's omschrijving erbij zodra
+    de naam zelf niets zegt.
+  - **Sticky importknop**, altijd onderaan bereikbaar, mét geruststellingstekst dat nog niet
+    gekozen tegenpartijen straks op Vandaag verschijnen als "nog te categoriseren" — de
+    kaartenstapel hoeft niet afgerond te zijn om te kunnen importeren.
+  - **Verbeterde foutmelding.** `UnrecognizedFormatException` draagt nu optioneel de eerste
+    bestandsregels en de gedetecteerde header mee; ontbreekt specifiek de datumkolom, dan kan de
+    gebruiker zelf op de juiste kolom tikken (`CsvIngParser` accepteert een
+    `dateColumnOverrideIndex`, alleen voor de datumkolom — andere ontbrekende kolommen falen nog
+    steeds hard, dat herstelpad is bewust beperkt gehouden).
+  - `:core`: 121 tests groen (was 118) — 3 nieuwe, dekken de verrijkte foutmelding en de
+    datumkolom-override (mét en zonder dat er nog een andere kolom ontbreekt). `:app`-laag
+    (beide schermen) zoals gebruikelijk alleen zorgvuldig gereviewd, niet gebouwd, in deze
+    sandbox.
+  - **Hiermee is het volledige herontwerp (delen 1 t/m 6, R1–R8 van het schermontwerp) compleet**
+    — alle acht schermen uit de Claude Design-mockups zijn nu doorgevoerd.
 
 ## Bekende beperkingen
 
