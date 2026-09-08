@@ -24,6 +24,22 @@ android {
         versionName = "0.1"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Checked-in on purpose — this is a debug-only keystore with the well-known public
+            // debug alias/password ("androiddebugkey"/"android"), the same convention Android
+            // Studio's own auto-generated ~/.android/debug.keystore uses. Never confuse this with
+            // a release signing key, which must never be committed. Pinning it here (instead of
+            // relying on the per-machine auto-generated default) means every debug build - local
+            // or from CI - carries the same signature, so a phone can install an update over an
+            // existing debug install instead of needing an uninstall first each time.
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

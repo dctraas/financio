@@ -99,6 +99,19 @@ traject.
 ./gradlew :app:build    # de volledige app — vereist een lokale Android SDK-installatie
 ```
 
+### Testen op je telefoon zonder Android Studio
+
+`.github/workflows/debug-build.yml` bouwt bij elke push naar `main` (en handmatig via de
+"Run workflow"-knop op het tabblad Actions) een debug-APK op GitHub's eigen build-runners — die
+hebben, in tegenstelling tot de sandbox waarin dit project grotendeels is opgezet, gewoon
+internettoegang tot Google's Maven-repository en de Android SDK. De APK wordt gepubliceerd als
+bijlage bij een vast "debug-latest"-release (tabblad **Releases**): download `financio-debug.apk`
+op je telefoon en tik 'm open om te installeren (Android vraagt eenmalig om "installeren van
+onbekende apps" toe te staan). `app/debug.keystore` is bewust ingecheckt (een debug-only sleutel
+met het overal bekende publieke wachtwoord "android", geen release-signing-key) zodat elke build —
+lokaal of vanuit CI — dezelfde ondertekening draagt en een nieuwe versie gewoon over de vorige heen
+installeert.
+
 `:core:test` is in deze repo geverifieerd (35 tests, groen). `:app` kon in de omgeving waarin
 dit skeleton is opgezet niet gebouwd worden — die had geen toegang tot Google's Maven-repository
 (nodig voor AndroidX/AGP) — dus is dit voor het eerst echt gecompileerd en gestart in Android

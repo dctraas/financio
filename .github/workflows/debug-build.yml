@@ -1,0 +1,64 @@
+name: Debug-build (testen op je telefoon)
+
+# Bouwt een installeerbare debug-APK bij elke push naar main (dus na elke gemergede PR), en
+# publiceert 'm als bijlage bij een vast "debug-latest"-release — zodat er altijd één link is
+# waarachter de nieuwste testversie staat, zonder een zip te hoeven uitpakken zoals bij een
+# gewoon Actions-artifact. Handig zolang Android Studio niet binnen handbereik is: download de
+# .apk op je telefoon en tik 'm open om te installeren.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17 instellen
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Debug-APK bouwen
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: APK hernoemen naar een duidelijke bestandsnaam
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/financio-debug.apk
+
+      - name: "debug-latest"-release bijwerken met de nieuwe APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: debug-latest
+          name: "Laatste testversie (debug)"
+          body: |
+            Automatisch gebouwd vanaf `main`, commit ${{ github.sha }}.
+
+            **Op je telefoon**: download `financio-debug.apk` hieronder en tik 'm open in je
+            downloads om te installeren. Android vraagt de eerste keer om "installeren van
+            onbekende apps" toe te staan voor je browser of bestandenbeheer-app — dat hoeft
+            daarna niet opnieuw. Een latere versie installeert gewoon overheen (zelfde
+            debug-ondertekening elke build), dus verwijderen vooraf is niet nodig.
+
+            Dit is een debug-build (niet geoptimaliseerd, groter dan een release-APK) puur
+            om onderweg te kunnen testen — geen vervanging voor een echte build/release.
+          files: app/build/outputs/apk/debug/financio-debug.apk
+          prerelease: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
