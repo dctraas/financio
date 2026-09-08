@@ -23,9 +23,13 @@ misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
 
-# Keystore files
+# Keystore files - a REAL signing key must never be committed. The one exception is
+# app/debug.keystore: a debug-only keystore with the well-known public debug password
+# ("android"), checked in on purpose so CI and every local machine sign debug builds
+# identically - see its own comment in app/build.gradle.kts.
 *.jks
 *.keystore
+!app/debug.keystore
 
 # Google Services (e.g. APIs or Firebase)
 google-services.json
