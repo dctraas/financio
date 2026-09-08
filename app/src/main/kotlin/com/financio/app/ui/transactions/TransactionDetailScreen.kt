@@ -63,7 +63,7 @@ fun TransactionDetailScreen(
     val transaction = state.transaction
     // "Ook toepassen op de rest?" — the same follow-up Transacties' long-press flow shows, now
     // triggered from this screen's own quick category dropdown too (see AmountHeader).
-    var bulkApplyPrompt by remember { mutableStateOf<BulkApplyPrompt?>(null) }
+    var bulkApplyPrompt by remember { mutableStateOf<DetailBulkApplyPrompt?>(null) }
 
     Scaffold(
         topBar = {
@@ -87,7 +87,7 @@ fun TransactionDetailScreen(
                     onCategorySelect = { categoryId ->
                         viewModel.setCategory(categoryId)
                         if (state.otherTransactionsWithSameCounterparty > 0) {
-                            bulkApplyPrompt = BulkApplyPrompt(transaction.counterpartyName, categoryId, state.otherTransactionsWithSameCounterparty)
+                            bulkApplyPrompt = DetailBulkApplyPrompt(transaction.counterpartyName, categoryId, state.otherTransactionsWithSameCounterparty)
                         }
                     },
                 )
@@ -121,7 +121,7 @@ fun TransactionDetailScreen(
     }
 
     bulkApplyPrompt?.let { prompt ->
-        BulkApplyDialog(
+        DetailBulkApplyDialog(
             prompt = prompt,
             onConfirm = {
                 viewModel.applyCategoryToCounterparty(prompt.categoryId)
@@ -132,10 +132,14 @@ fun TransactionDetailScreen(
     }
 }
 
-private data class BulkApplyPrompt(val counterpartyName: String, val categoryId: Long, val otherCount: Int)
+// "Detail"-prefixed to avoid colliding with TransactionsScreen.kt's own (differently-shaped)
+// private BulkApplyPrompt/BulkApplyDialog: a top-level `private` class is only source-scoped to
+// its file, not a separate JVM namespace, so two same-named top-level classes in the same package
+// are a hard "Redeclaration" compile error, not two coexisting privates.
+private data class DetailBulkApplyPrompt(val counterpartyName: String, val categoryId: Long, val otherCount: Int)
 
 @Composable
-private fun BulkApplyDialog(prompt: BulkApplyPrompt, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun DetailBulkApplyDialog(prompt: DetailBulkApplyPrompt, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ook toepassen op de rest?") },
