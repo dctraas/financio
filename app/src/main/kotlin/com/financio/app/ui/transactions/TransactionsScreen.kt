@@ -62,9 +62,10 @@ import java.time.LocalDate
 
 private data class BulkApplyPrompt(val accountId: Long, val counterpartyName: String, val categoryId: Long, val otherCount: Int)
 
-/** Either a day-group header (with that day's net total) or one transaction row — see [dayGroupedItems]. */
+/** A day-group header, a counterparty-group header, or one transaction row — see [groupedItems]. */
 private sealed interface TransactionListItem {
     data class DayHeader(val date: LocalDate, val netCents: Long) : TransactionListItem
+    data class CounterpartyHeader(val counterpartyName: String, val count: Int) : TransactionListItem
     data class Row(val transaction: Transaction) : TransactionListItem
 }
 
@@ -110,16 +111,18 @@ fun TransactionsScreen(onImportClick: () -> Unit, onOpenDetail: (Long) -> Unit, 
         } else if (state.transactions.isEmpty()) {
             NoFilterResults(padding, onClearFilters = viewModel::clearFilters)
         } else {
-            val listItems = dayGroupedItems(state.transactions, state.sort)
+            val listItems = groupedItems(state.transactions, state.sort)
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
                 items(listItems, key = { item ->
                     when (item) {
                         is TransactionListItem.DayHeader -> "header-${item.date}"
+                        is TransactionListItem.CounterpartyHeader -> "header-${item.counterpartyName}"
                         is TransactionListItem.Row -> item.transaction.id
                     }
                 }) { item ->
                     when (item) {
                         is TransactionListItem.DayHeader -> DayHeaderRow(item.date, item.netCents)
+                        is TransactionListItem.CounterpartyHeader -> CounterpartyHeaderRow(item.counterpartyName, item.count)
                         is TransactionListItem.Row -> {
                             val transaction = item.transaction
                             TransactionRow(
@@ -205,19 +208,25 @@ fun TransactionsScreen(onImportClick: () -> Unit, onOpenDetail: (Long) -> Unit, 
 }
 
 /**
- * Groups consecutive same-date transactions under one header — a plain `groupBy` on an
- * already date-sorted list, in order. Only attempted for the two date sorts: grouping an
- * amount-sorted list by date would scatter one day's transactions into many tiny groups instead
- * of one, which is worse than no headers at all.
+ * Groups consecutive same-key transactions under one header — a plain `groupBy` on an
+ * already-sorted list, in order (both sorts this groups for keep same-key transactions
+ * contiguous, so `groupBy`'s encounter-order grouping reproduces the sort's own ranking). Only
+ * attempted for the two date sorts and the counterparty-frequency sort: grouping an amount-sorted
+ * list by date, say, would scatter one day's transactions into many tiny groups instead of one,
+ * which is worse than no headers at all.
  */
-private fun dayGroupedItems(transactions: List<Transaction>, sort: TransactionSort): List<TransactionListItem> {
-    if (sort != TransactionSort.DATE_DESC && sort != TransactionSort.DATE_ASC) {
-        return transactions.map { TransactionListItem.Row(it) }
-    }
-    return transactions.groupBy { it.date }.flatMap { (date, dayTransactions) ->
-        listOf(TransactionListItem.DayHeader(date, dayTransactions.sumOf { it.amount.cents })) +
-            dayTransactions.map { TransactionListItem.Row(it) }
-    }
+private fun groupedItems(transactions: List<Transaction>, sort: TransactionSort): List<TransactionListItem> = when (sort) {
+    TransactionSort.DATE_DESC, TransactionSort.DATE_ASC ->
+        transactions.groupBy { it.date }.flatMap { (date, dayTransactions) ->
+            listOf(TransactionListItem.DayHeader(date, dayTransactions.sumOf { it.amount.cents })) +
+                dayTransactions.map { TransactionListItem.Row(it) }
+        }
+    TransactionSort.COUNTERPARTY_FREQUENCY_DESC ->
+        transactions.groupBy { it.counterpartyName }.flatMap { (counterpartyName, group) ->
+            listOf(TransactionListItem.CounterpartyHeader(counterpartyName, group.size)) +
+                group.map { TransactionListItem.Row(it) }
+        }
+    else -> transactions.map { TransactionListItem.Row(it) }
 }
 
 @Composable
@@ -235,6 +244,30 @@ private fun DayHeaderRow(date: LocalDate, netCents: Long) {
         )
         Text(
             Money(netCents).toSignedDisplayString(),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** "Albert Heijn · 7 transacties" — the count is the whole point of this sort, so it's shown, not implied. */
+@Composable
+private fun CounterpartyHeaderRow(counterpartyName: String, count: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            counterpartyName,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Text(
+            if (count == 1) "1 transactie" else "$count transacties",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -36,6 +36,13 @@ enum class TransactionSort(val label: String) {
     DATE_ASC("Datum (oud → nieuw)"),
     AMOUNT_DESC("Bedrag (hoog → laag)"),
     AMOUNT_ASC("Bedrag (laag → hoog)"),
+    // Groups by rekeninghouder and ranks the biggest groups first - meant for "Niet
+    // gecategoriseerd", so the counterparty with the most uncategorized transactions (one rule
+    // fixes all of them at once) surfaces before one-off transactions. Counts are scoped to
+    // whatever category filter is active (see filteredByCategory in the ViewModel), not the whole
+    // account, so switching to this while already on "Niet gecategoriseerd" ranks by *uncategorized*
+    // frequency rather than overall frequency.
+    COUNTERPARTY_FREQUENCY_DESC("Rekeninghouder (vaakst eerst)"),
 }
 
 data class TransactionsUiState(
@@ -98,9 +105,21 @@ class TransactionsViewModel @Inject constructor(
         sort,
     ) { transactions, categories, query, filter, sortOrder ->
         val searchMatched = transactions.filter { matchesSearch(it, query) }
-        val filtered = searchMatched
-            .filter { matchesCategoryFilter(it, filter) }
-            .sortedWith(comparatorFor(sortOrder))
+        val filteredByCategory = searchMatched.filter { matchesCategoryFilter(it, filter) }
+        val filtered = if (sortOrder == TransactionSort.COUNTERPARTY_FREQUENCY_DESC) {
+            // Counts within filteredByCategory, not searchMatched or all transactions: picking
+            // this sort while filtered to "Niet gecategoriseerd" must rank by how many
+            // *uncategorized* transactions share a counterparty, not how many exist overall.
+            val countsByCounterparty = filteredByCategory.groupingBy { it.counterpartyName }.eachCount()
+            filteredByCategory.sortedWith(
+                compareByDescending<Transaction> { countsByCounterparty.getValue(it.counterpartyName) }
+                    .thenBy { it.counterpartyName }
+                    .thenByDescending { it.date }
+                    .thenByDescending { it.id },
+            )
+        } else {
+            filteredByCategory.sortedWith(comparatorFor(sortOrder))
+        }
 
         TransactionsUiState(
             transactions = filtered,
@@ -208,5 +227,9 @@ class TransactionsViewModel @Inject constructor(
         TransactionSort.DATE_ASC -> compareBy<Transaction> { it.date }.thenBy { it.id }
         TransactionSort.AMOUNT_DESC -> compareByDescending { it.amount.cents }
         TransactionSort.AMOUNT_ASC -> compareBy { it.amount.cents }
+        // Never actually reached: filteredSnapshot branches around this sort order before calling
+        // comparatorFor, since ranking by counterparty frequency needs counts computed over the
+        // filtered list itself, not a comparator that only ever sees two transactions at a time.
+        TransactionSort.COUNTERPARTY_FREQUENCY_DESC -> error("COUNTERPARTY_FREQUENCY_DESC is handled directly in filteredSnapshot")
     }
 }
