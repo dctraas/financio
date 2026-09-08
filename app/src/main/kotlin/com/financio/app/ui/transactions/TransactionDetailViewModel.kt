@@ -3,6 +3,8 @@ package com.financio.app.ui.transactions
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financio.app.notifications.BudgetThresholdNotifier
+import com.financio.core.categorize.LearnedRule
 import com.financio.core.categorize.RuleMatcher
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
@@ -32,6 +34,8 @@ data class TransactionDetailUiState(
     val splits: List<Pair<Category?, Money>> = emptyList(),
     val counterpartyStats: CounterpartyStats? = null,
     val matchingRule: CategoryRule? = null,
+    /** Other transactions sharing this one's account + counterparty — same "ook toepassen op de rest?" trigger count Transacties uses, so the follow-up prompt fires here too, not just from a long-press in the list. */
+    val otherTransactionsWithSameCounterparty: Int = 0,
 )
 
 /**
@@ -42,7 +46,8 @@ data class TransactionDetailUiState(
 class TransactionDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val transactionRepository: TransactionRepository,
-    categoryRepository: CategoryRepository,
+    private val categoryRepository: CategoryRepository,
+    private val budgetThresholdNotifier: BudgetThresholdNotifier,
     accountRepository: AccountRepository,
 ) : ViewModel() {
 
@@ -57,6 +62,9 @@ class TransactionDetailViewModel @Inject constructor(
     ) { transactions, categories, rules, accounts, splits ->
         val transaction = transactions.firstOrNull { it.id == transactionId }
         val categoriesById = categories.associateBy { it.id }
+        val otherWithSameCounterparty = transaction?.let { t ->
+            transactions.count { it.accountId == t.accountId && it.counterpartyName == t.counterpartyName && it.id != t.id }
+        } ?: 0
         TransactionDetailUiState(
             loaded = true,
             transaction = transaction,
@@ -66,6 +74,7 @@ class TransactionDetailViewModel @Inject constructor(
             splits = splits.map { split -> categoriesById[split.categoryId] to split.amount },
             counterpartyStats = transaction?.let { counterpartyStatsFor(it, transactions) },
             matchingRule = transaction?.let { RuleMatcher(rules).matchingRule(it) },
+            otherTransactionsWithSameCounterparty = otherWithSameCounterparty,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionDetailUiState())
 
@@ -78,8 +87,25 @@ class TransactionDetailViewModel @Inject constructor(
         return CounterpartyStats(count = sameCounterparty.size, average = Money(averageCents))
     }
 
+    /** Same "remember the choice as a rule" behavior as Transacties' own categorize() - this screen's quick category dropdown shouldn't behave differently just because it's reached via a tap instead of a long-press. */
     fun setCategory(categoryId: Long) {
-        viewModelScope.launch { transactionRepository.updateCategory(transactionId, categoryId) }
+        val transaction = uiState.value.transaction ?: return
+        viewModelScope.launch {
+            val previousSpent = budgetThresholdNotifier.currentSpent(categoryId)
+            transactionRepository.updateCategory(transactionId, categoryId)
+            categoryRepository.addRule(LearnedRule.from(categoryId, transaction.counterpartyName))
+            budgetThresholdNotifier.checkAndNotify(categoryId, previousSpent)
+        }
+    }
+
+    /** The "ook toepassen op de rest?" follow-up's confirm action — see [otherTransactionsWithSameCounterparty]. */
+    fun applyCategoryToCounterparty(categoryId: Long) {
+        val transaction = uiState.value.transaction ?: return
+        viewModelScope.launch {
+            val previousSpent = budgetThresholdNotifier.currentSpent(categoryId)
+            transactionRepository.updateCategoryForCounterparty(transaction.accountId, transaction.counterpartyName, categoryId)
+            budgetThresholdNotifier.checkAndNotify(categoryId, previousSpent)
+        }
     }
 
     fun setNote(note: String?) {
