@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -60,6 +61,9 @@ fun TransactionDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val transaction = state.transaction
+    // "Ook toepassen op de rest?" — the same follow-up Transacties' long-press flow shows, now
+    // triggered from this screen's own quick category dropdown too (see AmountHeader).
+    var bulkApplyPrompt by remember { mutableStateOf<BulkApplyPrompt?>(null) }
 
     Scaffold(
         topBar = {
@@ -80,7 +84,12 @@ fun TransactionDetailScreen(
                     categoryName = state.categoryName,
                     isSplit = state.splits.isNotEmpty(),
                     categories = state.categories,
-                    onCategorySelect = viewModel::setCategory,
+                    onCategorySelect = { categoryId ->
+                        viewModel.setCategory(categoryId)
+                        if (state.otherTransactionsWithSameCounterparty > 0) {
+                            bulkApplyPrompt = BulkApplyPrompt(transaction.counterpartyName, categoryId, state.otherTransactionsWithSameCounterparty)
+                        }
+                    },
                 )
             }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
@@ -110,6 +119,35 @@ fun TransactionDetailScreen(
             item { Spacer(Modifier.height(32.dp)) }
         }
     }
+
+    bulkApplyPrompt?.let { prompt ->
+        BulkApplyDialog(
+            prompt = prompt,
+            onConfirm = {
+                viewModel.applyCategoryToCounterparty(prompt.categoryId)
+                bulkApplyPrompt = null
+            },
+            onDismiss = { bulkApplyPrompt = null },
+        )
+    }
+}
+
+private data class BulkApplyPrompt(val counterpartyName: String, val categoryId: Long, val otherCount: Int)
+
+@Composable
+private fun BulkApplyDialog(prompt: BulkApplyPrompt, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ook toepassen op de rest?") },
+        text = {
+            Text(
+                "${prompt.otherCount} andere transacties van '${prompt.counterpartyName}' krijgen dan " +
+                    "dezelfde categorie.",
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Toepassen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Nee, alleen deze") } },
+    )
 }
 
 @Composable
