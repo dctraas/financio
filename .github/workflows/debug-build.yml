@@ -41,7 +41,7 @@ jobs:
       - name: APK hernoemen naar een duidelijke bestandsnaam
         run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/financio-debug.apk
 
-      - name: "debug-latest"-release bijwerken met de nieuwe APK
+      - name: debug-latest-release bijwerken met de nieuwe APK
         uses: softprops/action-gh-release@v2
         with:
           tag_name: debug-latest
