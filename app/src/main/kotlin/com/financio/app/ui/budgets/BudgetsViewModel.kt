@@ -50,6 +50,12 @@ data class BudgetsUiState(
     val totalLimit: Money = Money.ZERO,
     /** The day-of-month fraction (e.g. 0.6 on the 18th of a 30-day month) that the pace tick marks on each bar — null for any month other than the current one, where "how far through the month are we" doesn't apply. */
     val pace: Float? = null,
+    /**
+     * Per category, its average spend over the 3 months *before* [yearMonth] - a "voorspeld
+     * budget" hint offered in [BudgetLimitDialog], never applied on its own. Missing entirely for
+     * a category with no spend at all in that window (nothing to predict from yet).
+     */
+    val suggestedLimitByCategory: Map<Long, Money> = emptyMap(),
 ) {
     val canGoToNextPeriod: Boolean get() = yearMonth.isBefore(YearMonth.now())
     val referenceLabel: String
@@ -70,11 +76,20 @@ class BudgetsViewModel @Inject constructor(
             budgetRepository.observeBudgets(month),
             categoryRepository.observeCategories(),
         ) { budgets, categories -> budgets to categories }
-            .flatMapLatest { (budgets, categories) -> combinedRowsFor(month, budgets, categories) }
-            .map { (rows, unlimited) -> buildState(month, rows, unlimited) }
+            .flatMapLatest { (budgets, categories) ->
+                combine(
+                    combinedRowsFor(month, budgets, categories),
+                    suggestedLimitsFor(month, categories),
+                ) { (rows, unlimited), suggestions -> buildState(month, rows, unlimited, suggestions) }
+            }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BudgetsUiState())
 
-    private fun buildState(month: YearMonth, rows: List<BudgetRow>, unlimited: List<UnlimitedCategorySpend>): BudgetsUiState {
+    private fun buildState(
+        month: YearMonth,
+        rows: List<BudgetRow>,
+        unlimited: List<UnlimitedCategorySpend>,
+        suggestions: Map<Long, Money>,
+    ): BudgetsUiState {
         val sortedRows = rows.sortedWith(compareByDescending<BudgetRow> { it.status.ordinal }.thenByDescending { it.percentage })
         val today = LocalDate.now()
         val pace = if (month == YearMonth.now()) today.dayOfMonth / month.lengthOfMonth().toFloat() else null
@@ -85,8 +100,24 @@ class BudgetsViewModel @Inject constructor(
             totalSpent = Money(rows.sumOf { it.spent.cents }),
             totalLimit = Money(rows.sumOf { it.effectiveLimit.cents }),
             pace = pace,
+            suggestedLimitByCategory = suggestions,
         )
     }
+
+    /** Every category's average spend over the 3 months before [month] - see [BudgetsUiState.suggestedLimitByCategory]. */
+    private fun suggestedLimitsFor(month: YearMonth, categories: List<Category>): Flow<Map<Long, Money>> {
+        if (categories.isEmpty()) return flowOf(emptyMap())
+        val trailingMonths = (1..3).map { month.minusMonths(it.toLong()) }
+        return combine(
+            categories.map { category ->
+                combine(trailingMonths.map { m -> transactionRepository.observeCategorySpent(category.id, m) }) { it.toList() }
+                    .map { amounts -> category.id to trailingAverageOrNull(amounts) }
+            },
+        ) { pairs -> pairs.mapNotNull { (id, average) -> average?.let { id to it } }.toMap() }
+    }
+
+    private fun trailingAverageOrNull(amounts: List<Money>): Money? =
+        amounts.takeIf { it.any { m -> m.cents > 0 } }?.let { Money(it.sumOf { m -> m.cents } / it.size) }
 
     private fun combinedRowsFor(
         month: YearMonth,

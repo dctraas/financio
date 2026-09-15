@@ -49,7 +49,12 @@ import com.financio.core.usecase.MerchantGrouper
 import java.time.YearMonth
 
 @Composable
-fun ChartsScreen(initialCategoryId: Long? = null, onGoToSubscriptionsClick: () -> Unit, viewModel: ChartsViewModel = hiltViewModel()) {
+fun ChartsScreen(
+    initialCategoryId: Long? = null,
+    onGoToSubscriptionsClick: () -> Unit,
+    onManageMerchantsClick: () -> Unit,
+    viewModel: ChartsViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
 
     LaunchedEffect(initialCategoryId) {
@@ -169,7 +174,7 @@ fun ChartsScreen(initialCategoryId: Long? = null, onGoToSubscriptionsClick: () -
                         }
 
                         if (state.counterpartyBreakdown.isNotEmpty()) {
-                            CounterpartyBreakdownSection(state.counterpartyBreakdown)
+                            CounterpartyBreakdownSection(state.counterpartyBreakdown, onManageMerchantsClick)
                         }
                     }
                 }
@@ -285,7 +290,7 @@ private fun SpikeInsightCard(insight: String) {
 
 /** The selected category's spend for the period on screen, broken down by counterparty - "waar komt dit vandaan?", independent of whether it's actually a spike. */
 @Composable
-private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>) {
+private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onManageMerchantsClick: () -> Unit) {
     Column(Modifier.padding(top = 24.dp)) {
         Text("Waar komt dit vandaan?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         breakdown.forEach { entry ->
@@ -304,6 +309,13 @@ private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>) {
                 Text(entry.amount.toDisplayString(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
+        Text(
+            "Ondernemingen beheren →",
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 8.dp).clickable(onClick = onManageMerchantsClick),
+        )
     }
 }
 

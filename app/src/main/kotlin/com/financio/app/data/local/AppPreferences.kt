@@ -147,6 +147,13 @@ class AppPreferences(context: Context) {
         _dismissedMerchantGroups.value = updated
     }
 
+    /** Un-aliases just [rawName], leaving any other names still mapped to the same canonical untouched — the Ondernemingen screen's per-member "verwijderen" action, distinct from [dismissMerchantGroup]'s whole-suggestion "nee". */
+    fun removeMerchantAlias(rawName: String) {
+        val updated = _confirmedMerchantAliases.value - rawName
+        persistMerchantAliases(updated)
+        _confirmedMerchantAliases.value = updated
+    }
+
     companion object {
         private const val PREFS_NAME = "financio_settings"
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"

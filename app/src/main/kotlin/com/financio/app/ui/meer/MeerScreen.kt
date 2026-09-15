@@ -35,6 +35,7 @@ fun MeerScreen(
     onSavingsGoalsClick: () -> Unit,
     onAccountsClick: () -> Unit,
     onManageCategoriesClick: () -> Unit,
+    onMerchantManagementClick: () -> Unit,
     onImportClick: () -> Unit,
     onAppearanceClick: () -> Unit,
     onLockPrivacyClick: () -> Unit,
@@ -132,6 +133,7 @@ fun MeerScreen(
         }
 
         item { SectionHeader("Instellingen") }
+        item { MeerRow("Ondernemingen", onMerchantManagementClick) }
         item { MeerRow("Weergave", onAppearanceClick) }
         item { MeerRow("Vergrendeling & privacy", onLockPrivacyClick) }
         item { MeerRow("Meldingen", onNotificationsClick) }
