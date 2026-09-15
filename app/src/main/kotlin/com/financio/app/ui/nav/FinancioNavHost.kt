@@ -22,6 +22,7 @@ import com.financio.app.ui.charts.ChartsScreen
 import com.financio.app.ui.importing.ImportScreen
 import com.financio.app.ui.meer.MeerScreen
 import com.financio.app.ui.merchants.MerchantManagementScreen
+import com.financio.app.ui.networth.NetWorthScreen
 import com.financio.app.ui.savings.SavingsGoalsScreen
 import com.financio.app.ui.settings.AppearanceScreen
 import com.financio.app.ui.settings.BackupExportScreen
@@ -32,6 +33,7 @@ import com.financio.app.ui.subscriptions.SubscriptionsScreen
 import com.financio.app.ui.transactions.TransactionDetailScreen
 import com.financio.app.ui.transactions.TransactionsScreen
 import com.financio.app.ui.vandaag.VandaagScreen
+import com.financio.app.ui.yearreview.YearReviewScreen
 
 private const val ARG_CATEGORY_ID = "categoryId"
 private const val ARG_TRANSACTION_ID = "transactionId"
@@ -52,6 +54,8 @@ private sealed class Destination(val route: String, val label: String) {
     data object TransactionDetail : Destination(TRANSACTION_DETAIL_ROUTE, "Transactie")
     data object CategoryManagement : Destination("categories", "Categorieën & regels")
     data object MerchantManagement : Destination("merchants", "Ondernemingen")
+    data object NetWorth : Destination("net-worth", "Vermogen")
+    data object YearReview : Destination("year-review", "Jaaroverzicht")
     data object Subscriptions : Destination("subscriptions", "Abonnementen")
     data object SavingsGoals : Destination("savings-goals", "Spaardoelen")
     data object Accounts : Destination("accounts", "Rekeningen")
@@ -142,6 +146,8 @@ fun FinancioNavHost() {
                     onAccountsClick = { navController.navigate(Destination.Accounts.route) },
                     onManageCategoriesClick = { navController.navigate(Destination.CategoryManagement.route) },
                     onMerchantManagementClick = { navController.navigate(Destination.MerchantManagement.route) },
+                    onNetWorthClick = { navController.navigate(Destination.NetWorth.route) },
+                    onYearReviewClick = { navController.navigate(Destination.YearReview.route) },
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onAppearanceClick = { navController.navigate(Destination.Appearance.route) },
                     onLockPrivacyClick = { navController.navigate(Destination.LockPrivacy.route) },
@@ -162,6 +168,8 @@ fun FinancioNavHost() {
             }
             composable(Destination.CategoryManagement.route) { CategoryManagementScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.MerchantManagement.route) { MerchantManagementScreen(onBackClick = { navController.popBackStack() }) }
+            composable(Destination.NetWorth.route) { NetWorthScreen(onBackClick = { navController.popBackStack() }) }
+            composable(Destination.YearReview.route) { YearReviewScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.Subscriptions.route) { SubscriptionsScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.SavingsGoals.route) { SavingsGoalsScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.Accounts.route) { AccountsScreen(onBackClick = { navController.popBackStack() }) }
@@ -186,6 +194,8 @@ private fun NavIcon(destination: Destination) {
         Destination.TransactionDetail -> Unit
         Destination.CategoryManagement -> Unit
         Destination.MerchantManagement -> Unit
+        Destination.NetWorth -> Unit
+        Destination.YearReview -> Unit
         Destination.Subscriptions -> Unit
         Destination.SavingsGoals -> Unit
         Destination.Accounts -> Unit
