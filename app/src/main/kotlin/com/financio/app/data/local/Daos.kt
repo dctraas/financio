@@ -119,6 +119,13 @@ interface SavingsGoalDao {
 
     @Query("DELETE FROM savings_goals WHERE id = :goalId")
     suspend fun delete(goalId: Long)
+
+    @Query("UPDATE savings_goals SET archived = :archived WHERE id = :goalId")
+    suspend fun setArchived(goalId: Long, archived: Boolean)
+
+    /** Adds (not sets) [deltaCents] to the running manual-adjustment total - see [com.financio.core.model.SavingsGoal.manualAdjustment]. */
+    @Query("UPDATE savings_goals SET manualAdjustmentCents = manualAdjustmentCents + :deltaCents WHERE id = :goalId")
+    suspend fun addManualAdjustment(goalId: Long, deltaCents: Long)
 }
 
 @Dao

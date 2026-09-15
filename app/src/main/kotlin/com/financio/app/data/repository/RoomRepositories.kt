@@ -24,6 +24,7 @@ import com.financio.core.repository.SavingsGoalRepository
 import com.financio.core.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import java.time.YearMonth
 import javax.inject.Inject
 
@@ -210,10 +211,26 @@ class RoomSavingsGoalRepository @Inject constructor(
     override fun observeGoals(): Flow<List<SavingsGoal>> =
         dao.observeAll().map { entities -> entities.map { it.toDomain() } }
 
-    override suspend fun addGoal(name: String, targetAmount: Money, categoryId: Long): Long =
-        dao.insert(SavingsGoalEntity(name = name, targetAmountCents = targetAmount.cents, categoryId = categoryId))
+    override suspend fun addGoal(name: String, targetAmount: Money, categoryId: Long, linkedAccountId: Long?, targetDate: LocalDate?): Long =
+        dao.insert(
+            SavingsGoalEntity(
+                name = name,
+                targetAmountCents = targetAmount.cents,
+                categoryId = categoryId,
+                linkedAccountId = linkedAccountId,
+                targetDate = targetDate?.toString(),
+            ),
+        )
 
     override suspend fun deleteGoal(goalId: Long) {
         dao.delete(goalId)
+    }
+
+    override suspend fun setArchived(goalId: Long, archived: Boolean) {
+        dao.setArchived(goalId, archived)
+    }
+
+    override suspend fun addManualAdjustment(goalId: Long, delta: Money) {
+        dao.addManualAdjustment(goalId, delta.cents)
     }
 }

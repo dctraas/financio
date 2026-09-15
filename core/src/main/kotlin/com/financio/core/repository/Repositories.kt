@@ -9,6 +9,7 @@ import com.financio.core.model.SavingsGoal
 import com.financio.core.model.Transaction
 import com.financio.core.model.TransactionSplit
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 import java.time.YearMonth
 
 /**
@@ -117,6 +118,15 @@ interface AccountRepository {
 
 interface SavingsGoalRepository {
     fun observeGoals(): Flow<List<SavingsGoal>>
-    suspend fun addGoal(name: String, targetAmount: Money, categoryId: Long): Long
+
+    /** Returns the new goal's id. [linkedAccountId] and [targetDate] are purely informational/display - see [SavingsGoal]. */
+    suspend fun addGoal(name: String, targetAmount: Money, categoryId: Long, linkedAccountId: Long? = null, targetDate: LocalDate? = null): Long
+
     suspend fun deleteGoal(goalId: Long)
+
+    /** "Archiveren" on a gehaald doel - moves it out of the active/gehaald sections without deleting its history. */
+    suspend fun setArchived(goalId: Long, archived: Boolean)
+
+    /** Adds [delta] (positive or negative) to the goal's manual top-up total - see [SavingsGoal.manualAdjustment]. */
+    suspend fun addManualAdjustment(goalId: Long, delta: Money)
 }

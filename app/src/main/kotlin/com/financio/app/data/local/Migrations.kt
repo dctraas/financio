@@ -85,3 +85,14 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("ALTER TABLE savings_goals ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/**
+ * v4 -> v5: one new defaulted column, same purely-additive shape as every migration above - the
+ * Spaardoelen redesign's manual top-up ("+") exception on top of a goal's transaction-derived
+ * progress.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE savings_goals ADD COLUMN manualAdjustmentCents INTEGER NOT NULL DEFAULT 0")
+    }
+}

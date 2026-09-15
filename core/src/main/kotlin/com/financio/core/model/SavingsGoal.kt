@@ -25,4 +25,12 @@ data class SavingsGoal(
     val targetDate: LocalDate? = null,
     /** "Gehaald" goals move to their own section and stop counting toward the active total, without losing their history. */
     val archived: Boolean = false,
+    /**
+     * A manual correction on top of the category's real transaction history - the "+" exception
+     * for a one-off top-up that didn't come through as its own categorized transaction (e.g. cash,
+     * or a transfer this app never saw). Deliberately a single running total rather than its own
+     * ledger: it only ever affects this goal's own progress number, never Transacties, Budget, or
+     * any other screen's totals, which all stay purely transaction-derived.
+     */
+    val manualAdjustment: Money = Money.ZERO,
 )
