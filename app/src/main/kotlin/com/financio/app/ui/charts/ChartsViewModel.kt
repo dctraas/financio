@@ -11,6 +11,7 @@ import com.financio.core.model.TransactionSplit
 import com.financio.core.repository.BudgetRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.TransactionRepository
+import com.financio.core.usecase.MerchantGrouper
 import com.financio.core.usecase.SubscriptionDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -109,10 +110,12 @@ data class ChartsUiState(
     val incomeRatioLabel: String? = null,
     /** Savings suggestions for the overview - category spikes, subscription price rises, unconfirmed recurring merchants, high spend with no budget limit. Only populated when [selectedCategoryId] is null. */
     val savingsTips: List<SavingsTip> = emptyList(),
-    /** The selected category's spend for the period on screen, broken down by counterparty, biggest first — "waar komt dit vandaan?". Only populated when [selectedCategoryId] is non-null. */
+    /** The selected category's spend for the period on screen, broken down by counterparty, biggest first — "waar komt dit vandaan?". Already merged by [ChartsViewModel.confirmMerchantGroup]'s confirmed aliases, if any apply. Only populated when [selectedCategoryId] is non-null. */
     val counterpartyBreakdown: List<CounterpartySpend> = emptyList(),
     /** A one-line "why is this higher than normal" explanation naming the counterparty behind most of the rise - null unless the period on screen is a genuine spike (see [SPIKE_RATIO_NUM]/[SPIKE_MIN_EXTRA_CENTS]). Only populated when [selectedCategoryId] is non-null. */
     val spikeInsight: String? = null,
+    /** A "these look like the same chain" suggestion relevant to what's in [counterpartyBreakdown] - e.g. "Albert Heijn 2200 Gorinchem NLD" and "Albert Heijn 1359 Gouda" both reducing to "Albert Heijn" - see [MerchantGrouper]. Null once there's nothing new to ask about (already confirmed, or dismissed). Only populated when [selectedCategoryId] is non-null. */
+    val mergeSuggestion: MerchantGrouper.MerchantGroupCandidate? = null,
 )
 
 @HiltViewModel
@@ -330,21 +333,56 @@ class ChartsViewModel @Inject constructor(
                     budgetRepository.observeBudgets(anchor),
                     transactionRepository.observeAllTransactions(),
                     transactionRepository.observeAllSplits(),
-                ) { budgets, transactions, splits ->
+                    appPreferences.confirmedMerchantAliases,
+                    appPreferences.dismissedMerchantGroups,
+                ) { budgets, transactions, splits, aliases, dismissedGroups ->
                     val partial = buildState(cats, categoryId, m, anchor, periods, amounts)
-                    val breakdown = breakdownFor(transactions, splits, categoryId, periods, m, amounts)
+                    val breakdown = breakdownFor(transactions, splits, categoryId, periods, m, amounts, aliases)
                     partial.copy(
                         limit = budgets.firstOrNull { it.categoryId == categoryId }?.limit,
                         counterpartyBreakdown = breakdown.list,
                         spikeInsight = breakdown.insight,
+                        mergeSuggestion = mergeSuggestionFor(transactions, aliases, dismissedGroups, breakdown.rawCounterpartyNames),
                     )
                 }
             }
     }
 
-    private data class Breakdown(val list: List<CounterpartySpend>, val insight: String?)
+    /** "Ja, dit is dezelfde onderneming" — every name in [candidate]'s group resolves to its canonical name from now on, in every category's breakdown. */
+    fun confirmMerchantGroup(candidate: MerchantGrouper.MerchantGroupCandidate) {
+        appPreferences.confirmMerchantGroup(candidate.canonicalName, candidate.rawNames)
+    }
 
-    /** The rightmost period's spend by counterparty, plus each one's own average over the other periods on screen - see [CounterpartySpend]. */
+    /** "Nee, dit zijn verschillende ondernemingen" — stops suggesting this canonical name again. */
+    fun dismissMerchantGroup(candidate: MerchantGrouper.MerchantGroupCandidate) {
+        appPreferences.dismissMerchantGroup(candidate.canonicalName)
+    }
+
+    /**
+     * A merchant-grouping suggestion worth surfacing right now: analyzed over *every* transaction
+     * ever recorded (a branch visited only twice, months apart, still deserves to be found), but
+     * only surfaced when it's actually relevant to what's on screen ([relevantRawNames] - the raw
+     * counterparty names behind the current breakdown) and there's something new to decide (at
+     * least one raw name in the group isn't already mapped to that canonical name).
+     */
+    private fun mergeSuggestionFor(
+        transactions: List<Transaction>,
+        aliases: Map<String, String>,
+        dismissedGroups: Set<String>,
+        relevantRawNames: Set<String>,
+    ): MerchantGrouper.MerchantGroupCandidate? {
+        if (relevantRawNames.isEmpty()) return null
+        return MerchantGrouper.candidateGroups(transactions.map { it.counterpartyName })
+            .firstOrNull { candidate ->
+                candidate.canonicalName !in dismissedGroups &&
+                    candidate.rawNames.any { it in relevantRawNames } &&
+                    candidate.rawNames.any { aliases[it] != candidate.canonicalName }
+            }
+    }
+
+    private data class Breakdown(val list: List<CounterpartySpend>, val insight: String?, val rawCounterpartyNames: Set<String>)
+
+    /** The rightmost period's spend by counterparty (merged by confirmed alias, see [mergeByAlias]), plus each one's own average over the other periods on screen - see [CounterpartySpend]. */
     private fun breakdownFor(
         transactions: List<Transaction>,
         splitsByTransaction: Map<Long, List<TransactionSplit>>,
@@ -352,10 +390,14 @@ class ChartsViewModel @Inject constructor(
         periods: List<YearMonth>,
         m: ChartMode,
         amounts: List<Money>,
+        aliases: Map<String, String>,
     ): Breakdown {
         val priorPeriods = periods.dropLast(1)
-        val currentByCounterparty = spendByCounterparty(transactions, splitsByTransaction, categoryId, periods.last(), m)
-        val priorByCounterpartyPerPeriod = priorPeriods.map { p -> spendByCounterparty(transactions, splitsByTransaction, categoryId, p, m) }
+        val currentRaw = spendByCounterparty(transactions, splitsByTransaction, categoryId, periods.last(), m)
+        val currentByCounterparty = mergeByAlias(currentRaw, aliases)
+        val priorByCounterpartyPerPeriod = priorPeriods.map { p ->
+            mergeByAlias(spendByCounterparty(transactions, splitsByTransaction, categoryId, p, m), aliases)
+        }
 
         val list = currentByCounterparty.entries
             .map { (name, cents) ->
@@ -369,7 +411,7 @@ class ChartsViewModel @Inject constructor(
             }
             .sortedByDescending { it.amount.cents }
 
-        return Breakdown(list, spikeInsightFor(list, amounts, m))
+        return Breakdown(list, spikeInsightFor(list, amounts, m), currentRaw.keys)
     }
 
     private fun spendByCounterparty(
@@ -389,6 +431,13 @@ class ChartsViewModel @Inject constructor(
                 splits.forEach { split -> if (split.categoryId == categoryId) result.merge(t.counterpartyName, abs(split.amount.cents), Long::plus) }
             }
         }
+        return result
+    }
+
+    /** Resolves each raw counterparty name through [aliases] (falling back to itself when unconfirmed) before summing - the actual merge step a confirmed [MerchantGrouper] suggestion produces. */
+    private fun mergeByAlias(raw: Map<String, Long>, aliases: Map<String, String>): Map<String, Long> {
+        val result = mutableMapOf<String, Long>()
+        raw.forEach { (name, cents) -> result.merge(aliases[name] ?: name, cents, Long::plus) }
         return result
     }
 

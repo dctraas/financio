@@ -45,6 +45,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.categoryColorFor
 import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.core.model.Money
+import com.financio.core.usecase.MerchantGrouper
 import java.time.YearMonth
 
 @Composable
@@ -158,6 +159,14 @@ fun ChartsScreen(initialCategoryId: Long? = null, onGoToSubscriptionsClick: () -
                         }
 
                         state.spikeInsight?.let { insight -> SpikeInsightCard(insight) }
+
+                        state.mergeSuggestion?.let { suggestion ->
+                            MergeSuggestionCard(
+                                suggestion = suggestion,
+                                onConfirm = { viewModel.confirmMerchantGroup(suggestion) },
+                                onDismiss = { viewModel.dismissMerchantGroup(suggestion) },
+                            )
+                        }
 
                         if (state.counterpartyBreakdown.isNotEmpty()) {
                             CounterpartyBreakdownSection(state.counterpartyBreakdown)
@@ -296,6 +305,55 @@ private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>) {
             }
         }
     }
+}
+
+/**
+ * "Deze lijken bij dezelfde onderneming te horen" - a suggestion to merge branches of the same
+ * chain into one row below (see MerchantGrouper), never applied without this explicit yes/no:
+ * a wrong merge would silently blend two unrelated payees' spend into one number, so nothing is
+ * folded together until the user confirms it themselves.
+ */
+@Composable
+private fun MergeSuggestionCard(suggestion: MerchantGrouper.MerchantGroupCandidate, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(12.dp),
+    ) {
+        Text("Dit lijkt dezelfde onderneming", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "${joinNatural(suggestion.rawNames)} → \"${suggestion.canonicalName}\"",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            Text(
+                "Ja, samenvoegen",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.clickable(onClick = onConfirm),
+            )
+            Text(
+                "Nee, apart houden",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.clickable(onClick = onDismiss),
+            )
+        }
+    }
+}
+
+/** "A en B" for two, "A, B en C" for more - reads better than a plain comma-joined list for a handful of names. */
+private fun joinNatural(items: List<String>): String = when (items.size) {
+    0 -> ""
+    1 -> items[0]
+    else -> items.dropLast(1).joinToString(", ") + " en " + items.last()
 }
 
 @Composable

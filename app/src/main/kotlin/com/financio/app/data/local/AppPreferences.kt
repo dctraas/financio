@@ -100,6 +100,53 @@ class AppPreferences(context: Context) {
         _dismissedSubscriptionNames.value = updated
     }
 
+    /**
+     * Inzicht's "waar komt dit vandaan?" merchant-grouping confirmations (see MerchantGrouper in
+     * :core) - a raw counterparty name -> the canonical chain name the user agreed it belongs
+     * under, e.g. "Albert Heijn 2200 Gorinchem NLD" -> "Albert Heijn". A SharedPreferences string
+     * set can't store a map directly, so each entry is packed as "raw<sep>canonical" using
+     * [MERCHANT_ALIAS_SEPARATOR] - an unprintable control character no real counterparty name is
+     * remotely likely to contain, unlike a plain comma or pipe a shop name might genuinely use.
+     */
+    private val _confirmedMerchantAliases = MutableStateFlow(loadMerchantAliases())
+    val confirmedMerchantAliases: StateFlow<Map<String, String>> = _confirmedMerchantAliases.asStateFlow()
+
+    /** Canonical names the user said "nee" to grouping under - keyed by canonical name, not by the raw names involved, so the suggestion doesn't reappear even if a new branch of the same chain shows up later. */
+    private val _dismissedMerchantGroups = MutableStateFlow(prefs.getStringSet(KEY_DISMISSED_MERCHANT_GROUPS, emptySet()).orEmpty())
+    val dismissedMerchantGroups: StateFlow<Set<String>> = _dismissedMerchantGroups.asStateFlow()
+
+    private fun loadMerchantAliases(): Map<String, String> =
+        prefs.getStringSet(KEY_CONFIRMED_MERCHANT_ALIASES, emptySet()).orEmpty()
+            .mapNotNull { entry ->
+                val parts = entry.split(MERCHANT_ALIAS_SEPARATOR, limit = 2)
+                if (parts.size == 2) parts[0] to parts[1] else null
+            }
+            .toMap()
+
+    private fun persistMerchantAliases(aliases: Map<String, String>) {
+        val encoded = aliases.map { (raw, canonical) -> "$raw$MERCHANT_ALIAS_SEPARATOR$canonical" }.toSet()
+        prefs.edit().putStringSet(KEY_CONFIRMED_MERCHANT_ALIASES, encoded).apply()
+    }
+
+    /** "Ja, dit is dezelfde onderneming" — every name in [rawNames] resolves to [canonicalName] from now on, everywhere a counterparty is grouped. */
+    fun confirmMerchantGroup(canonicalName: String, rawNames: List<String>) {
+        val updated = _confirmedMerchantAliases.value + rawNames.associateWith { canonicalName }
+        persistMerchantAliases(updated)
+        _confirmedMerchantAliases.value = updated
+        if (canonicalName in _dismissedMerchantGroups.value) {
+            val updatedDismissed = _dismissedMerchantGroups.value - canonicalName
+            prefs.edit().putStringSet(KEY_DISMISSED_MERCHANT_GROUPS, updatedDismissed).apply()
+            _dismissedMerchantGroups.value = updatedDismissed
+        }
+    }
+
+    /** "Nee, dit zijn verschillende ondernemingen" — stops suggesting [canonicalName] as a merge again. */
+    fun dismissMerchantGroup(canonicalName: String) {
+        val updated = _dismissedMerchantGroups.value + canonicalName
+        prefs.edit().putStringSet(KEY_DISMISSED_MERCHANT_GROUPS, updated).apply()
+        _dismissedMerchantGroups.value = updated
+    }
+
     companion object {
         private const val PREFS_NAME = "financio_settings"
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
@@ -108,6 +155,9 @@ class AppPreferences(context: Context) {
         private const val KEY_MONTH_START_DAY = "month_start_day"
         private const val KEY_CONFIRMED_SUBSCRIPTIONS = "confirmed_subscription_names"
         private const val KEY_DISMISSED_SUBSCRIPTIONS = "dismissed_subscription_names"
+        private const val KEY_CONFIRMED_MERCHANT_ALIASES = "confirmed_merchant_aliases"
+        private const val KEY_DISMISSED_MERCHANT_GROUPS = "dismissed_merchant_groups"
+        private const val MERCHANT_ALIAS_SEPARATOR = "\u0001"
         // On by default for a finance app — matches the architecture doc's security section.
         private const val DEFAULT_BIOMETRIC_LOCK = true
         private const val DEFAULT_NOTIFICATIONS = false
