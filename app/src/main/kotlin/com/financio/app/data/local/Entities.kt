@@ -11,6 +11,12 @@ data class AccountEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val ibanMasked: String,
+    /** See [com.financio.core.model.Account.hidden]. Added in schema v4. */
+    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
+    /** See [com.financio.core.model.Account.excludedFromTotal]. Added in schema v4. */
+    @ColumnInfo(defaultValue = "0") val excludedFromTotal: Boolean = false,
+    /** See [com.financio.core.model.Account.manualBalance]. Added in schema v4. */
+    @ColumnInfo(defaultValue = "NULL") val manualBalanceCents: Long? = null,
 )
 
 @Entity(tableName = "categories")
@@ -113,4 +119,10 @@ data class SavingsGoalEntity(
     val name: String,
     val targetAmountCents: Long,
     val categoryId: Long,
+    /** See [com.financio.core.model.SavingsGoal.linkedAccountId]. Added in schema v4. */
+    @ColumnInfo(defaultValue = "NULL") val linkedAccountId: Long? = null,
+    /** ISO "yyyy-MM-dd", or null for no streefdatum. Added in schema v4. */
+    @ColumnInfo(defaultValue = "NULL") val targetDate: String? = null,
+    /** See [com.financio.core.model.SavingsGoal.archived]. Added in schema v4. */
+    @ColumnInfo(defaultValue = "0") val archived: Boolean = false,
 )

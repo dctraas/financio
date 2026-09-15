@@ -86,6 +86,18 @@ interface AccountRepository {
 
     /** Returns the new account's id. */
     suspend fun addAccount(name: String, ibanMasked: String): Long
+
+    /** An IBAN is a bank's identifier, not a name someone picked - this is the "naam wijzigen" action on Rekeningen. */
+    suspend fun renameAccount(accountId: Long, name: String)
+
+    /** Hidden from the day-to-day accounts list without deleting its transaction history - e.g. a closed account. */
+    suspend fun setAccountHidden(accountId: Long, hidden: Boolean)
+
+    /** Left out of every cross-account total without hiding the account itself - e.g. a shared account where only part of the balance is really yours. */
+    suspend fun setAccountExcludedFromTotal(accountId: Long, excluded: Boolean)
+
+    /** Fills in (or clears, with null) the balance for an account whose imports carry no closing balance at all - see [com.financio.core.usecase.AccountBalanceResolver]. */
+    suspend fun setManualBalance(accountId: Long, balance: Money?)
 }
 
 interface SavingsGoalRepository {

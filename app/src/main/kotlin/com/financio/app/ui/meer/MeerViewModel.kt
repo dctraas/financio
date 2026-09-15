@@ -7,6 +7,8 @@ import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.SavingsGoalRepository
 import com.financio.core.repository.TransactionRepository
+import com.financio.core.usecase.AccountBalance
+import com.financio.core.usecase.AccountBalanceResolver
 import com.financio.core.usecase.SubscriptionCadence
 import com.financio.core.usecase.SubscriptionDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -50,7 +52,7 @@ class MeerViewModel @Inject constructor(
     val uiState: StateFlow<MeerUiState> = combine(
         transactionRepository.observeAllTransactions(),
         savingsGoalsSummary(savingsGoalRepository, transactionRepository),
-        accountsTotalBalance(accountRepository, transactionRepository),
+        accountRepository.observeAccounts(),
         combine(categoryRepository.observeCategories(), categoryRepository.observeRules()) { cats, rules -> cats.size to rules.size },
     ) { transactions, savings, accounts, categoryCounts ->
         val subscriptions = SubscriptionDetector.detect(transactions)
@@ -61,13 +63,20 @@ class MeerViewModel @Inject constructor(
             val cents = kotlin.math.abs(subscription.averageAmount.cents)
             if (subscription.cadence == SubscriptionCadence.YEARLY) cents / 12 else cents
         }
+        // Same definition as Rekeningen's own total: a hidden or excluded account never
+        // contributes, and an Unknown balance (no closing balance in the import at all, and no
+        // manual override yet) contributes nothing rather than silently counting as €0 - see
+        // AccountBalanceResolver.
+        val countedBalances = accounts
+            .filter { !it.hidden && !it.excludedFromTotal }
+            .mapNotNull { account -> (AccountBalanceResolver.resolve(account, transactions) as? AccountBalance.Known)?.amount }
         MeerUiState(
             subscriptionCount = subscriptions.size,
             subscriptionMonthlyTotal = Money(monthlyEquivalentTotal),
             savingsGoalCount = savings.first,
             savingsTotalSaved = savings.second,
-            accountCount = accounts.first,
-            accountsTotalBalance = accounts.second,
+            accountCount = accounts.size,
+            accountsTotalBalance = Money(countedBalances.sumOf { it.cents }),
             categoryCount = categoryCounts.first,
             ruleCount = categoryCounts.second,
             mostRecentTransactionDate = transactions.maxOfOrNull { it.date },
@@ -84,26 +93,6 @@ class MeerViewModel @Inject constructor(
             } else {
                 combine(goals.map { transactionRepository.observeCategoryNetAllTime(it.categoryId) }) { progresses ->
                     goals.size to Money(progresses.sumOf { it.cents })
-                }
-            }
-        }
-
-    /**
-     * One account's balance is whatever its most recent transaction's [com.financio.core.model.Transaction.balanceAfter]
-     * says — the same "first hit walking date-DESC order" approximation Vandaag's forecast uses
-     * (see `VandaagViewModel.forecastFor`), since ING's CSV carries no time-of-day.
-     */
-    private fun accountsTotalBalance(
-        accountRepository: AccountRepository,
-        transactionRepository: TransactionRepository,
-    ): Flow<Pair<Int, Money>> =
-        accountRepository.observeAccounts().flatMapLatest { accounts ->
-            if (accounts.isEmpty()) {
-                flowOf(0 to Money.ZERO)
-            } else {
-                combine(accounts.map { account -> transactionRepository.observeTransactions(account.id) }) { perAccount ->
-                    val total = perAccount.sumOf { transactions -> transactions.firstNotNullOfOrNull { it.balanceAfter }?.cents ?: 0L }
-                    accounts.size to Money(total)
                 }
             }
         }
