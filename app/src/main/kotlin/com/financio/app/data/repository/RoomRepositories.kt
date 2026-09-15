@@ -59,6 +59,10 @@ class RoomTransactionRepository @Inject constructor(
         dao.updateCategory(transactionId, categoryId)
     }
 
+    override suspend fun clearCategory(transactionId: Long) {
+        dao.setCategoryColumn(transactionId, null)
+    }
+
     override suspend fun updateCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int =
         dao.updateCategoryForCounterparty(accountId, counterpartyName, categoryId)
 
@@ -77,6 +81,10 @@ class RoomTransactionRepository @Inject constructor(
 
     override suspend fun setNote(transactionId: Long, note: String?) {
         dao.setNote(transactionId, note)
+    }
+
+    override suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long?) {
+        dao.reassignCategory(oldCategoryId, newCategoryId)
     }
 }
 
@@ -102,12 +110,24 @@ class RoomCategoryRepository @Inject constructor(
     override suspend fun addCategory(name: String, colorHex: String): Long =
         categoryDao.insert(com.financio.app.data.local.CategoryEntity(name = name, colorHex = colorHex))
 
+    override suspend fun renameCategory(categoryId: Long, name: String) {
+        categoryDao.rename(categoryId, name)
+    }
+
+    override suspend fun setCategoryColor(categoryId: Long, colorHex: String) {
+        categoryDao.setColor(categoryId, colorHex)
+    }
+
     override suspend fun deleteCategory(categoryId: Long) {
         categoryDao.delete(categoryId)
     }
 
     override suspend fun deleteRule(ruleId: Long) {
         ruleDao.delete(ruleId)
+    }
+
+    override suspend fun reorderRules(orderedRuleIds: List<Long>) {
+        orderedRuleIds.forEachIndexed { index, ruleId -> ruleDao.setPriority(ruleId, index + 1) }
     }
 
     private fun CategoryRule.toRuleEntity() = com.financio.app.data.local.CategoryRuleEntity(
@@ -152,6 +172,8 @@ class RoomBudgetRepository @Inject constructor(
         )
         dao.upsert(budget.toEntity())
     }
+
+    override suspend fun countBudgetsForCategory(categoryId: Long): Int = dao.countForCategory(categoryId)
 }
 
 class RoomAccountRepository @Inject constructor(

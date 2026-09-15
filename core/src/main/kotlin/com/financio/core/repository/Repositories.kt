@@ -43,6 +43,9 @@ interface TransactionRepository {
     /** Manual categorization of an already-persisted transaction — from the transaction list's "Te categoriseren" state. Also clears any existing splits on it. */
     suspend fun updateCategory(transactionId: Long, categoryId: Long)
 
+    /** Back to "te categoriseren" - the undo path for a bulk rule application that had categorized a previously-uncategorized transaction. */
+    suspend fun clearCategory(transactionId: Long)
+
     /** Applies [categoryId] to every transaction sharing [counterpartyName] on this account. Returns the number of rows changed. */
     suspend fun updateCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int
 
@@ -59,6 +62,9 @@ interface TransactionRepository {
 
     /** The transaction detail screen's free-text note field. Pass null to clear it. */
     suspend fun setNote(transactionId: Long, note: String?)
+
+    /** Every whole transaction currently in [oldCategoryId] moves to [newCategoryId] (or null) - the "kies waar deze transacties naartoe gaan" step before deleting a category. */
+    suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long?)
 }
 
 interface CategoryRepository {
@@ -70,15 +76,24 @@ interface CategoryRepository {
     /** Returns the new category's id. */
     suspend fun addCategory(name: String, colorHex: String): Long
 
-    /** Deleting a category also deletes any rule pointing at it and un-categorizes its transactions. */
+    suspend fun renameCategory(categoryId: Long, name: String)
+    suspend fun setCategoryColor(categoryId: Long, colorHex: String)
+
+    /** Deleting a category also deletes any rule pointing at it and un-categorizes its transactions - reassign them first (see [TransactionRepository.reassignCategory]) if they should go somewhere else instead. */
     suspend fun deleteCategory(categoryId: Long)
     suspend fun deleteRule(ruleId: Long)
+
+    /** Rewrites every listed rule's priority to match its position in [orderedRuleIds] (1-indexed) - the "sleep om de volgorde te wijzigen" reorder action. */
+    suspend fun reorderRules(orderedRuleIds: List<Long>)
 }
 
 interface BudgetRepository {
     fun observeBudgets(yearMonth: YearMonth): Flow<List<Budget>>
     suspend fun setLimit(categoryId: Long, yearMonth: YearMonth, limit: Money)
     suspend fun setRollover(categoryId: Long, yearMonth: YearMonth, rollover: Boolean)
+
+    /** How many budget rows (any month) point at this category - the delete-category confirmation's cascade count. */
+    suspend fun countBudgetsForCategory(categoryId: Long): Int
 }
 
 interface AccountRepository {

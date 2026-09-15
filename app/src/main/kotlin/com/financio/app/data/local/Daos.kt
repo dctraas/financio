@@ -45,6 +45,12 @@ interface CategoryDao {
     /** Cascades to category_rules (ON DELETE CASCADE) and sets transactions.categoryId to null (ON DELETE SET NULL). */
     @Query("DELETE FROM categories WHERE id = :categoryId")
     suspend fun delete(categoryId: Long)
+
+    @Query("UPDATE categories SET name = :name WHERE id = :categoryId")
+    suspend fun rename(categoryId: Long, name: String)
+
+    @Query("UPDATE categories SET colorHex = :colorHex WHERE id = :categoryId")
+    suspend fun setColor(categoryId: Long, colorHex: String)
 }
 
 @Dao
@@ -60,6 +66,10 @@ interface CategoryRuleDao {
 
     @Query("DELETE FROM category_rules WHERE id = :ruleId")
     suspend fun delete(ruleId: Long)
+
+    /** The "sleep om de volgorde te wijzigen" reorder action: whichever rules moved get their priority rewritten to match the new list order (1-indexed). */
+    @Query("UPDATE category_rules SET priority = :priority WHERE id = :ruleId")
+    suspend fun setPriority(ruleId: Long, priority: Int)
 }
 
 @Dao
@@ -79,6 +89,10 @@ interface BudgetDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(budget: BudgetEntity)
+
+    /** How many budget rows (any month) point at this category - the "1 budgetlimiet" count in the delete-category confirmation. */
+    @Query("SELECT COUNT(*) FROM budgets WHERE categoryId = :categoryId")
+    suspend fun countForCategory(categoryId: Long): Int
 
     /**
      * One-time repair for rows already duplicated by the bug [find] fixes going forward: keeps
@@ -165,6 +179,10 @@ interface TransactionDao {
 
     @Query("UPDATE transactions SET categoryId = :categoryId WHERE accountId = :accountId AND counterpartyName = :counterpartyName")
     suspend fun setCategoryForCounterparty(accountId: Long, counterpartyName: String, categoryId: Long): Int
+
+    /** Every whole transaction currently in [oldCategoryId] moves to [newCategoryId] (or null) - the "kies waar deze transacties naartoe gaan" step before deleting a category. A split transaction's own categoryId is already null, so this never touches split allocations. */
+    @Query("UPDATE transactions SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
+    suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long?)
 
     @Query("UPDATE transactions SET note = :note WHERE id = :transactionId")
     suspend fun setNote(transactionId: Long, note: String?)
