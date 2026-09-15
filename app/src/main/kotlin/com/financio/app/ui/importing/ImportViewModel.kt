@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -70,6 +71,16 @@ class ImportViewModel @Inject constructor(
 
     val accounts: StateFlow<List<Account>> = accountRepository.observeAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Whether anything has ever been imported, on any account - decides whether [ImportUiState.PickFile]
+     * shows the full "eerste keer" onboarding speech or just the terse "kies een bestand" a returning
+     * user doing their Nth import actually wants. Defaults to true (the terse view) so a returning
+     * user with real data never sees even a one-frame flash of onboarding copy while this loads.
+     */
+    val hasAnyTransactions: StateFlow<Boolean> = transactionRepository.observeAllTransactions()
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     /** Which account the next import goes into — only ever surfaced in the UI once a second account exists. */
     private val _selectedAccountId = MutableStateFlow(DefaultAccount.ID)

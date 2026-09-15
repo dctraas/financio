@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -59,6 +61,7 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
     val categories by viewModel.categories.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
     val selectedAccountId by viewModel.selectedAccountId.collectAsState()
+    val hasAnyTransactions by viewModel.hasAnyTransactions.collectAsState()
     val context = LocalContext.current
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -75,21 +78,26 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
 
     Scaffold(topBar = { TopAppBar(title = { Text("Importeren") }) }) { padding ->
         when (val current = state) {
-            is ImportUiState.PickFile -> Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
-                // Only surfaced once a second account actually exists - a single-account install
-                // (still the common case) never sees this and always imports into DefaultAccount.
-                if (accounts.size > 1) {
-                    AccountPicker(
-                        accounts = accounts,
-                        selectedAccountId = selectedAccountId,
-                        onSelect = viewModel::selectAccount,
-                    )
+            is ImportUiState.PickFile -> {
+                val onPickFile = { filePicker.launch(arrayOf("text/*", "application/octet-stream")) }
+                if (hasAnyTransactions) {
+                    Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
+                        // Only surfaced once a second account actually exists - a single-account
+                        // install (still the common case) never sees this and always imports into
+                        // DefaultAccount.
+                        if (accounts.size > 1) {
+                            AccountPicker(
+                                accounts = accounts,
+                                selectedAccountId = selectedAccountId,
+                                onSelect = viewModel::selectAccount,
+                            )
+                        }
+                        Text("Kies een CSV- of MT940-export uit Mijn ING.", style = MaterialTheme.typography.bodyLarge)
+                        Button(onClick = onPickFile, modifier = Modifier.padding(top = 16.dp)) { Text("Bestand kiezen") }
+                    }
+                } else {
+                    FirstLaunchContent(padding = padding, onPickFile = onPickFile)
                 }
-                Text("Kies een CSV- of MT940-export uit Mijn ING.", style = MaterialTheme.typography.bodyLarge)
-                Button(
-                    onClick = { filePicker.launch(arrayOf("text/*", "application/octet-stream")) },
-                    modifier = Modifier.padding(top = 16.dp),
-                ) { Text("Bestand kiezen") }
             }
 
             is ImportUiState.Loading -> Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
@@ -104,6 +112,76 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
                 Text("Geïmporteerd.")
             }
         }
+    }
+}
+
+/**
+ * The one screen that decides whether someone ever uses the app at all (R12): the critical step —
+ * exporting from Mijn ING — happens entirely outside this app, in the user's own bank environment,
+ * where nothing can be steered after the fact. So this leads with exactly where to click, which
+ * format, and which period, instead of the single terse line a returning user (see
+ * [ImportViewModel.hasAnyTransactions]) doing their Nth import actually wants.
+ *
+ * Deliberately doesn't offer a bundled "voorbeelddata" demo mode, unlike the original redesign
+ * mockup: that would mean either seeding fake-looking transactions into the same real, encrypted
+ * database a genuine import writes to (a real risk of permanently mixing demo and real financial
+ * history if anything about clearing it later went wrong), or a second, fully parallel
+ * fake-data-rendering path through every screen's ViewModel — both a much larger surface than this
+ * pass's effort budget justifies without a way to test either interactively.
+ */
+@Composable
+private fun FirstLaunchContent(padding: PaddingValues, onPickFile: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+    ) {
+        Text(
+            "Geen account, geen bankkoppeling. Je bankexport wordt hier op dit toestel " +
+                "ingelezen en versleuteld opgeslagen — Financio heeft geen server en geen " +
+                "internettoegang, dus je gegevens verlaten dit toestel nooit.",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+
+        Text(
+            "Zo exporteer je je transacties uit Mijn ING",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 28.dp, bottom = 12.dp),
+        )
+        NumberedStep(1, "Open Mijn ING (app of website) en ga naar de rekening die je wilt importeren.")
+        NumberedStep(2, "Kies \"Afschriften\" of \"Exporteren\".")
+        NumberedStep(3, "Kies als periode \"Afgelopen 2 jaar\" — dat geeft de beste resultaten voor abonnementen-detectie en gemiddeldes, ook al importeer je zelf misschien maar voor een paar maanden.")
+        NumberedStep(4, "Kies CSV of MT940 als bestandsformaat en download het bestand.")
+
+        Text(
+            "Financio categoriseert automatisch ongeveer 80% van je transacties. De rest kies " +
+                "je zelf — dat kost een paar minuten, eenmalig. Daarna hoeft dat nooit meer.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 24.dp, bottom = 20.dp),
+        )
+
+        Button(onClick = onPickFile, modifier = Modifier.fillMaxWidth()) { Text("Bestand kiezen") }
+    }
+}
+
+@Composable
+private fun NumberedStep(number: Int, text: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(number.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold)
+        }
+        Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 12.dp).weight(1f))
     }
 }
 
