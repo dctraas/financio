@@ -153,22 +153,27 @@ class SavingsGoalsViewModel @Inject constructor(
                 // this over - there's no historical transaction date to pin that moment to, so "today".
                 ?: today
         }
-        val earlyByDays = if (achievedDate != null && goal.targetDate != null) {
-            ChronoUnit.DAYS.between(achievedDate, goal.targetDate).toInt()
+        // Room/Kotlin cross-module note: goal.targetDate can't be smart-cast from a null check
+        // alone (it's a val declared in :core, a different module from this ViewModel) - a local
+        // copy sidesteps that entirely.
+        val targetDate = goal.targetDate
+
+        val earlyByDays = if (achievedDate != null && targetDate != null) {
+            ChronoUnit.DAYS.between(achievedDate, targetDate).toInt()
         } else {
             null
         }
 
-        val paceFraction = if (!achieved && goal.targetDate != null && firstContributionDate != null && goal.targetDate.isAfter(firstContributionDate)) {
-            val totalDays = ChronoUnit.DAYS.between(firstContributionDate, goal.targetDate).toFloat()
+        val paceFraction = if (!achieved && targetDate != null && firstContributionDate != null && targetDate.isAfter(firstContributionDate)) {
+            val totalDays = ChronoUnit.DAYS.between(firstContributionDate, targetDate).toFloat()
             val elapsedDays = ChronoUnit.DAYS.between(firstContributionDate, today).toFloat()
             (elapsedDays / totalDays).coerceIn(0f, 1f)
         } else {
             null
         }
 
-        val requiredMonthlyContribution = if (!achieved && goal.targetDate != null && goal.targetDate.isAfter(today)) {
-            val monthsRemaining = ChronoUnit.MONTHS.between(YearMonth.from(today), YearMonth.from(goal.targetDate)).coerceAtLeast(1)
+        val requiredMonthlyContribution = if (!achieved && targetDate != null && targetDate.isAfter(today)) {
+            val monthsRemaining = ChronoUnit.MONTHS.between(YearMonth.from(today), YearMonth.from(targetDate)).coerceAtLeast(1)
             val remainingCents = (goal.targetAmount.cents - progress.cents).coerceAtLeast(0)
             Money(remainingCents / monthsRemaining)
         } else {
