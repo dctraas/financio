@@ -1,6 +1,7 @@
 package com.financio.app.ui.charts
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -26,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -43,7 +46,7 @@ import com.financio.core.model.Money
 import java.time.YearMonth
 
 @Composable
-fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = hiltViewModel()) {
+fun ChartsScreen(initialCategoryId: Long? = null, onGoToSubscriptionsClick: () -> Unit, viewModel: ChartsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
 
     LaunchedEffect(initialCategoryId) {
@@ -91,7 +94,15 @@ fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = h
                     )
 
                     if (state.selectedCategoryId == null) {
-                        OverviewSection(state.overviewSpends, state.incomeRatioLabel, onSegmentClick = viewModel::selectCategory)
+                        OverviewSection(
+                            spends = state.overviewSpends,
+                            incomeRatioLabel = state.incomeRatioLabel,
+                            savingsTips = state.savingsTips,
+                            onSegmentClick = viewModel::selectCategory,
+                            onTipClick = { tip ->
+                                if (tip.categoryId != null) viewModel.selectCategory(tip.categoryId) else onGoToSubscriptionsClick()
+                            },
+                        )
                     } else {
                         ModeSwitch(mode = state.mode, onModeChange = viewModel::selectMode)
 
@@ -134,6 +145,12 @@ fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = h
                                 )
                             }
                         }
+
+                        state.spikeInsight?.let { insight -> SpikeInsightCard(insight) }
+
+                        if (state.counterpartyBreakdown.isNotEmpty()) {
+                            CounterpartyBreakdownSection(state.counterpartyBreakdown)
+                        }
                     }
                 }
             }
@@ -146,7 +163,13 @@ fun ChartsScreen(initialCategoryId: Long? = null, viewModel: ChartsViewModel = h
  * top-4 list, replacing what used to be an arbitrarily-first-selected category's trend chart.
  */
 @Composable
-private fun OverviewSection(spends: List<CategorySpend>, incomeRatioLabel: String?, onSegmentClick: (Long) -> Unit) {
+private fun OverviewSection(
+    spends: List<CategorySpend>,
+    incomeRatioLabel: String?,
+    savingsTips: List<SavingsTip>,
+    onSegmentClick: (Long) -> Unit,
+    onTipClick: (SavingsTip) -> Unit,
+) {
     if (spends.isEmpty()) {
         Text(
             "Nog niets besteed deze maand.",
@@ -164,7 +187,19 @@ private fun OverviewSection(spends: List<CategorySpend>, incomeRatioLabel: Strin
                     modifier = Modifier.fillMaxWidth().clickable { onSegmentClick(entry.category.id) }.padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(entry.category.name, style = MaterialTheme.typography.bodyMedium)
+                    Column(Modifier.weight(1f, fill = false)) {
+                        Text(entry.category.name, style = MaterialTheme.typography.bodyMedium)
+                        // Same signal as a Bespaartip below, but visible at a glance without
+                        // reading the tips list - the two are meant to reinforce each other.
+                        if (entry.isAnomaly) {
+                            Text(
+                                "▲ ongewoon hoog",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LocalBudgetStatusColors.current.over,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
                     Text(entry.spent.toDisplayString(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -177,6 +212,78 @@ private fun OverviewSection(spends: List<CategorySpend>, incomeRatioLabel: Strin
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp),
         )
+    }
+    if (savingsTips.isNotEmpty()) {
+        Column(Modifier.padding(top = 24.dp)) {
+            Text("Bespaartips", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            savingsTips.forEach { tip -> SavingsTipRow(tip, onClick = { onTipClick(tip) }) }
+        }
+    }
+}
+
+/** "Boodschappen is opvallend hoog" etc — a tappable card per tip, same surfaceVariant-card look as MatchingRuleCard on the transaction detail screen. */
+@Composable
+private fun SavingsTipRow(tip: SavingsTip, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+    ) {
+        Text(tip.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            tip.detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/** The "waarom is dit hoger dan normaal" one-liner, shown right under a selected category's chart legend. */
+@Composable
+private fun SpikeInsightCard(insight: String) {
+    val overColor = LocalBudgetStatusColors.current.over
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(overColor.copy(alpha = 0.12f))
+            .padding(12.dp),
+    ) {
+        Text(
+            "Waarom hoger dan normaal? $insight",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/** The selected category's spend for the period on screen, broken down by counterparty - "waar komt dit vandaan?", independent of whether it's actually a spike. */
+@Composable
+private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>) {
+    Column(Modifier.padding(top = 24.dp)) {
+        Text("Waar komt dit vandaan?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        breakdown.forEach { entry ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f, fill = false)) {
+                    Text(entry.counterpartyName, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        entry.previousAverage?.let { "gemiddeld ${it.toDisplayString()}" } ?: "nieuw",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(entry.amount.toDisplayString(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
 

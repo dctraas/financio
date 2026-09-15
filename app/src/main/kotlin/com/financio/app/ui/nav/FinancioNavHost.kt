@@ -127,7 +127,10 @@ fun FinancioNavHost() {
                 arguments = listOf(navArgument(ARG_CATEGORY_ID) { type = NavType.LongType; defaultValue = -1L }),
             ) { backStackEntry ->
                 val categoryId = backStackEntry.arguments?.getLong(ARG_CATEGORY_ID)?.takeIf { it > 0 }
-                ChartsScreen(initialCategoryId = categoryId)
+                ChartsScreen(
+                    initialCategoryId = categoryId,
+                    onGoToSubscriptionsClick = { navController.navigate(Destination.Subscriptions.route) },
+                )
             }
             composable(Destination.Meer.route) {
                 MeerScreen(
