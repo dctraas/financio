@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -85,7 +87,16 @@ fun ChartsScreen(initialCategoryId: Long? = null, onGoToSubscriptionsClick: () -
                     }
                 }
 
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                // Scrollable: the "Waarom hoger dan normaal?" card and the counterparty
+                // breakdown list below the chart are variable-length and, together with the
+                // Bespaartips list on the overview, can easily run past one screen's height -
+                // without this the extra content used to just get clipped at the bottom edge
+                // instead of being reachable at all.
+                Column(
+                    Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                ) {
                     PeriodNavigator(
                         label = state.referenceLabel,
                         canGoToNextPeriod = state.canGoToNextPeriod,
