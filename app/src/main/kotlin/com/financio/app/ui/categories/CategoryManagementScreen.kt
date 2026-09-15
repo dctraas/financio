@@ -109,6 +109,16 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
                     modifier = Modifier.padding(vertical = 8.dp),
                 ) { Text("+ Nieuwe regel") }
             }
+            item {
+                // A rule normally only affects future imports; this is the explicit "and also fix
+                // what's already there" action - a new/aangepaste regel toepassen op transacties
+                // die al bestonden voordat de regel er was.
+                TextButton(
+                    onClick = viewModel::requestRuleApplicationPreview,
+                    enabled = state.rules.isNotEmpty(),
+                    modifier = Modifier.padding(bottom = 24.dp),
+                ) { Text("Regels met terugwerkende kracht toepassen →") }
+            }
         }
     }
 
@@ -155,6 +165,36 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
                 viewModel.addRule(categoryId, matchType, pattern)
                 showAddRuleDialog = false
             },
+        )
+    }
+
+    state.ruleApplicationPreview?.let { count ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelRuleApplicationPreview,
+            title = { Text("Regels toepassen op bestaande transacties?") },
+            text = {
+                Text(
+                    if (count == 0) {
+                        "Geen enkele bestaande transactie zou hierdoor van categorie wisselen — alles staat al zoals je regels het zouden zetten."
+                    } else {
+                        "$count ${if (count == 1) "transactie wisselt" else "transacties wisselen"} van categorie " +
+                            "op basis van je huidige regels. Gesplitste transacties worden overgeslagen."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmRuleApplication, enabled = count > 0) { Text("Toepassen") }
+            },
+            dismissButton = { TextButton(onClick = viewModel::cancelRuleApplicationPreview) { Text("Annuleren") } },
+        )
+    }
+
+    state.ruleApplicationResult?.let { count ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissRuleApplicationResult,
+            title = { Text("Klaar") },
+            text = { Text(if (count == 1) "1 transactie bijgewerkt." else "$count transacties bijgewerkt.") },
+            confirmButton = { TextButton(onClick = viewModel::dismissRuleApplicationResult) { Text("Oké") } },
         )
     }
 }

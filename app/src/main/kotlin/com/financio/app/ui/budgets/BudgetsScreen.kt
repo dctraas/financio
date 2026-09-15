@@ -112,6 +112,7 @@ fun BudgetsScreen(onCategoryClick: (Long) -> Unit = {}, viewModel: BudgetsViewMo
             categoryName = edit.category.name,
             currentLimit = edit.currentLimit,
             currentRollover = edit.currentRollover,
+            suggestedLimit = state.suggestedLimitByCategory[edit.category.id],
             onDismiss = { editingCategory = null },
             onSave = { limit, rollover ->
                 viewModel.setLimit(edit.category.id, limit, rollover)
@@ -332,6 +333,7 @@ private fun BudgetLimitDialog(
     categoryName: String,
     currentLimit: Money?,
     currentRollover: Boolean,
+    suggestedLimit: Money?,
     onDismiss: () -> Unit,
     onSave: (Money, Boolean) -> Unit,
 ) {
@@ -352,6 +354,22 @@ private fun BudgetLimitDialog(
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // Offered, never applied on its own - a plain average can be a bad limit (a
+                // one-off big purchase skews it), so it only fills the field in when tapped, and
+                // only shows while the field is still empty (already typing your own number, or
+                // editing an existing limit, means there's nothing left to suggest).
+                if (suggestedLimit != null && text.isBlank()) {
+                    Text(
+                        "Voorstel: ${suggestedLimit.toDisplayString()} (gemiddeld laatste 3 maanden) — gebruiken →",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .clickable { text = suggestedLimit.toEuroInputString() },
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
