@@ -125,4 +125,6 @@ data class SavingsGoalEntity(
     @ColumnInfo(defaultValue = "NULL") val targetDate: String? = null,
     /** See [com.financio.core.model.SavingsGoal.archived]. Added in schema v4. */
     @ColumnInfo(defaultValue = "0") val archived: Boolean = false,
+    /** See [com.financio.core.model.SavingsGoal.manualAdjustment]. Added in schema v5. */
+    @ColumnInfo(defaultValue = "0") val manualAdjustmentCents: Long = 0,
 )

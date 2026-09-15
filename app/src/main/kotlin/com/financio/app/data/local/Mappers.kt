@@ -76,6 +76,7 @@ fun SavingsGoalEntity.toDomain() = SavingsGoal(
     linkedAccountId = linkedAccountId,
     targetDate = targetDate?.let { LocalDate.parse(it) },
     archived = archived,
+    manualAdjustment = Money(manualAdjustmentCents),
 )
 
 fun CategoryEntity.toDomain() = Category(id = id, name = name, colorHex = colorHex, parentId = parentId)
