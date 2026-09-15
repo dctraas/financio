@@ -45,7 +45,14 @@ fun Transaction.toEntity() = TransactionEntity(
     note = note,
 )
 
-fun AccountEntity.toDomain() = Account(id = id, name = name, ibanMasked = ibanMasked)
+fun AccountEntity.toDomain() = Account(
+    id = id,
+    name = name,
+    ibanMasked = ibanMasked,
+    hidden = hidden,
+    excludedFromTotal = excludedFromTotal,
+    manualBalance = manualBalanceCents?.let { Money(it) },
+)
 
 fun TransactionSplitEntity.toDomain() = TransactionSplit(
     id = id,
@@ -66,6 +73,9 @@ fun SavingsGoalEntity.toDomain() = SavingsGoal(
     name = name,
     targetAmount = Money(targetAmountCents),
     categoryId = categoryId,
+    linkedAccountId = linkedAccountId,
+    targetDate = targetDate?.let { LocalDate.parse(it) },
+    archived = archived,
 )
 
 fun CategoryEntity.toDomain() = Category(id = id, name = name, colorHex = colorHex, parentId = parentId)

@@ -61,3 +61,27 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         db.execSQL("ALTER TABLE transactions ADD COLUMN note TEXT DEFAULT NULL")
     }
 }
+
+/**
+ * v3 -> v4: six new columns across two existing tables, all nullable or defaulted, same
+ * "purely additive" shape as [MIGRATION_1_2] and [MIGRATION_2_3] — the Rekeningen redesign's
+ * hidden/excludedFromTotal/manualBalance, and Spaardoelen's linkedAccountId/targetDate/archived.
+ * Deliberately no new FOREIGN KEY on `linkedAccountId`: SQLite's ALTER TABLE ADD COLUMN can't add
+ * one without rebuilding the whole table, and this app's own encrypted database - already
+ * carrying a real person's imported transaction history by the time this runs - is exactly the
+ * kind of migration where "smaller and purely additive" beats "in-place table rebuild" even
+ * though the rebuild would be the more textbook-correct schema. The column is still validated at
+ * the app layer (SavingsGoalRepository), same as any other cross-table reference this app doesn't
+ * enforce at the SQL level.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE accounts ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE accounts ADD COLUMN excludedFromTotal INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE accounts ADD COLUMN manualBalanceCents INTEGER DEFAULT NULL")
+
+        db.execSQL("ALTER TABLE savings_goals ADD COLUMN linkedAccountId INTEGER DEFAULT NULL")
+        db.execSQL("ALTER TABLE savings_goals ADD COLUMN targetDate TEXT DEFAULT NULL")
+        db.execSQL("ALTER TABLE savings_goals ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+    }
+}

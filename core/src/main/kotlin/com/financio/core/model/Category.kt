@@ -4,6 +4,17 @@ data class Account(
     val id: Long = 0,
     val name: String,
     val ibanMasked: String,
+    /** Hidden from the accounts list's day-to-day view without deleting its (real) transaction history — e.g. a closed account. */
+    val hidden: Boolean = false,
+    /** Left out of every cross-account total (Meer's tile, Vermogen) without hiding the account itself — e.g. a shared account where only part of the balance is really yours. */
+    val excludedFromTotal: Boolean = false,
+    /**
+     * A user-typed balance for an account whose imports carry no [Transaction.balanceAfter] at
+     * all (an MT940 export with no closing-balance record, say) - the account's balance is
+     * "onbekend" rather than a silently-wrong €0 until this is filled in. Ignored once a real
+     * balanceAfter exists; see AccountBalance.resolve.
+     */
+    val manualBalance: Money? = null,
 )
 
 data class Category(

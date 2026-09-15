@@ -163,6 +163,22 @@ class RoomAccountRepository @Inject constructor(
 
     override suspend fun addAccount(name: String, ibanMasked: String): Long =
         dao.insert(com.financio.app.data.local.AccountEntity(name = name, ibanMasked = ibanMasked))
+
+    override suspend fun renameAccount(accountId: Long, name: String) {
+        dao.rename(accountId, name)
+    }
+
+    override suspend fun setAccountHidden(accountId: Long, hidden: Boolean) {
+        dao.setHidden(accountId, hidden)
+    }
+
+    override suspend fun setAccountExcludedFromTotal(accountId: Long, excluded: Boolean) {
+        dao.setExcludedFromTotal(accountId, excluded)
+    }
+
+    override suspend fun setManualBalance(accountId: Long, balance: Money?) {
+        dao.setManualBalance(accountId, balance?.cents)
+    }
 }
 
 class RoomSavingsGoalRepository @Inject constructor(

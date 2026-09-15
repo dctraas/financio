@@ -16,6 +16,18 @@ interface AccountDao {
 
     @Query("SELECT * FROM accounts ORDER BY name")
     fun observeAll(): Flow<List<AccountEntity>>
+
+    @Query("UPDATE accounts SET name = :name WHERE id = :accountId")
+    suspend fun rename(accountId: Long, name: String)
+
+    @Query("UPDATE accounts SET hidden = :hidden WHERE id = :accountId")
+    suspend fun setHidden(accountId: Long, hidden: Boolean)
+
+    @Query("UPDATE accounts SET excludedFromTotal = :excluded WHERE id = :accountId")
+    suspend fun setExcludedFromTotal(accountId: Long, excluded: Boolean)
+
+    @Query("UPDATE accounts SET manualBalanceCents = :balanceCents WHERE id = :accountId")
+    suspend fun setManualBalance(accountId: Long, balanceCents: Long?)
 }
 
 @Dao

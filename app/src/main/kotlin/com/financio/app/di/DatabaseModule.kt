@@ -10,6 +10,7 @@ import com.financio.app.data.local.DatabasePassphraseProvider
 import com.financio.app.data.local.FinancioDatabase
 import com.financio.app.data.local.MIGRATION_1_2
 import com.financio.app.data.local.MIGRATION_2_3
+import com.financio.app.data.local.MIGRATION_3_4
 import com.financio.app.data.local.SavingsGoalDao
 import com.financio.app.data.local.TransactionDao
 import dagger.Module
@@ -39,7 +40,7 @@ object DatabaseModule {
         // page size fix in the version bump that pinned this version.
         return Room.databaseBuilder(context, FinancioDatabase::class.java, "financio.db")
             .openHelperFactory(SupportOpenHelperFactory(passphrase))
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
     }
 
