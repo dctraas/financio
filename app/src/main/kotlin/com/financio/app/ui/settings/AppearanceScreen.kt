@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.data.local.TextSize
 import com.financio.app.data.local.ThemeMode
 
 /** Reached from Meer's "Instellingen" section — was Settings' "Weergave" section. */
@@ -50,6 +51,17 @@ fun AppearanceScreen(onBackClick: () -> Unit, viewModel: SettingsViewModel = hil
                 ThemeModeChip("Donker", ThemeMode.DARK, state.themeMode, viewModel::setThemeMode)
                 ThemeModeChip("Systeem", ThemeMode.SYSTEM, state.themeMode, viewModel::setThemeMode)
             }
+
+            Text(
+                "Tekstgrootte",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextSizeChip("Klein", TextSize.SMALL, state.textSize, viewModel::setTextSize)
+                TextSizeChip("Standaard", TextSize.STANDARD, state.textSize, viewModel::setTextSize)
+                TextSizeChip("Groot", TextSize.LARGE, state.textSize, viewModel::setTextSize)
+            }
         }
     }
 }
@@ -59,6 +71,15 @@ private fun ThemeModeChip(label: String, mode: ThemeMode, selectedMode: ThemeMod
     FilterChip(
         selected = selectedMode == mode,
         onClick = { onSelect(mode) },
+        label = { Text(label) },
+    )
+}
+
+@Composable
+private fun TextSizeChip(label: String, size: TextSize, selectedSize: TextSize, onSelect: (TextSize) -> Unit) {
+    FilterChip(
+        selected = selectedSize == size,
+        onClick = { onSelect(size) },
         label = { Text(label) },
     )
 }
