@@ -1,13 +1,19 @@
 package com.financio.app.ui.nav
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -51,7 +57,8 @@ private sealed class Destination(val route: String, val label: String) {
     data object Budgets : Destination("budgets", "Budget")
     /** Registered with an optional `categoryId` so Budget can deep-link into one category's chart. */
     data object Charts : Destination(CHARTS_ROUTE, "Inzicht")
-    data object Meer : Destination("meer", "Meer")
+    /** Route/screen title stay "meer"/`MeerScreen` (see github.md's screen map) - only the tab's own label changed to match the schermontwerp redesign's "Beheer" rename. */
+    data object Meer : Destination("meer", "Beheer")
     data object Import : Destination("import", "Importeren")
     /** Registered with a required `transactionId` — what a tap on a transaction row now opens (R3). */
     data object TransactionDetail : Destination(TRANSACTION_DETAIL_ROUTE, "Transactie")
@@ -69,7 +76,8 @@ private sealed class Destination(val route: String, val label: String) {
     data object BackupExport : Destination("settings/backup-export", "Back-up & export")
 }
 
-private val bottomTabs = listOf(Destination.Vandaag, Destination.Transactions, Destination.SavingsGoals, Destination.Charts, Destination.Meer)
+// Order per the schermontwerp redesign: Inzicht now comes before Doelen (was the reverse).
+private val bottomTabs = listOf(Destination.Vandaag, Destination.Transactions, Destination.Charts, Destination.SavingsGoals, Destination.Meer)
 
 @Composable
 fun FinancioNavHost() {
@@ -80,29 +88,42 @@ fun FinancioNavHost() {
             val backStackEntry by navController.currentBackStackEntryAsState()
             val currentRoute = backStackEntry?.destination?.route
             if (bottomTabs.any { it.route == currentRoute }) {
-                NavigationBar {
-                    bottomTabs.forEach { destination ->
-                        NavigationBarItem(
-                            selected = currentRoute == destination.route,
-                            onClick = {
-                                // Charts and Transactions are both registered with an optional
-                                // arg; a plain tab tap navigates to the bare path so it falls
-                                // back to the default instead of literally targeting the
-                                // "{categoryId}"/"{uncategorized}" placeholder route string.
-                                val target = when (destination) {
-                                    Destination.Charts -> "charts"
-                                    Destination.Transactions -> "transactions"
-                                    else -> destination.route
-                                }
-                                navController.navigate(target) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { NavIcon(destination) },
-                            label = { Text(destination.label) },
-                        )
+                Column {
+                    // NavigationBar draws no border of its own - a 1dp top line is how the
+                    // schermontwerp redesign separates the bar from scrolled-under content
+                    // instead of an elevation shadow (the design has none anywhere).
+                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
+                        bottomTabs.forEach { destination ->
+                            NavigationBarItem(
+                                selected = currentRoute == destination.route,
+                                onClick = {
+                                    // Charts and Transactions are both registered with an optional
+                                    // arg; a plain tab tap navigates to the bare path so it falls
+                                    // back to the default instead of literally targeting the
+                                    // "{categoryId}"/"{uncategorized}" placeholder route string.
+                                    val target = when (destination) {
+                                        Destination.Charts -> "charts"
+                                        Destination.Transactions -> "transactions"
+                                        else -> destination.route
+                                    }
+                                    navController.navigate(target) {
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                                icon = { NavIcon(destination) },
+                                label = { Text(destination.label, fontWeight = if (currentRoute == destination.route) FontWeight.SemiBold else FontWeight.Medium) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                            )
+                        }
                     }
                 }
             }

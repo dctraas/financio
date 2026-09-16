@@ -35,12 +35,14 @@ interface FinancioColorTokens {
 }
 
 object FinancioColorsLight : FinancioColorTokens {
-    override val background = Color(0xFFF5F2EC) // warm paper
+    // Both corrected in the September 2026 layout-redesign handoff: background a touch less
+    // yellow, inkFaint darkened because the old value fell short of 4.5:1 for small text.
+    override val background = Color(0xFFF7F6F3) // warm paper
     override val surface = Color(0xFFFFFFFF)
     override val surfaceAlt = Color(0xFFEDE7DA)
     override val ink = Color(0xFF14201B)
     override val inkSoft = Color(0xFF5B6259)
-    override val inkFaint = Color(0xFF8B9188)
+    override val inkFaint = Color(0xFF6E746F)
     override val line = Color(0xFFDDD6C7)
     override val lineFaint = Color(0xFFE8E2D3)
     override val accent = Color(0xFF0F5C42) // deep bosgroen — the one brand accent

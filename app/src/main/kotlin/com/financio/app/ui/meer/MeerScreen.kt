@@ -51,7 +51,7 @@ fun MeerScreen(
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         item {
             Text(
-                "Meer",
+                "Beheer",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 20.dp, bottom = 16.dp),
