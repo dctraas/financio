@@ -72,8 +72,20 @@ private sealed interface TransactionListItem {
 }
 
 @Composable
-fun TransactionsScreen(onImportClick: () -> Unit, onOpenDetail: (Long) -> Unit, viewModel: TransactionsViewModel = hiltViewModel()) {
+fun TransactionsScreen(
+    onImportClick: () -> Unit,
+    onOpenDetail: (Long) -> Unit,
+    startWithUncategorizedFilter: Boolean = false,
+    viewModel: TransactionsViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
+
+    // "Nu doen" on Vandaag's uncategorized tile navigates here expecting the filter already
+    // applied, not a fresh, unfiltered list the user then has to filter themselves.
+    LaunchedEffect(startWithUncategorizedFilter) {
+        if (startWithUncategorizedFilter) viewModel.setCategoryFilter(CategoryFilter.Uncategorized)
+    }
+
     var categorizing by remember { mutableStateOf<Transaction?>(null) }
     var splitting by remember { mutableStateOf<Transaction?>(null) }
     var bulkApplyPrompt by remember { mutableStateOf<BulkApplyPrompt?>(null) }

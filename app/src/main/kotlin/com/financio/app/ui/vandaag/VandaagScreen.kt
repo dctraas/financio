@@ -44,6 +44,8 @@ import java.util.Locale
 @Composable
 fun VandaagScreen(
     onSeeAllClick: () -> Unit,
+    onCategorizeClick: () -> Unit,
+    onSubscriptionsClick: () -> Unit,
     onImportClick: () -> Unit,
     onOpenDetail: (Long) -> Unit,
     viewModel: VandaagViewModel = hiltViewModel(),
@@ -61,7 +63,7 @@ fun VandaagScreen(
             }
         }
         state.forecast?.let { forecast -> item { ForecastCard(forecast) } }
-        item { TaskTiles(state, onSeeAllClick) }
+        item { TaskTiles(state, onCategorizeClick, onSubscriptionsClick) }
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 8.dp),
@@ -256,7 +258,7 @@ private fun ForecastChart(forecast: BalanceForecastCalculator.Result, modifier: 
 }
 
 @Composable
-private fun TaskTiles(state: VandaagUiState, onSeeAllClick: () -> Unit) {
+private fun TaskTiles(state: VandaagUiState, onCategorizeClick: () -> Unit, onSubscriptionsClick: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state.uncategorizedCount > 0) {
             Column(
@@ -264,7 +266,7 @@ private fun TaskTiles(state: VandaagUiState, onSeeAllClick: () -> Unit) {
                     .weight(1f)
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .clickable(onClick = onSeeAllClick)
+                    .clickable(onClick = onCategorizeClick)
                     .padding(16.dp),
             ) {
                 Text(
@@ -294,6 +296,7 @@ private fun TaskTiles(state: VandaagUiState, onSeeAllClick: () -> Unit) {
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                    .clickable(onClick = onSubscriptionsClick)
                     .padding(16.dp),
             ) {
                 Text(state.subscriptionMonthlyTotal.toDisplayString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)

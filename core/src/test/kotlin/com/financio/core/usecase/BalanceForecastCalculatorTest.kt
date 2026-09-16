@@ -3,6 +3,7 @@ package com.financio.core.usecase
 import com.financio.core.model.Money
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 
@@ -95,6 +96,37 @@ class BalanceForecastCalculatorTest {
             upcomingSubscriptions = emptyList(),
         )
         assertNull(result.tightDate)
+    }
+
+    @Test
+    fun `upcoming income lands entirely on its own date, added on top of the daily spend`() {
+        val result = BalanceForecastCalculator.forecast(
+            currentBalance = Money(100_00),
+            today = LocalDate.of(2026, 9, 1),
+            averageDailySpend = Money(1_00),
+            upcomingSubscriptions = emptyList(),
+            upcomingIncome = listOf(LocalDate.of(2026, 9, 3) to Money(200_00)),
+        )
+        // 9/2: -1. 9/3: -1 and +200 the same day.
+        assertEquals(Money(99_00), result.points[1].balance)
+        assertEquals(Money(298_00), result.points[2].balance)
+        assertEquals(Money(297_00), result.points[3].balance)
+    }
+
+    @Test
+    fun `expected income before month-end keeps a low early-month balance from projecting as still negative`() {
+        val result = BalanceForecastCalculator.forecast(
+            currentBalance = Money(50_00),
+            today = LocalDate.of(2026, 9, 1),
+            averageDailySpend = Money(10_00),
+            upcomingSubscriptions = emptyList(),
+            upcomingIncome = listOf(LocalDate.of(2026, 9, 4) to Money(3_000_00)),
+        )
+        // Without the income, this would hit zero on 9/6 (50 - 5*10 = 0, tightDate) and go negative
+        // from there. With the salary landing on 9/4, it stays comfortably positive all month.
+        assertNull(result.tightDate)
+        val afterPayday = result.points.first { it.date == LocalDate.of(2026, 9, 6) }
+        assertTrue(afterPayday.balance.cents > 0)
     }
 
     @Test
