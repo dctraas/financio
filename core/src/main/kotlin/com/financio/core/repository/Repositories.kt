@@ -131,6 +131,9 @@ interface SavingsGoalRepository {
 
     suspend fun deleteGoal(goalId: Long)
 
+    /** Full edit ("bewerken") of an existing goal's own fields - name, doelbedrag, categorie, gekoppelde rekening, streefdatum. Leaves [SavingsGoal.archived] and [SavingsGoal.manualAdjustment] untouched; those have their own dedicated actions. */
+    suspend fun updateGoal(goalId: Long, name: String, targetAmount: Money, categoryId: Long, linkedAccountId: Long?, targetDate: LocalDate?)
+
     /** "Archiveren" on a gehaald doel - moves it out of the active/gehaald sections without deleting its history. */
     suspend fun setArchived(goalId: Long, archived: Boolean)
 

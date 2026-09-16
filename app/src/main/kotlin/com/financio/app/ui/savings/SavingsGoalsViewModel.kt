@@ -238,6 +238,11 @@ class SavingsGoalsViewModel @Inject constructor(
         viewModelScope.launch { savingsGoalRepository.addGoal(name, targetAmount, categoryId, linkedAccountId, targetDate) }
     }
 
+    /** "Spaardoel bewerken" - tapping an existing goal, as opposed to [addGoal]'s "Nieuw spaardoel"/"Nieuw doel hiermee". */
+    fun editGoal(goalId: Long, name: String, targetAmount: Money, categoryId: Long, linkedAccountId: Long?, targetDate: LocalDate?) {
+        viewModelScope.launch { savingsGoalRepository.updateGoal(goalId, name, targetAmount, categoryId, linkedAccountId, targetDate) }
+    }
+
     /** The "+ Nieuwe categorie" option inside "Nieuw spaardoel"'s category picker - creates the category and hands its id back so the dialog can select it immediately, without the user ever leaving the dialog. */
     fun addCategory(name: String, onCreated: (Long) -> Unit) {
         val trimmed = name.trim()
