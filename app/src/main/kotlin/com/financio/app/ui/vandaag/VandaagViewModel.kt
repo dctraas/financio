@@ -11,6 +11,7 @@ import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.TransactionRepository
 import com.financio.core.usecase.BalanceForecastCalculator
 import com.financio.core.usecase.DetectedSubscription
+import com.financio.core.usecase.RecurringIncomeDetector
 import com.financio.core.usecase.SafeToSpendCalculator
 import com.financio.core.usecase.SubscriptionDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -109,7 +110,16 @@ class VandaagViewModel @Inject constructor(
         val upcoming = subscriptions
             .filter { it.estimatedNextDate.isAfter(today) && !it.estimatedNextDate.isAfter(endOfMonth) }
             .map { it.estimatedNextDate to Money(kotlin.math.abs(it.averageAmount.cents)) }
-        return BalanceForecastCalculator.forecast(currentBalance, today, averageDailySpend(transactions, subscriptions, today), upcoming)
+        val upcomingIncome = RecurringIncomeDetector.detect(transactions)
+            .filter { it.estimatedNextDate.isAfter(today) && !it.estimatedNextDate.isAfter(endOfMonth) }
+            .map { it.estimatedNextDate to it.averageAmount }
+        return BalanceForecastCalculator.forecast(
+            currentBalance,
+            today,
+            averageDailySpend(transactions, subscriptions, today),
+            upcoming,
+            upcomingIncome,
+        )
     }
 
     /**

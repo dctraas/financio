@@ -37,14 +37,17 @@ import com.financio.app.ui.yearreview.YearReviewScreen
 
 private const val ARG_CATEGORY_ID = "categoryId"
 private const val ARG_TRANSACTION_ID = "transactionId"
+private const val ARG_UNCATEGORIZED = "uncategorized"
 private const val CHARTS_ROUTE = "charts?categoryId={categoryId}"
 private const val TRANSACTION_DETAIL_ROUTE = "transaction/{transactionId}"
+private const val TRANSACTIONS_ROUTE = "transactions?uncategorized={uncategorized}"
 
 private sealed class Destination(val route: String, val label: String) {
     // Vandaag is the start destination - "het antwoord, niet de data" - so it's first both here
     // and in the bottom bar.
     data object Vandaag : Destination("vandaag", "Vandaag")
-    data object Transactions : Destination("transactions", "Transacties")
+    /** Registered with an optional `uncategorized` flag so Vandaag's "Nu doen" tile can deep-link straight into the already-filtered list. */
+    data object Transactions : Destination(TRANSACTIONS_ROUTE, "Transacties")
     data object Budgets : Destination("budgets", "Budget")
     /** Registered with an optional `categoryId` so Budget can deep-link into one category's chart. */
     data object Charts : Destination(CHARTS_ROUTE, "Inzicht")
@@ -82,9 +85,15 @@ fun FinancioNavHost() {
                         NavigationBarItem(
                             selected = currentRoute == destination.route,
                             onClick = {
-                                // Charts is registered with an optional arg; a plain tab tap
-                                // navigates to the bare path so it falls back to the default.
-                                val target = if (destination == Destination.Charts) "charts" else destination.route
+                                // Charts and Transactions are both registered with an optional
+                                // arg; a plain tab tap navigates to the bare path so it falls
+                                // back to the default instead of literally targeting the
+                                // "{categoryId}"/"{uncategorized}" placeholder route string.
+                                val target = when (destination) {
+                                    Destination.Charts -> "charts"
+                                    Destination.Transactions -> "transactions"
+                                    else -> destination.route
+                                }
                                 navController.navigate(target) {
                                     popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                     launchSingleTop = true
@@ -107,20 +116,32 @@ fun FinancioNavHost() {
             composable(Destination.Vandaag.route) {
                 VandaagScreen(
                     onSeeAllClick = {
-                        navController.navigate(Destination.Transactions.route) {
+                        navController.navigate("transactions") {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
                         }
                     },
+                    onCategorizeClick = {
+                        navController.navigate("transactions?uncategorized=true") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onSubscriptionsClick = { navController.navigate(Destination.Subscriptions.route) },
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
                 )
             }
-            composable(Destination.Transactions.route) {
+            composable(
+                route = Destination.Transactions.route,
+                arguments = listOf(navArgument(ARG_UNCATEGORIZED) { type = NavType.BoolType; defaultValue = false }),
+            ) { backStackEntry ->
                 TransactionsScreen(
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
+                    startWithUncategorizedFilter = backStackEntry.arguments?.getBoolean(ARG_UNCATEGORIZED) ?: false,
                 )
             }
             composable(Destination.Budgets.route) {
