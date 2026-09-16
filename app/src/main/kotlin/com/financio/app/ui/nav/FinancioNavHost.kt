@@ -56,7 +56,7 @@ private sealed class Destination(val route: String, val label: String) {
     /** Registered with a required `transactionId` — what a tap on a transaction row now opens (R3). */
     data object TransactionDetail : Destination(TRANSACTION_DETAIL_ROUTE, "Transactie")
     data object CategoryManagement : Destination("categories", "Categorieën & regels")
-    data object MerchantManagement : Destination("merchants", "Ondernemingen")
+    data object MerchantManagement : Destination("merchants", "Tegenpartijen")
     data object NetWorth : Destination("net-worth", "Vermogen")
     data object YearReview : Destination("year-review", "Jaaroverzicht")
     data object Subscriptions : Destination("subscriptions", "Abonnementen")

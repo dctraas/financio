@@ -128,7 +128,7 @@ class AppPreferences(context: Context) {
         prefs.edit().putStringSet(KEY_CONFIRMED_MERCHANT_ALIASES, encoded).apply()
     }
 
-    /** "Ja, dit is dezelfde onderneming" — every name in [rawNames] resolves to [canonicalName] from now on, everywhere a counterparty is grouped. */
+    /** "Ja, dit is dezelfde tegenpartij" — every name in [rawNames] resolves to [canonicalName] from now on, everywhere a counterparty is grouped. */
     fun confirmMerchantGroup(canonicalName: String, rawNames: List<String>) {
         val updated = _confirmedMerchantAliases.value + rawNames.associateWith { canonicalName }
         persistMerchantAliases(updated)
@@ -140,14 +140,14 @@ class AppPreferences(context: Context) {
         }
     }
 
-    /** "Nee, dit zijn verschillende ondernemingen" — stops suggesting [canonicalName] as a merge again. */
+    /** "Nee, dit zijn verschillende tegenpartijen" — stops suggesting [canonicalName] as a merge again. */
     fun dismissMerchantGroup(canonicalName: String) {
         val updated = _dismissedMerchantGroups.value + canonicalName
         prefs.edit().putStringSet(KEY_DISMISSED_MERCHANT_GROUPS, updated).apply()
         _dismissedMerchantGroups.value = updated
     }
 
-    /** Un-aliases just [rawName], leaving any other names still mapped to the same canonical untouched — the Ondernemingen screen's per-member "verwijderen" action, distinct from [dismissMerchantGroup]'s whole-suggestion "nee". */
+    /** Un-aliases just [rawName], leaving any other names still mapped to the same canonical untouched — the Tegenpartijen screen's per-member "verwijderen" action, distinct from [dismissMerchantGroup]'s whole-suggestion "nee". */
     fun removeMerchantAlias(rawName: String) {
         val updated = _confirmedMerchantAliases.value - rawName
         persistMerchantAliases(updated)

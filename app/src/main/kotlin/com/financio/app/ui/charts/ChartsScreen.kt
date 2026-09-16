@@ -318,7 +318,7 @@ private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onM
             }
         }
         Text(
-            "Ondernemingen beheren →",
+            "Tegenpartijen beheren →",
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.bodySmall,
@@ -328,7 +328,7 @@ private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onM
 }
 
 /**
- * "Deze lijken bij dezelfde onderneming te horen" - a suggestion to merge branches of the same
+ * "Deze lijken bij dezelfde tegenpartij te horen" - a suggestion to merge branches of the same
  * chain into one row below (see MerchantGrouper), never applied without this explicit yes/no:
  * a wrong merge would silently blend two unrelated payees' spend into one number, so nothing is
  * folded together until the user confirms it themselves.
@@ -343,7 +343,7 @@ private fun MergeSuggestionCard(suggestion: MerchantGrouper.MerchantGroupCandida
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(12.dp),
     ) {
-        Text("Dit lijkt dezelfde onderneming", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text("Dit lijkt dezelfde tegenpartij", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "${joinNatural(suggestion.rawNames)} → \"${suggestion.canonicalName}\"",
             style = MaterialTheme.typography.bodySmall,

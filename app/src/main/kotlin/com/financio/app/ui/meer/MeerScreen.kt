@@ -137,7 +137,7 @@ fun MeerScreen(
         item { SectionHeader("Instellingen") }
         item { MeerRow("Vermogen", onNetWorthClick) }
         item { MeerRow("Jaaroverzicht", onYearReviewClick) }
-        item { MeerRow("Ondernemingen", onMerchantManagementClick) }
+        item { MeerRow("Tegenpartijen", onMerchantManagementClick) }
         item { MeerRow("Weergave", onAppearanceClick) }
         item { MeerRow("Vergrendeling & privacy", onLockPrivacyClick) }
         item { MeerRow("Meldingen", onNotificationsClick) }
