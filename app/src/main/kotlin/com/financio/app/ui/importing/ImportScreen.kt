@@ -115,6 +115,14 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
 
             is ImportUiState.Failed -> FailedContent(current, padding, onRetryWithDateColumn = viewModel::retryWithDateColumn)
 
+            is ImportUiState.AccountDetected -> AccountDetectedContent(
+                state = current,
+                padding = padding,
+                onConfirm = viewModel::confirmNewAccount,
+                onLinkToExisting = viewModel::linkToExistingAccount,
+                onCancel = viewModel::cancelAccountDetection,
+            )
+
             is ImportUiState.Ready -> ReadyContent(current, categories, padding, viewModel)
 
             is ImportUiState.Imported -> Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
@@ -261,6 +269,105 @@ private fun FailedContent(state: ImportUiState.Failed, padding: PaddingValues, o
                 }
             }
         }
+    }
+}
+
+/**
+ * Shown when the imported file's own account (an IBAN, or an internal ING code for an account
+ * with none visible) matches none of the app's known accounts yet — see
+ * [ImportViewModel.handleUnknownAccount]. Naam/IBAN mirror [com.financio.app.ui.accounts.AccountsScreen]'s
+ * "Nieuwe rekening" dialog, just as a full-page step in the import flow instead of a dialog, so
+ * confirming here flows straight back into importing into the newly created account.
+ */
+@Composable
+private fun AccountDetectedContent(
+    state: ImportUiState.AccountDetected,
+    padding: PaddingValues,
+    onConfirm: (name: String, ibanMasked: String) -> Unit,
+    onLinkToExisting: (accountId: Long) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var name by remember { mutableStateOf(state.suggestedName) }
+    var iban by remember { mutableStateOf("") }
+    var showExistingPicker by remember { mutableStateOf(false) }
+    val isValid = name.isNotBlank() && iban.isNotBlank()
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+    ) {
+        Text("Nieuwe rekening gevonden", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Dit bestand hoort bij een rekening die nog niet in Financio bestaat. Voeg hem toe " +
+                "om deze transacties aan de juiste rekening te koppelen.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
+        )
+
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Naam") },
+            placeholder = { Text("bijv. ING Spaarrekening") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = iban,
+            onValueChange = { iban = it },
+            label = { Text("IBAN (gemaskeerd)") },
+            placeholder = { Text("bijv. NL•• INGB •••• •• 1234") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
+
+        Button(
+            onClick = { onConfirm(name.trim(), iban.trim()) },
+            enabled = isValid,
+            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+        ) { Text("Rekening toevoegen") }
+
+        if (state.existingAccounts.isNotEmpty()) {
+            Text(
+                "Dit is eigenlijk een bestaande rekening →",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { showExistingPicker = true }.padding(top = 20.dp),
+            )
+        }
+        Text(
+            "Annuleren",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clickable(onClick = onCancel).padding(top = 16.dp),
+        )
+    }
+
+    if (showExistingPicker) {
+        AlertDialog(
+            onDismissRequest = { showExistingPicker = false },
+            title = { Text("Aan welke rekening horen deze transacties?") },
+            text = {
+                Column {
+                    state.existingAccounts.forEach { account ->
+                        Text(
+                            account.name,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showExistingPicker = false
+                                    onLinkToExisting(account.id)
+                                }
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showExistingPicker = false }) { Text("Annuleren") } },
+        )
     }
 }
 

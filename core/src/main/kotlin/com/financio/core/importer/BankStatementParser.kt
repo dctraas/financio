@@ -16,6 +16,15 @@ class UnrecognizedFormatException(
     val detectedColumns: List<String> = emptyList(),
 ) : Exception(message)
 
+/**
+ * The file's own account, as identified by the file itself (an IBAN, or an internal ING code
+ * like "L866-14401" for a savings account that has no visible IBAN in the export) — not a
+ * counterparty. Used to detect whether an import belongs to an account the app doesn't know
+ * about yet. [suggestedName] is a human-readable label the file also provides, if any
+ * (e.g. "Oranje Spaarrekening"), to prefill a new-account screen with.
+ */
+data class DetectedAccount(val rawIdentifier: String, val suggestedName: String? = null)
+
 /** One adapter per bron-formaat. Everything above this interface is formaat-onafhankelijk. */
 interface BankStatementParser {
     val format: SourceFormat
@@ -26,6 +35,13 @@ interface BankStatementParser {
      * parser except [CsvIngParser], which is the only one that identifies columns by name at all.
      */
     fun parse(content: String, accountId: Long, dateColumnOverrideIndex: Int? = null): List<ParsedTransaction>
+
+    /**
+     * Identifies which of the user's own bank accounts this file is an export of, if the format
+     * exposes that. Returns null when the file carries no such identifier or parsing it fails —
+     * callers treat that as "can't tell", not as "this is a new account".
+     */
+    fun detectOwnAccount(content: String): DetectedAccount? = null
 }
 
 /**

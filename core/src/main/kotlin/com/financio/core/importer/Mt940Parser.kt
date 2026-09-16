@@ -69,6 +69,17 @@ class Mt940Parser : BankStatementParser {
         return transactions
     }
 
+    /**
+     * Reads the file's own account from the :25: tag ("Account Identification" — an IBAN, or an
+     * IBAN/currency pair like "NL91ABNA0417164300/EUR"). MT940 has no separate account-name tag,
+     * so unlike the CSV parser this never has a suggested name to offer.
+     */
+    override fun detectOwnAccount(content: String): DetectedAccount? {
+        val line = content.lineSequence().firstOrNull { it.startsWith(TAG_ACCOUNT) } ?: return null
+        val rawIdentifier = line.removePrefix(TAG_ACCOUNT).substringBefore("/").trim()
+        return rawIdentifier.takeIf { it.isNotBlank() }?.let { DetectedAccount(it) }
+    }
+
     /** A raw :86: line's continuation, when the bank wraps a long info field over multiple lines. */
     private fun isContinuationLine(line: String): Boolean =
         line.isNotBlank() && !line.startsWith(":")
@@ -93,6 +104,7 @@ class Mt940Parser : BankStatementParser {
     companion object {
         private const val TAG_STATEMENT_LINE = ":61:"
         private const val TAG_INFO = ":86:"
+        private const val TAG_ACCOUNT = ":25:"
         private const val RAW_KEY = "__raw__"
 
         // YYMMDD, optional MMDD entry date, D or C funds code, amount, rest (type code + refs, ignored).

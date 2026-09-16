@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.financio.app.DefaultAccount
 import com.financio.app.notifications.BudgetThresholdNotifier
 import com.financio.core.categorize.LearnedRule
+import com.financio.core.importer.DetectedAccount
 import com.financio.core.importer.UnrecognizedFormatException
 import com.financio.core.model.Account
 import com.financio.core.model.Category
@@ -12,6 +13,7 @@ import com.financio.core.model.Transaction
 import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.TransactionRepository
+import com.financio.core.usecase.AccountDetectionResult
 import com.financio.core.usecase.ImportPreview
 import com.financio.core.usecase.ImportStatementUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -67,6 +69,19 @@ sealed interface ImportUiState {
         val detectedColumns: List<String> = emptyList(),
     ) : ImportUiState
 
+    /**
+     * The file's own account (see [com.financio.core.importer.DetectedAccount]) matched no
+     * account the app already knows about. [suggestedName] prefills the new-account form when
+     * the file provided one (a savings account's "Rekening naam"); otherwise a generic default.
+     * [existingAccounts] backs the escape hatch for a false positive — "dit is eigenlijk een
+     * bestaande rekening" — for the one case the zero-transaction backfill heuristic can't cover
+     * safely: re-importing into an already-used sole account before it's ever been learned.
+     */
+    data class AccountDetected(
+        val suggestedName: String,
+        val existingAccounts: List<Account>,
+    ) : ImportUiState
+
     data object Imported : ImportUiState
 }
 
@@ -76,7 +91,7 @@ class ImportViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val budgetThresholdNotifier: BudgetThresholdNotifier,
     private val transactionRepository: TransactionRepository,
-    accountRepository: AccountRepository,
+    private val accountRepository: AccountRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ImportUiState>(ImportUiState.PickFile)
@@ -107,14 +122,90 @@ class ImportViewModel @Inject constructor(
     private var pendingFileContent: String? = null
     private var pendingAccountId: Long? = null
 
+    // Set while ImportUiState.AccountDetected is showing, so its follow-up actions
+    // (confirmNewAccount/linkToExistingAccount) know which identifier to learn.
+    private var pendingDetectedAccount: DetectedAccount? = null
+
     fun selectAccount(accountId: Long) {
         _selectedAccountId.value = accountId
     }
 
     fun onFilePicked(content: String) {
         pendingFileContent = content
-        pendingAccountId = _selectedAccountId.value
-        load(content, _selectedAccountId.value, dateColumnOverrideIndex = null)
+        _uiState.value = ImportUiState.Loading
+        viewModelScope.launch {
+            val knownAccounts = accounts.value
+            when (val detection = importStatementUseCase.detectAccount(content, knownAccounts)) {
+                is AccountDetectionResult.Matched -> {
+                    _selectedAccountId.value = detection.accountId
+                    pendingAccountId = detection.accountId
+                    load(content, detection.accountId, dateColumnOverrideIndex = null)
+                }
+                is AccountDetectionResult.Unknown -> handleUnknownAccount(content, detection.detected, knownAccounts)
+                AccountDetectionResult.Undetectable -> {
+                    pendingAccountId = _selectedAccountId.value
+                    load(content, _selectedAccountId.value, dateColumnOverrideIndex = null)
+                }
+            }
+        }
+    }
+
+    /**
+     * A file identifies an account none of [knownAccounts] has learned yet. Silently attaching
+     * the identifier is only safe when there's exactly one candidate this could plausibly be —
+     * an unlearned account with zero transactions of its own — since a pre-existing account with
+     * real history but no learned identifier (every account before this feature shipped) must
+     * never have a different account's transactions silently attached to it; that's the bug this
+     * whole feature exists to fix. Anything less certain surfaces the new-account screen instead.
+     */
+    private suspend fun handleUnknownAccount(content: String, detected: DetectedAccount, knownAccounts: List<Account>) {
+        val unlearned = knownAccounts.filter { it.importIdentifier == null }
+        val soleVirginCandidate = unlearned.singleOrNull()
+            ?.takeIf { transactionRepository.existingDedupHashes(it.id).isEmpty() }
+        if (soleVirginCandidate != null) {
+            accountRepository.setImportIdentifier(soleVirginCandidate.id, detected.rawIdentifier)
+            _selectedAccountId.value = soleVirginCandidate.id
+            pendingAccountId = soleVirginCandidate.id
+            load(content, soleVirginCandidate.id, dateColumnOverrideIndex = null)
+        } else {
+            pendingDetectedAccount = detected
+            _uiState.value = ImportUiState.AccountDetected(
+                suggestedName = detected.suggestedName ?: "Nieuwe rekening",
+                existingAccounts = knownAccounts,
+            )
+        }
+    }
+
+    /** "Rekening toevoegen" on the new-account screen — creates the account and continues the import straight into it. */
+    fun confirmNewAccount(name: String, ibanMasked: String) {
+        val content = pendingFileContent ?: return
+        val detected = pendingDetectedAccount ?: return
+        viewModelScope.launch {
+            val accountId = accountRepository.addAccount(name, ibanMasked, importIdentifier = detected.rawIdentifier)
+            pendingDetectedAccount = null
+            _selectedAccountId.value = accountId
+            pendingAccountId = accountId
+            load(content, accountId, dateColumnOverrideIndex = null)
+        }
+    }
+
+    /** The escape hatch — "dit is eigenlijk een bestaande rekening" — for a false-positive new-account detection. */
+    fun linkToExistingAccount(accountId: Long) {
+        val content = pendingFileContent ?: return
+        val detected = pendingDetectedAccount ?: return
+        viewModelScope.launch {
+            accountRepository.setImportIdentifier(accountId, detected.rawIdentifier)
+            pendingDetectedAccount = null
+            _selectedAccountId.value = accountId
+            pendingAccountId = accountId
+            load(content, accountId, dateColumnOverrideIndex = null)
+        }
+    }
+
+    /** Backs out of the new-account screen without importing anything. */
+    fun cancelAccountDetection() {
+        pendingDetectedAccount = null
+        _uiState.value = ImportUiState.PickFile
     }
 
     /** The error screen's recovery action - "column N is actually the date column". */

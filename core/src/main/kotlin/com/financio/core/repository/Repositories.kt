@@ -104,8 +104,11 @@ interface BudgetRepository {
 interface AccountRepository {
     fun observeAccounts(): Flow<List<Account>>
 
-    /** Returns the new account's id. */
-    suspend fun addAccount(name: String, ibanMasked: String): Long
+    /** Returns the new account's id. [importIdentifier] links the account to a file-detected account (see [com.financio.core.importer.DetectedAccount]) right away, when known at creation time. */
+    suspend fun addAccount(name: String, ibanMasked: String, importIdentifier: String? = null): Long
+
+    /** Learns (or overwrites) which file-detected account this app account corresponds to - set once an import is confirmed for it. */
+    suspend fun setImportIdentifier(accountId: Long, identifier: String)
 
     /** An IBAN is a bank's identifier, not a name someone picked - this is the "naam wijzigen" action on Rekeningen. */
     suspend fun renameAccount(accountId: Long, name: String)

@@ -58,4 +58,24 @@ class Mt940ParserTest {
         assertEquals(2, transactions.size)
         assertEquals("Jumbo", transactions[1].counterpartyName)
     }
+
+    @Test
+    fun `detectOwnAccount reads the IBAN from the 25 tag`() {
+        val detected = Mt940Parser().detectOwnAccount(sampleStatement)
+        assertEquals("NL12INGB0001234567", detected?.rawIdentifier)
+        assertEquals(null, detected?.suggestedName)
+    }
+
+    @Test
+    fun `detectOwnAccount strips a currency suffix off the 25 tag`() {
+        val withCurrency = sampleStatement.replace(":25:NL12INGB0001234567", ":25:NL12INGB0001234567/EUR")
+        val detected = Mt940Parser().detectOwnAccount(withCurrency)
+        assertEquals("NL12INGB0001234567", detected?.rawIdentifier)
+    }
+
+    @Test
+    fun `detectOwnAccount returns null when the 25 tag is absent`() {
+        val withoutTag = sampleStatement.lines().filterNot { it.startsWith(":25:") }.joinToString("\n")
+        assertEquals(null, Mt940Parser().detectOwnAccount(withoutTag))
+    }
 }

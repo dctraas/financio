@@ -17,6 +17,8 @@ data class AccountEntity(
     @ColumnInfo(defaultValue = "0") val excludedFromTotal: Boolean = false,
     /** See [com.financio.core.model.Account.manualBalance]. Added in schema v4. */
     @ColumnInfo(defaultValue = "NULL") val manualBalanceCents: Long? = null,
+    /** See [com.financio.core.model.Account.importIdentifier]. Added in schema v6. */
+    @ColumnInfo(defaultValue = "NULL") val importIdentifier: String? = null,
 )
 
 @Entity(tableName = "categories")

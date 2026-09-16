@@ -189,8 +189,12 @@ class RoomAccountRepository @Inject constructor(
     override fun observeAccounts(): Flow<List<Account>> =
         dao.observeAll().map { entities -> entities.map { it.toDomain() } }
 
-    override suspend fun addAccount(name: String, ibanMasked: String): Long =
-        dao.insert(com.financio.app.data.local.AccountEntity(name = name, ibanMasked = ibanMasked))
+    override suspend fun addAccount(name: String, ibanMasked: String, importIdentifier: String?): Long =
+        dao.insert(com.financio.app.data.local.AccountEntity(name = name, ibanMasked = ibanMasked, importIdentifier = importIdentifier))
+
+    override suspend fun setImportIdentifier(accountId: Long, identifier: String) {
+        dao.setImportIdentifier(accountId, identifier)
+    }
 
     override suspend fun renameAccount(accountId: Long, name: String) {
         dao.rename(accountId, name)
