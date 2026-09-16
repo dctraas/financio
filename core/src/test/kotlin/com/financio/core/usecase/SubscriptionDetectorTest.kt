@@ -187,4 +187,37 @@ class SubscriptionDetectorTest {
         assertTrue(SubscriptionDetector.detect(groceries).isEmpty())
         assertTrue(SubscriptionDetector.detectUncertain(groceries).isEmpty())
     }
+
+    @Test
+    fun `manualSummary summarizes even a single occurrence that never clears detectUncertain's own bar`() {
+        val single = listOf(txn("Sportschool", -3000, LocalDate.of(2026, 1, 10)))
+        val summary = SubscriptionDetector.manualSummary("Sportschool", single)
+
+        assertEquals("Sportschool", summary?.counterpartyName)
+        assertEquals(1, summary?.occurrences)
+        assertEquals(Money(-3000), summary?.lastAmount)
+        assertEquals(LocalDate.of(2026, 1, 10), summary?.lastDate)
+        assertEquals("handmatig toegevoegd", summary?.reason)
+    }
+
+    @Test
+    fun `manualSummary is null when the counterparty has no debit at all`() {
+        val onlyNetflix = listOf(txn("Netflix", -1299, LocalDate.of(2026, 1, 15)))
+        assertEquals(null, SubscriptionDetector.manualSummary("Sportschool", onlyNetflix))
+    }
+
+    @Test
+    fun `manualSummary ignores other counterparties and credits, using the most recent debit`() {
+        val mixed = listOf(
+            txn("Werkgever", 250000, LocalDate.of(2026, 1, 25)),
+            txn("Netflix", -1299, LocalDate.of(2026, 1, 15)),
+            txn("Sportschool", -3000, LocalDate.of(2026, 1, 10)),
+            txn("Sportschool", -3500, LocalDate.of(2026, 2, 10)),
+        )
+        val summary = SubscriptionDetector.manualSummary("Sportschool", mixed)
+
+        assertEquals(2, summary?.occurrences)
+        assertEquals(Money(-3500), summary?.lastAmount)
+        assertEquals(LocalDate.of(2026, 2, 10), summary?.lastDate)
+    }
 }
