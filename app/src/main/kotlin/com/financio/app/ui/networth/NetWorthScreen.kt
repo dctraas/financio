@@ -79,6 +79,17 @@ fun NetWorthScreen(onBackClick: () -> Unit, viewModel: NetWorthViewModel = hiltV
                 )
             }
 
+            // Financio has no bank connection - this total can only ever be as complete as the
+            // rekeningen the user has actually added, so it's easy to mistake it for an accurate
+            // total net worth when a savings account or other asset was simply never entered.
+            Text(
+                "Gebaseerd op de rekeningen en spaardoelen die je hebt toegevoegd. Heb je bijvoorbeeld " +
+                    "geen spaarrekening ingevoerd, dan telt dat geld hier niet mee.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+
             NetWorthBarChart(state.points, modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 20.dp))
 
             Row(
