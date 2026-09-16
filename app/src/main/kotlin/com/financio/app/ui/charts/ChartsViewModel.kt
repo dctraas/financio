@@ -60,6 +60,8 @@ data class CounterpartySpend(
     val counterpartyName: String,
     val amount: Money,
     val previousAverage: Money?,
+    /** The actual transactions (whole or split) behind [amount] for the period on screen, most recent first - "waar komt dit vandaan?"'s tap-to-expand. */
+    val transactions: List<Transaction>,
 )
 
 enum class SavingsTipKind { CATEGORY_SPIKE, PRICE_INCREASE, UNCERTAIN_SUBSCRIPTION, NO_BUDGET_LIMIT }
@@ -418,6 +420,10 @@ class ChartsViewModel @Inject constructor(
         val otherByCounterpartyPerPeriod = otherPeriods.map { p ->
             mergeByAlias(spendByCounterparty(transactions, splitsByTransaction, categoryId, p, m), aliases)
         }
+        val currentTransactionsByCounterparty = mergeTransactionsByAlias(
+            transactionsByCounterparty(transactions, splitsByTransaction, categoryId, periods[selectedIndex], m),
+            aliases,
+        )
 
         val list = currentByCounterparty.entries
             .map { (name, cents) ->
@@ -427,7 +433,12 @@ class ChartsViewModel @Inject constructor(
                 } else {
                     Money(otherByCounterpartyPerPeriod.sumOf { it[name] ?: 0L } / otherPeriods.size)
                 }
-                CounterpartySpend(name, Money(cents), previousAverage)
+                CounterpartySpend(
+                    counterpartyName = name,
+                    amount = Money(cents),
+                    previousAverage = previousAverage,
+                    transactions = currentTransactionsByCounterparty[name].orEmpty().sortedByDescending { it.date },
+                )
             }
             .sortedByDescending { it.amount.cents }
 
@@ -458,6 +469,31 @@ class ChartsViewModel @Inject constructor(
     private fun mergeByAlias(raw: Map<String, Long>, aliases: Map<String, String>): Map<String, Long> {
         val result = mutableMapOf<String, Long>()
         raw.forEach { (name, cents) -> result.merge(aliases[name] ?: name, cents, Long::plus) }
+        return result
+    }
+
+    /** Same match rule as [spendByCounterparty] (whole transaction or matching split), grouped by raw counterparty name - the actual transactions behind a [CounterpartySpend] row, for "waar komt dit vandaan?"'s tap-to-expand. A transaction with more than one split into [categoryId] still only appears once. */
+    private fun transactionsByCounterparty(
+        transactions: List<Transaction>,
+        splitsByTransaction: Map<Long, List<TransactionSplit>>,
+        categoryId: Long,
+        period: YearMonth,
+        m: ChartMode,
+    ): Map<String, List<Transaction>> {
+        val result = mutableMapOf<String, MutableList<Transaction>>()
+        transactions.forEach { t ->
+            if (!matchesPeriod(t.date, period, m)) return@forEach
+            val splits = splitsByTransaction[t.id]
+            val matches = if (splits.isNullOrEmpty()) t.categoryId == categoryId else splits.any { it.categoryId == categoryId }
+            if (matches) result.getOrPut(t.counterpartyName) { mutableListOf() }.add(t)
+        }
+        return result
+    }
+
+    /** [mergeByAlias]'s counterpart for transaction lists rather than summed cents. */
+    private fun mergeTransactionsByAlias(raw: Map<String, List<Transaction>>, aliases: Map<String, String>): Map<String, List<Transaction>> {
+        val result = mutableMapOf<String, MutableList<Transaction>>()
+        raw.forEach { (name, txns) -> result.getOrPut(aliases[name] ?: name) { mutableListOf() }.addAll(txns) }
         return result
     }
 
