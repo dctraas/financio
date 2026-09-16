@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         TransactionSplitEntity::class,
         SavingsGoalEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class FinancioDatabase : RoomDatabase() {

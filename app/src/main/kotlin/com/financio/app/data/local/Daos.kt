@@ -28,6 +28,9 @@ interface AccountDao {
 
     @Query("UPDATE accounts SET manualBalanceCents = :balanceCents WHERE id = :accountId")
     suspend fun setManualBalance(accountId: Long, balanceCents: Long?)
+
+    @Query("UPDATE accounts SET importIdentifier = :identifier WHERE id = :accountId")
+    suspend fun setImportIdentifier(accountId: Long, identifier: String)
 }
 
 @Dao

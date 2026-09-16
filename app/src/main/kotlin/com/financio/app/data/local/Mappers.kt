@@ -52,6 +52,7 @@ fun AccountEntity.toDomain() = Account(
     hidden = hidden,
     excludedFromTotal = excludedFromTotal,
     manualBalance = manualBalanceCents?.let { Money(it) },
+    importIdentifier = importIdentifier,
 )
 
 fun TransactionSplitEntity.toDomain() = TransactionSplit(

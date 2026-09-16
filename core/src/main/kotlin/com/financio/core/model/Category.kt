@@ -15,6 +15,15 @@ data class Account(
      * balanceAfter exists; see AccountBalance.resolve.
      */
     val manualBalance: Money? = null,
+    /**
+     * The raw account identifier a file import reported for this account (an IBAN, or an
+     * internal ING code for an account with none visible, like "L866-14401") — internal-only,
+     * never shown to the user. Distinct from [ibanMasked], which is a user-typed, deliberately
+     * masked display string and can't reliably be matched against an import file. Null until a
+     * successful import learns it, either by user confirmation (a newly detected account) or by
+     * backfilling a pre-existing account's first import after upgrading.
+     */
+    val importIdentifier: String? = null,
 )
 
 data class Category(

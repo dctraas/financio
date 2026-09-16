@@ -63,6 +63,25 @@ class CsvIngParser : BankStatementParser {
         return lines.drop(1).map { line -> parseLine(line, delimiter, columnIndex, tagIndex, accountId) }
     }
 
+    /**
+     * Reads the file's own account from the first data row's "Rekening"/"Rekening naam" columns
+     * (a checking account export has only the former; a savings account export has both). Returns
+     * null rather than throwing when either column is absent or the file has no data rows — an
+     * unidentifiable file is not the same as a malformed one.
+     */
+    override fun detectOwnAccount(content: String): DetectedAccount? {
+        val lines = content.lineSequence().filter { it.isNotBlank() }.toList()
+        if (lines.size < 2) return null
+        val delimiter = detectDelimiter(lines.first())
+        val header = splitCsvLine(lines.first(), delimiter).map { it.trim() }
+        val accountIndex = header.indexOf(COL_ACCOUNT).takeIf { it >= 0 } ?: return null
+        val nameIndex = header.indexOf(COL_ACCOUNT_NAME).takeIf { it >= 0 }
+        val fields = splitCsvLine(lines[1], delimiter)
+        val rawIdentifier = fields.getOrElse(accountIndex) { "" }.trim().takeIf { it.isNotBlank() } ?: return null
+        val suggestedName = nameIndex?.let { fields.getOrElse(it) { "" }.trim() }?.takeIf { it.isNotBlank() }
+        return DetectedAccount(rawIdentifier, suggestedName)
+    }
+
     /** A checking account exports "20260903"; a savings account's own export seen so far uses ISO "2026-09-03" instead - tries both rather than assuming every ING export shares one date format. */
     private fun parseDate(raw: String): LocalDate =
         DATE_FORMATS.firstNotNullOfOrNull { format -> runCatching { LocalDate.parse(raw, format) }.getOrNull() }
@@ -152,6 +171,8 @@ class CsvIngParser : BankStatementParser {
         private const val COL_NOTES = "Mededelingen"
         private const val COL_BALANCE = "Saldo na mutatie"
         private const val COL_TAG = "Tag"
+        private const val COL_ACCOUNT = "Rekening"
+        private const val COL_ACCOUNT_NAME = "Rekening naam"
 
         private val REQUIRED_COLUMNS = listOf(
             COL_DATE, COL_NAME, COL_COUNTERPARTY, COL_DIRECTION, COL_AMOUNT, COL_NOTES, COL_BALANCE,

@@ -164,6 +164,31 @@ class CsvIngParserTest {
     }
 
     @Test
+    fun `detectOwnAccount reads the Rekening and Rekening naam columns from a savings-account export`() {
+        val savingsAccountCsv = """
+            "Datum";"Omschrijving";"Rekening";"Rekening naam";"Tegenrekening";"Af Bij";"Bedrag";"Valuta";"Mutatiesoort";"Mededelingen";"Saldo na mutatie"
+            "2026-09-15";"Overboeking naar betaalrekening NL14INGB0008028652";"L866-14401";"Oranje Spaarrekening";"NL14INGB0008028652";"Af";"200,00";"EUR";"Opname";"";"8387,49"
+        """.trimIndent()
+
+        val detected = CsvIngParser().detectOwnAccount(savingsAccountCsv)
+        assertEquals("L866-14401", detected?.rawIdentifier)
+        assertEquals("Oranje Spaarrekening", detected?.suggestedName)
+    }
+
+    @Test
+    fun `detectOwnAccount reads only the Rekening column when Rekening naam is absent, as in a checking-account export`() {
+        val detected = CsvIngParser().detectOwnAccount(sampleCsv)
+        assertEquals("NL12INGB0001234567", detected?.rawIdentifier)
+        assertEquals(null, detected?.suggestedName)
+    }
+
+    @Test
+    fun `detectOwnAccount returns null when the Rekening column is absent`() {
+        val withoutAccountColumn = sampleCsv.replace("Rekening;", "")
+        assertEquals(null, CsvIngParser().detectOwnAccount(withoutAccountColumn))
+    }
+
+    @Test
     fun `parses a real RFC 4180-quoted, semicolon-delimited ING export`() {
         // This is the actual "Mijn ING" export format, confirmed against a real download copied
         // straight from the source: every field wrapped in double quotes, ";" as the delimiter.
