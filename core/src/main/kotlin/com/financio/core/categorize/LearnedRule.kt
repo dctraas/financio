@@ -15,10 +15,16 @@ import com.financio.core.model.MatchType
 object LearnedRule {
     const val PRIORITY = 50
 
-    fun from(categoryId: Long, counterpartyName: String) = CategoryRule(
+    /**
+     * [pattern] is usually the transaction's own counterparty name (the whole-counterparty rule
+     * this always used to learn), but can also be a narrower keyword the user picked from the
+     * description — see [CounterpartyConflict] — for a counterparty that sends transactions for
+     * more than one purpose under one name.
+     */
+    fun from(categoryId: Long, pattern: String) = CategoryRule(
         categoryId = categoryId,
         matchType = MatchType.KEYWORD,
-        pattern = counterpartyName,
+        pattern = pattern,
         priority = PRIORITY,
     )
 }

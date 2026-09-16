@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.notifications.BudgetThresholdNotifier
 import com.financio.app.usecase.safeToSpendFor
+import com.financio.core.categorize.CounterpartyConflict
 import com.financio.core.categorize.LearnedRule
 import com.financio.core.model.Account
 import com.financio.core.model.Category
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -71,6 +73,10 @@ data class TransactionsUiState(
     val totalCount: Int = 0,
     val uncategorizedCount: Int = 0,
     val categoryCounts: Map<Long, Int> = emptyMap(),
+    /** Non-null while the "meerdere soorten transacties bij deze rekeninghouder?" dialog is open — see [CategorizationConflict]. */
+    val categorizationConflict: CategorizationConflict? = null,
+    /** Non-null right after a categorize() actually persists - the screen turns this into its "ook toepassen op de rest?" follow-up, then clears it via [TransactionsViewModel.consumeAppliedCategorization]. */
+    val appliedCategorization: AppliedCategorization? = null,
 )
 
 @HiltViewModel
@@ -87,6 +93,9 @@ class TransactionsViewModel @Inject constructor(
 
     /** null = alle rekeningen — the default, and the only state a single-account install ever sees. */
     private val selectedAccountId = MutableStateFlow<Long?>(null)
+
+    private val categorizationConflict = MutableStateFlow<CategorizationConflict?>(null)
+    private val appliedCategorization = MutableStateFlow<AppliedCategorization?>(null)
 
     private val accounts = accountRepository.observeAccounts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -142,8 +151,16 @@ class TransactionsViewModel @Inject constructor(
         transactionRepository.observeSplitTransactionIds(),
         accounts,
         transactionRepository.observeAllSplits(),
-    ) { snapshot, splitIds, accountList, splitsByTransaction ->
-        snapshot.copy(splitTransactionIds = splitIds, accounts = accountList, splitsByTransaction = splitsByTransaction)
+        combine(categorizationConflict, appliedCategorization) { conflict, applied -> conflict to applied },
+    ) { snapshot, splitIds, accountList, splitsByTransaction, conflictAndApplied ->
+        val (conflict, applied) = conflictAndApplied
+        snapshot.copy(
+            splitTransactionIds = splitIds,
+            accounts = accountList,
+            splitsByTransaction = splitsByTransaction,
+            categorizationConflict = conflict,
+            appliedCategorization = applied,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionsUiState())
 
     fun selectAccount(accountId: Long?) {
@@ -167,14 +184,70 @@ class TransactionsViewModel @Inject constructor(
         categoryFilter.value = CategoryFilter.All
     }
 
-    /** Same "remember the choice as a rule" behavior as the import screen's manual categorization. */
+    /**
+     * Same "remember the choice as a rule" behavior as the import screen's manual categorization —
+     * unless [transaction]'s counterparty already has transactions in a *different* category
+     * elsewhere, in which case this pauses and opens [CategorizationConflict] instead of blindly
+     * learning a whole-counterparty rule that would wrongly capture that other, differently
+     * categorized series too (the Belastingdienst can mean both motorrijtuigenbelasting and
+     * kinderopvangtoeslag).
+     */
     fun categorize(transaction: Transaction, categoryId: Long) {
         viewModelScope.launch {
-            val previousSpent = budgetThresholdNotifier.currentSpent(categoryId)
-            transactionRepository.updateCategory(transaction.id, categoryId)
-            categoryRepository.addRule(LearnedRule.from(categoryId, transaction.counterpartyName))
-            budgetThresholdNotifier.checkAndNotify(categoryId, previousSpent)
+            val allTransactions = transactionRepository.observeAllTransactions().first()
+            val existingCategoryId = CounterpartyConflict.existingDifferentCategory(allTransactions, transaction.counterpartyName, categoryId)
+            if (existingCategoryId != null) {
+                val existingCategoryName = categoryRepository.observeCategories().first().firstOrNull { it.id == existingCategoryId }?.name
+                categorizationConflict.value = CategorizationConflict(transaction, categoryId, existingCategoryName, allTransactions)
+                return@launch
+            }
+            applyCategorize(transaction, categoryId)
         }
+    }
+
+    private suspend fun applyCategorize(transaction: Transaction, categoryId: Long) {
+        val previousSpent = budgetThresholdNotifier.currentSpent(categoryId)
+        transactionRepository.updateCategory(transaction.id, categoryId)
+        categoryRepository.addRule(LearnedRule.from(categoryId, transaction.counterpartyName))
+        budgetThresholdNotifier.checkAndNotify(categoryId, previousSpent)
+        appliedCategorization.value = AppliedCategorization(transaction, categoryId)
+    }
+
+    /** "Voor alle transacties van deze rekeninghouder" - the conflict dialog's blanket option, same effect [categorize] always had before this conflict check existed. */
+    fun resolveConflictForAll() {
+        val conflict = categorizationConflict.value ?: return
+        viewModelScope.launch {
+            applyCategorize(conflict.transaction, conflict.categoryId)
+            categorizationConflict.value = null
+        }
+    }
+
+    /** "Alleen transacties met dit woord" - scopes the learned rule to [keyword] instead of the bare counterparty name, so it doesn't also capture the counterparty's other, differently-categorized transactions. Never sets [appliedCategorization]: bulk-applying to every same-counterparty transaction afterward would defeat the whole point of scoping this down. */
+    fun resolveConflictWithKeyword(keyword: String) {
+        val conflict = categorizationConflict.value ?: return
+        val trimmed = keyword.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            val previousSpent = budgetThresholdNotifier.currentSpent(conflict.categoryId)
+            transactionRepository.updateCategory(conflict.transaction.id, conflict.categoryId)
+            categoryRepository.addRule(LearnedRule.from(conflict.categoryId, trimmed))
+            budgetThresholdNotifier.checkAndNotify(conflict.categoryId, previousSpent)
+            categorizationConflict.value = null
+        }
+    }
+
+    fun cancelConflict() {
+        categorizationConflict.value = null
+    }
+
+    fun consumeAppliedCategorization() {
+        appliedCategorization.value = null
+    }
+
+    /** Live "how many would this word actually catch" count for the conflict dialog's keyword field - see [CounterpartyConflict.matchingKeywordCount]. */
+    fun previewConflictKeywordCount(keyword: String): Int {
+        val conflict = categorizationConflict.value ?: return 0
+        return CounterpartyConflict.matchingKeywordCount(conflict.allTransactionsSnapshot, conflict.transaction.counterpartyName, keyword)
     }
 
     /**
