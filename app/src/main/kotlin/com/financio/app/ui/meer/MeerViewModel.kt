@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.core.model.Money
 import com.financio.core.repository.AccountRepository
+import com.financio.core.repository.BudgetRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.SavingsGoalRepository
 import com.financio.core.repository.TransactionRepository
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
+import java.time.YearMonth
 import javax.inject.Inject
 
 data class MeerUiState(
@@ -28,6 +30,7 @@ data class MeerUiState(
     val subscriptionMonthlyTotal: Money = Money.ZERO,
     val savingsGoalCount: Int = 0,
     val savingsTotalSaved: Money = Money.ZERO,
+    val budgetCount: Int = 0,
     val accountCount: Int = 0,
     val accountsTotalBalance: Money = Money.ZERO,
     val categoryCount: Int = 0,
@@ -47,6 +50,7 @@ class MeerViewModel @Inject constructor(
     savingsGoalRepository: SavingsGoalRepository,
     accountRepository: AccountRepository,
     categoryRepository: CategoryRepository,
+    budgetRepository: BudgetRepository,
 ) : ViewModel() {
 
     val uiState: StateFlow<MeerUiState> = combine(
@@ -54,7 +58,8 @@ class MeerViewModel @Inject constructor(
         savingsGoalsSummary(savingsGoalRepository, transactionRepository),
         accountRepository.observeAccounts(),
         combine(categoryRepository.observeCategories(), categoryRepository.observeRules()) { cats, rules -> cats.size to rules.size },
-    ) { transactions, savings, accounts, categoryCounts ->
+        budgetRepository.observeBudgets(YearMonth.now()),
+    ) { transactions, savings, accounts, categoryCounts, budgets ->
         val subscriptions = SubscriptionDetector.detect(transactions)
         // Amortized to a monthly-equivalent figure per subscription (÷12 for a yearly one) - since
         // SubscriptionDetector now also confirms yearly subscriptions, summing their full
@@ -75,6 +80,7 @@ class MeerViewModel @Inject constructor(
             subscriptionMonthlyTotal = Money(monthlyEquivalentTotal),
             savingsGoalCount = savings.first,
             savingsTotalSaved = savings.second,
+            budgetCount = budgets.size,
             accountCount = accounts.size,
             accountsTotalBalance = Money(countedBalances.sumOf { it.cents }),
             categoryCount = categoryCounts.first,

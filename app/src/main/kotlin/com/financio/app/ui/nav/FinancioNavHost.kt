@@ -69,7 +69,7 @@ private sealed class Destination(val route: String, val label: String) {
     data object BackupExport : Destination("settings/backup-export", "Back-up & export")
 }
 
-private val bottomTabs = listOf(Destination.Vandaag, Destination.Transactions, Destination.Budgets, Destination.Charts, Destination.Meer)
+private val bottomTabs = listOf(Destination.Vandaag, Destination.Transactions, Destination.SavingsGoals, Destination.Charts, Destination.Meer)
 
 @Composable
 fun FinancioNavHost() {
@@ -144,11 +144,7 @@ fun FinancioNavHost() {
                     startWithUncategorizedFilter = backStackEntry.arguments?.getBoolean(ARG_UNCATEGORIZED) ?: false,
                 )
             }
-            composable(Destination.Budgets.route) {
-                BudgetsScreen(onCategoryClick = { categoryId ->
-                    navController.navigate("charts?categoryId=$categoryId") { launchSingleTop = true }
-                })
-            }
+            composable(Destination.SavingsGoals.route) { SavingsGoalsScreen() }
             composable(
                 route = Destination.Charts.route,
                 arguments = listOf(navArgument(ARG_CATEGORY_ID) { type = NavType.LongType; defaultValue = -1L }),
@@ -163,7 +159,7 @@ fun FinancioNavHost() {
             composable(Destination.Meer.route) {
                 MeerScreen(
                     onSubscriptionsClick = { navController.navigate(Destination.Subscriptions.route) },
-                    onSavingsGoalsClick = { navController.navigate(Destination.SavingsGoals.route) },
+                    onBudgetsClick = { navController.navigate(Destination.Budgets.route) },
                     onAccountsClick = { navController.navigate(Destination.Accounts.route) },
                     onManageCategoriesClick = { navController.navigate(Destination.CategoryManagement.route) },
                     onMerchantManagementClick = { navController.navigate(Destination.MerchantManagement.route) },
@@ -192,7 +188,12 @@ fun FinancioNavHost() {
             composable(Destination.NetWorth.route) { NetWorthScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.YearReview.route) { YearReviewScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.Subscriptions.route) { SubscriptionsScreen(onBackClick = { navController.popBackStack() }) }
-            composable(Destination.SavingsGoals.route) { SavingsGoalsScreen(onBackClick = { navController.popBackStack() }) }
+            composable(Destination.Budgets.route) {
+                BudgetsScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onCategoryClick = { categoryId -> navController.navigate("charts?categoryId=$categoryId") { launchSingleTop = true } },
+                )
+            }
             composable(Destination.Accounts.route) { AccountsScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.Appearance.route) { AppearanceScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.LockPrivacy.route) { LockPrivacyScreen(onBackClick = { navController.popBackStack() }) }
@@ -208,7 +209,7 @@ private fun NavIcon(destination: Destination) {
     when (destination) {
         Destination.Vandaag -> VandaagIcon()
         Destination.Transactions -> TransactionsIcon()
-        Destination.Budgets -> BudgetsIcon()
+        Destination.SavingsGoals -> SavingsGoalsIcon()
         Destination.Charts -> ChartsIcon()
         Destination.Meer -> MeerIcon()
         Destination.Import -> Unit
@@ -218,7 +219,7 @@ private fun NavIcon(destination: Destination) {
         Destination.NetWorth -> Unit
         Destination.YearReview -> Unit
         Destination.Subscriptions -> Unit
-        Destination.SavingsGoals -> Unit
+        Destination.Budgets -> Unit
         Destination.Accounts -> Unit
         Destination.Appearance -> Unit
         Destination.LockPrivacy -> Unit
