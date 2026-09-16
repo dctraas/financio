@@ -91,6 +91,7 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.core)
+    implementation(libs.compose.animation)
     implementation(libs.navigation.compose)
 
     implementation(libs.hilt.android)

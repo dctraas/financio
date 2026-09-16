@@ -34,11 +34,23 @@ import javax.inject.Inject
  * transactions for more than one purpose under one name (motorrijtuigenbelasting vs.
  * kinderopvangtoeslag), so a group's transactions aren't necessarily all-or-nothing.
  */
-data class ManualCategoryChoice(val counterpartyName: String, val categoryId: Long, val keyword: String? = null) {
+data class ManualCategoryChoice(
+    val counterpartyName: String,
+    val categoryId: Long,
+    val keyword: String? = null,
+    /** The categorize flow's "Onthoud X → Y" switch - off means this decision applies only to this group's own transactions, with no [com.financio.core.categorize.LearnedRule] learned from it (see [ImportViewModel.confirm]). */
+    val learnRule: Boolean = true,
+) {
     /** Mirrors [com.financio.core.model.MatchType.KEYWORD]'s own matching exactly, so a transaction resolved here behaves identically to how the rule [ImportViewModel.confirm] learns from it will match in the future. */
     fun matches(transaction: Transaction): Boolean =
         transaction.counterpartyName == counterpartyName &&
             (keyword == null || "${transaction.counterpartyName} ${transaction.description}".contains(keyword, ignoreCase = true))
+}
+
+/** One undoable step in the categorize flow (screen 03) — "Terug-tik of 'Ongedaan maken' herstelt de vorige groep". */
+sealed interface CategorizeAction {
+    data class Assigned(val choice: ManualCategoryChoice) : CategorizeAction
+    data class Skipped(val counterpartyName: String) : CategorizeAction
 }
 
 sealed interface ImportUiState {
@@ -61,6 +73,8 @@ sealed interface ImportUiState {
         val skippedGroups: Set<String> = emptySet(),
         /** How many already-imported transactions use each category — ranks the top-4 chips by the user's own habits instead of category-creation order. */
         val categoryUsageFrequency: Map<Long, Int> = emptyMap(),
+        /** In lockstep with [manualCategoryChoices]/[skippedGroups] - the categorize flow's one-step undo reads the last entry here to know exactly what to reverse. */
+        val actionHistory: List<CategorizeAction> = emptyList(),
     ) : ImportUiState
 
     data class Failed(
@@ -243,12 +257,14 @@ class ImportViewModel @Inject constructor(
             .groupingBy { it }
             .eachCount()
 
-    /** [counterpartyName] is a group key from `preview.needsCategoryGrouped`, applying to every transaction that shares it. */
-    fun assignCategory(counterpartyName: String, categoryId: Long) {
+    /** [counterpartyName] is a group key from `preview.needsCategoryGrouped`, applying to every transaction that shares it. [learnRule] is the categorize flow's "Onthoud X → Y" switch. */
+    fun assignCategory(counterpartyName: String, categoryId: Long, learnRule: Boolean = true) {
         val current = _uiState.value
         if (current !is ImportUiState.Ready) return
+        val choice = ManualCategoryChoice(counterpartyName, categoryId, learnRule = learnRule)
         _uiState.value = current.copy(
-            manualCategoryChoices = current.manualCategoryChoices + ManualCategoryChoice(counterpartyName, categoryId),
+            manualCategoryChoices = current.manualCategoryChoices + choice,
+            actionHistory = current.actionHistory + CategorizeAction.Assigned(choice),
         )
     }
 
@@ -263,8 +279,10 @@ class ImportViewModel @Inject constructor(
         if (current !is ImportUiState.Ready) return
         val trimmed = keyword.trim()
         if (trimmed.isBlank()) return
+        val choice = ManualCategoryChoice(counterpartyName, categoryId, trimmed)
         _uiState.value = current.copy(
-            manualCategoryChoices = current.manualCategoryChoices + ManualCategoryChoice(counterpartyName, categoryId, trimmed),
+            manualCategoryChoices = current.manualCategoryChoices + choice,
+            actionHistory = current.actionHistory + CategorizeAction.Assigned(choice),
         )
     }
 
@@ -272,7 +290,26 @@ class ImportViewModel @Inject constructor(
     fun skip(counterpartyName: String) {
         val current = _uiState.value
         if (current !is ImportUiState.Ready) return
-        _uiState.value = current.copy(skippedGroups = current.skippedGroups + counterpartyName)
+        _uiState.value = current.copy(
+            skippedGroups = current.skippedGroups + counterpartyName,
+            actionHistory = current.actionHistory + CategorizeAction.Skipped(counterpartyName),
+        )
+    }
+
+    /** The categorize flow's "Ongedaan maken" - reverses exactly the last [assignCategory]/[assignCategoryToKeyword]/[skip] call, whichever it was. */
+    fun undoLast() {
+        val current = _uiState.value
+        if (current !is ImportUiState.Ready) return
+        when (val lastAction = current.actionHistory.lastOrNull() ?: return) {
+            is CategorizeAction.Assigned -> _uiState.value = current.copy(
+                manualCategoryChoices = current.manualCategoryChoices.dropLast(1),
+                actionHistory = current.actionHistory.dropLast(1),
+            )
+            is CategorizeAction.Skipped -> _uiState.value = current.copy(
+                skippedGroups = current.skippedGroups - lastAction.counterpartyName,
+                actionHistory = current.actionHistory.dropLast(1),
+            )
+        }
     }
 
     /**
@@ -303,8 +340,10 @@ class ImportViewModel @Inject constructor(
 
             // A keyword-scoped choice learns a rule on just that keyword, not the bare
             // counterparty name — otherwise the rule would wrongly capture the counterparty's
-            // other, differently-categorized transactions too (see ManualCategoryChoice).
-            current.manualCategoryChoices.forEach { choice ->
+            // other, differently-categorized transactions too (see ManualCategoryChoice). A
+            // choice made with the categorize flow's "Onthoud X → Y" switch off learns nothing -
+            // it resolved only this group's own transactions above.
+            current.manualCategoryChoices.filter { it.learnRule }.forEach { choice ->
                 categoryRepository.addRule(LearnedRule.from(choice.categoryId, choice.keyword ?: choice.counterpartyName))
             }
 

@@ -60,6 +60,11 @@ compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+# Declared explicitly rather than relied on transitively via material3 -> foundation: this
+# sandbox can never compile :app to confirm which animation APIs (AnimatedContent in particular)
+# a given compose-bom release actually re-exports that way, so the categorize flow's slide-in
+# transition (screen 03) gets its own direct dependency instead of a guess.
+compose-animation = { group = "androidx.compose.animation", name = "animation" }
 compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }

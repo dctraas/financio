@@ -124,7 +124,11 @@ fun FinancioTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, textSize: TextSize = 
     val density = LocalDensity.current
     CompositionLocalProvider(LocalDensity provides Density(density = density.density, fontScale = textSize.fontScale)) {
         MaterialTheme(colorScheme = colorScheme, typography = financioTypography) {
-            CompositionLocalProvider(LocalBudgetStatusColors provides statusColors, content = content)
+            CompositionLocalProvider(
+                LocalBudgetStatusColors provides statusColors,
+                LocalFinancioColors provides tokens,
+                content = content,
+            )
         }
     }
 }
@@ -172,3 +176,12 @@ private val financioTypography = Typography(
 val LocalBudgetStatusColors = staticCompositionLocalOf {
     BudgetStatusColors(ok = Color.Unspecified, warning = Color.Unspecified, over = Color.Unspecified)
 }
+
+/**
+ * The full [FinancioColorTokens] set for the handful of roles Material3's own ColorScheme has no
+ * equivalent for (inkFaint's uppercase section labels, most notably) — everything else should
+ * still prefer `MaterialTheme.colorScheme.*` (accent -> primary, accentSoft -> primaryContainer,
+ * line -> outline, lineFaint -> outlineVariant, inkSoft -> onSurfaceVariant, ...) so a screen
+ * never has to branch on dark/light itself.
+ */
+val LocalFinancioColors = staticCompositionLocalOf<FinancioColorTokens> { FinancioColorsLight }

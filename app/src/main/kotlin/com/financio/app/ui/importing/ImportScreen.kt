@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.toShortDisplayString
 import com.financio.core.model.Account
-import com.financio.core.model.Category
 import com.financio.core.model.SourceFormat
 import com.financio.core.usecase.ImportPreview
 import com.financio.core.usecase.UncategorizedGroup
@@ -65,6 +64,13 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
     val selectedAccountId by viewModel.selectedAccountId.collectAsState()
     val hasAnyTransactions by viewModel.hasAnyTransactions.collectAsState()
     val context = LocalContext.current
+    // Screen 03 "Categoriseren" (see CategorizeScreen.kt) takes over full-screen from Ready's
+    // summary, with its own header instead of the standard "Importeren" app bar. Keyed on the
+    // Ready state's own `preview` instance (stable across a choice made within it, since
+    // assignCategory/skip both produce a new Ready via .copy() without touching preview) so this
+    // resets to false only when a genuinely new import starts, not on every choice.
+    val categorizeKey = (state as? ImportUiState.Ready)?.preview
+    var categorizing by remember(categorizeKey) { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -80,10 +86,12 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Importeren") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-            )
+            if (!(state is ImportUiState.Ready && categorizing)) {
+                TopAppBar(
+                    title = { Text("Importeren") },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                )
+            }
         },
     ) { padding ->
         when (val current = state) {
@@ -123,7 +131,17 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
                 onCancel = viewModel::cancelAccountDetection,
             )
 
-            is ImportUiState.Ready -> ReadyContent(current, categories, padding, viewModel)
+            is ImportUiState.Ready -> if (categorizing) {
+                CategorizeContent(
+                    state = current,
+                    categories = categories,
+                    padding = padding,
+                    viewModel = viewModel,
+                    onExit = { categorizing = false },
+                )
+            } else {
+                ReadyContent(current, padding, viewModel, onStartCategorizing = { categorizing = true })
+            }
 
             is ImportUiState.Imported -> Column(Modifier.fillMaxSize().padding(padding).padding(20.dp)) {
                 Text("Geïmporteerd.")
@@ -391,13 +409,12 @@ private fun looksLikeIban(value: String): Boolean = IBAN_PATTERN.matches(value.t
 @Composable
 private fun ReadyContent(
     state: ImportUiState.Ready,
-    categories: List<Category>,
     padding: PaddingValues,
     viewModel: ImportViewModel,
+    onStartCategorizing: () -> Unit,
 ) {
     val preview = state.preview
     val groups = preview.needsCategoryGrouped
-    val topCategoryIds = state.categoryUsageFrequency.entries.sortedByDescending { it.value }.take(4).map { it.key }
     val remainingGroups = computeRemainingGroups(groups, state.manualCategoryChoices, state.skippedGroups)
     var showDuplicateInfo by remember { mutableStateOf(false) }
 
@@ -417,27 +434,28 @@ private fun ReadyContent(
                     )
                 }
             } else {
-                val current = remainingGroups.first()
-                Column(Modifier.fillMaxSize()) {
+                // The screen 03 "Categoriseren" flow (see CategorizeScreen.kt) takes over full-screen
+                // from here - the summary above already spelled out that 24 transactions are really
+                // just 9 decisions, so the button names that instead of a generic "doorgaan".
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
                     Text(
-                        "Nog ${remainingGroups.size} tegenpartij${if (remainingGroups.size == 1) "" else "en"} te controleren",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 12.dp),
+                        "${remainingGroups.size} tegenpartij${if (remainingGroups.size == 1) "" else "en"} nog te categoriseren.",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                     )
-                    CounterpartyCard(
-                        group = current,
-                        categories = categories,
-                        topCategoryIds = topCategoryIds,
-                        onSelect = { categoryId -> viewModel.assignCategory(current.counterpartyName, categoryId) },
-                        onSplitByKeyword = { keyword, categoryId -> viewModel.assignCategoryToKeyword(current.counterpartyName, keyword, categoryId) },
-                        onSkip = { viewModel.skip(current.counterpartyName) },
-                    )
+                    Button(onClick = onStartCategorizing, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                        Text("Nu categoriseren · ${remainingGroups.size} groep${if (remainingGroups.size == 1) "" else "en"}")
+                    }
+                    TextButton(onClick = viewModel::confirm, modifier = Modifier.fillMaxWidth()) {
+                        Text("Later, zet ze in de lijst")
+                    }
                 }
             }
         }
 
-        StickyImportBar(total = preview.total, onImport = viewModel::confirm)
+        if (remainingGroups.isEmpty()) {
+            StickyImportBar(total = preview.total, onImport = viewModel::confirm)
+        }
     }
 
     if (showDuplicateInfo) {
@@ -462,7 +480,7 @@ private fun ReadyContent(
  * reappears here as a smaller card containing just the rest, instead of disappearing entirely or
  * staying stuck at its original full size.
  */
-private fun computeRemainingGroups(groups: List<UncategorizedGroup>, choices: List<ManualCategoryChoice>, skippedGroups: Set<String>): List<UncategorizedGroup> =
+fun computeRemainingGroups(groups: List<UncategorizedGroup>, choices: List<ManualCategoryChoice>, skippedGroups: Set<String>): List<UncategorizedGroup> =
     groups.mapNotNull { group ->
         if (group.counterpartyName in skippedGroups) return@mapNotNull null
         val pending = group.transactions.filter { transaction -> choices.none { it.matches(transaction) } }
@@ -530,144 +548,6 @@ private fun SummaryTile(label: String, value: String, modifier: Modifier = Modif
 }
 
 /**
- * One counterparty at a time (R7) — a tap on a category chip both assigns it and (by removing
- * this group from `remainingGroups`) advances to the next card, instead of the old scrollable
- * list of dropdowns that asked all-at-once.
- */
-@Composable
-private fun CounterpartyCard(
-    group: UncategorizedGroup,
-    categories: List<Category>,
-    topCategoryIds: List<Long>,
-    onSelect: (Long) -> Unit,
-    onSplitByKeyword: (keyword: String, categoryId: Long) -> Unit,
-    onSkip: () -> Unit,
-) {
-    var showAllCategories by remember(group.counterpartyName) { mutableStateOf(false) }
-    // Keyed on the group's own identity (name + size), not just its name: once a keyword split
-    // resolves part of the group, the follow-up card is the *same* counterparty name but a
-    // smaller remainder - this should start back in "kies een categorie" mode, not stay stuck
-    // showing the keyword field from the card it replaced.
-    var splitting by remember(group.counterpartyName, group.count) { mutableStateOf(false) }
-    var keyword by remember(group.counterpartyName, group.count) { mutableStateOf("") }
-    val rawDescription = group.transactions.firstOrNull()?.description
-
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-            .padding(20.dp),
-    ) {
-        Text(group.counterpartyName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        // A cryptic SEPA-style name ("NL91INGB000012345 REF 88213...") doesn't tell you anything
-        // by itself - the raw description underneath at least gives you something to go on.
-        if (looksCryptic(group.counterpartyName) && rawDescription != null) {
-            Text(
-                rawDescription,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Text(
-            groupSummary(group),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
-        )
-
-        if (!splitting) {
-            val topCategories = categories.filter { it.id in topCategoryIds }
-                .sortedBy { topCategoryIds.indexOf(it.id) }
-            val shown = if (showAllCategories) categories else topCategories
-
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(shown, key = { it.id }) { category ->
-                    FilterChip(selected = false, onClick = { onSelect(category.id) }, label = { Text(category.name) })
-                }
-            }
-            if (!showAllCategories && categories.size > topCategories.size) {
-                Text(
-                    "Alle ${categories.size} →",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { showAllCategories = true }.padding(top = 10.dp),
-                )
-            }
-
-            // Only worth offering once there's more than one transaction to actually split -
-            // splitting a single-transaction group would just be a roundabout way to categorize
-            // it, not a real "meerdere soorten transacties" situation like the Belastingdienst
-            // sending both motorrijtuigenbelasting and kinderopvangtoeslag under one name.
-            if (group.count > 1) {
-                Text(
-                    "Bevat dit meerdere soorten transacties? Splitsen op trefwoord →",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { splitting = true }.padding(top = 12.dp),
-                )
-            }
-
-            Text(
-                "Overslaan →",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable(onClick = onSkip).padding(top = 16.dp),
-            )
-        } else {
-            val matchCount = if (keyword.isBlank()) {
-                0
-            } else {
-                group.transactions.count { "${it.counterpartyName} ${it.description}".contains(keyword, ignoreCase = true) }
-            }
-            OutlinedTextField(
-                value = keyword,
-                onValueChange = { keyword = it },
-                label = { Text("Woord in de omschrijving") },
-                placeholder = { Text("bijv. motorrijtuigenbelasting") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (keyword.isNotBlank()) {
-                Text(
-                    "Raakt nu $matchCount van de ${group.count} transacties.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-            Text(
-                "Kies een categorie voor deze transacties:",
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
-            )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(categories, key = { it.id }) { category ->
-                    FilterChip(
-                        selected = false,
-                        onClick = { onSplitByKeyword(keyword, category.id) },
-                        label = { Text(category.name) },
-                        enabled = keyword.isNotBlank(),
-                    )
-                }
-            }
-            Text(
-                "Terug",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable { splitting = false }.padding(top = 12.dp),
-            )
-        }
-    }
-}
-
-/** A rough "does this look like machine-generated SEPA gibberish, not an actual merchant name" check. */
-private fun looksCryptic(name: String): Boolean {
-    val digitCount = name.count { it.isDigit() }
-    return name.length > 10 && digitCount.toFloat() / name.length > 0.3f
-}
-
-/**
  * Always docked at the bottom, never scrolled away (R7) - importing doesn't require finishing
  * the card stack first, and the reassurance text says so explicitly.
  */
@@ -687,21 +567,3 @@ private fun StickyImportBar(total: Int, onImport: () -> Unit) {
     }
 }
 
-/**
- * "3× · €45,20 · 4 – 12 sep" for a repeated merchant, or "€30,63 · 4 sep" for a one-off — the
- * context that actually helps decide a category (impact and recency), without the raw ING
- * card/transfer boilerplate (Kaartnr/Datum/Tijd/Transactie/Term) that clutters the description
- * field and rarely matters for picking a category.
- */
-private fun groupSummary(group: UncategorizedGroup): String {
-    val amount = if (group.count > 1 && group.minAmount != group.maxAmount) {
-        "${group.minAmount.toDisplayString()} – ${group.maxAmount.toDisplayString()} (totaal ${group.totalAmount.toDisplayString()})"
-    } else {
-        group.totalAmount.toDisplayString()
-    }
-    val period = if (group.firstDate == group.lastDate) group.firstDate.toShortDisplayString() else {
-        "${group.firstDate.toShortDisplayString()} – ${group.lastDate.toShortDisplayString()}"
-    }
-    val countPrefix = if (group.count > 1) "${group.count}× · " else ""
-    return "$countPrefix$amount · $period"
-}
