@@ -24,6 +24,12 @@ import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
+/** A small rotation, not a picker: keeps "add a category" down to just typing a name - same set CategoryManagementViewModel.addCategory uses. */
+private val COLOR_ROTATION = listOf(
+    "#5B7A52", "#4C6E77", "#8A4A3D", "#7A6A45", "#6B6485",
+    "#4A5A8A", "#3D8A6E", "#9C7A3D", "#3D8FA3", "#A35D82",
+)
+
 data class SavingsGoalRow(
     val goal: SavingsGoal,
     val category: Category?,
@@ -230,6 +236,17 @@ class SavingsGoalsViewModel @Inject constructor(
 
     fun addGoal(name: String, targetAmount: Money, categoryId: Long, linkedAccountId: Long?, targetDate: LocalDate?) {
         viewModelScope.launch { savingsGoalRepository.addGoal(name, targetAmount, categoryId, linkedAccountId, targetDate) }
+    }
+
+    /** The "+ Nieuwe categorie" option inside "Nieuw spaardoel"'s category picker - creates the category and hands its id back so the dialog can select it immediately, without the user ever leaving the dialog. */
+    fun addCategory(name: String, onCreated: (Long) -> Unit) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            val color = COLOR_ROTATION[uiState.value.categories.size % COLOR_ROTATION.size]
+            val id = categoryRepository.addCategory(trimmed, color)
+            onCreated(id)
+        }
     }
 
     fun deleteGoal(goalId: Long) {

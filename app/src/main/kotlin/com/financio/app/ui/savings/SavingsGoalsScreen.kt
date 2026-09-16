@@ -136,6 +136,7 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
             accounts = state.accounts,
             prefill = null,
             onDismiss = { addingGoal = false },
+            onAddCategory = viewModel::addCategory,
             onSave = { name, target, categoryId, linkedAccountId, targetDate ->
                 viewModel.addGoal(name, target, categoryId, linkedAccountId, targetDate)
                 addingGoal = false
@@ -149,6 +150,7 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
             accounts = state.accounts,
             prefill = previous,
             onDismiss = { rollForwardFrom = null },
+            onAddCategory = viewModel::addCategory,
             onSave = { name, target, categoryId, linkedAccountId, targetDate ->
                 viewModel.addGoal(name, target, categoryId, linkedAccountId, targetDate)
                 rollForwardFrom = null
@@ -405,12 +407,15 @@ private fun AddGoalDialog(
     accounts: List<Account>,
     prefill: SavingsGoal?,
     onDismiss: () -> Unit,
+    onAddCategory: (name: String, onCreated: (Long) -> Unit) -> Unit,
     onSave: (name: String, target: Money, categoryId: Long, linkedAccountId: Long?, targetDate: LocalDate?) -> Unit,
 ) {
     var name by remember { mutableStateOf(prefill?.let { "${it.name} (vervolg)" } ?: "") }
     var targetText by remember { mutableStateOf("") }
     var categoryId by remember { mutableStateOf(prefill?.categoryId ?: categories.firstOrNull()?.id) }
     var categoryMenuOpen by remember { mutableStateOf(false) }
+    var addingCategory by remember { mutableStateOf(false) }
+    var newCategoryName by remember { mutableStateOf("") }
     var linkedAccountId by remember { mutableStateOf(prefill?.linkedAccountId) }
     var accountMenuOpen by remember { mutableStateOf(false) }
     var targetDateText by remember { mutableStateOf("") }
@@ -455,6 +460,32 @@ private fun AddGoalDialog(
                                 onClick = { categoryId = category.id; categoryMenuOpen = false },
                             )
                         }
+                        DropdownMenuItem(
+                            text = { Text("+ Nieuwe categorie", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) },
+                            onClick = { categoryMenuOpen = false; addingCategory = true },
+                        )
+                    }
+                }
+                // Inline rather than a second dialog on top of this one - so "sparen voor mijn
+                // bruiloft" never means closing Nieuw Spaardoel, going to Categorieën, and starting
+                // this whole dialog over just to pick a category that didn't exist yet.
+                if (addingCategory) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        OutlinedTextField(
+                            value = newCategoryName,
+                            onValueChange = { newCategoryName = it },
+                            placeholder = { Text("Naam nieuwe categorie") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            enabled = newCategoryName.isNotBlank(),
+                            onClick = {
+                                onAddCategory(newCategoryName) { newId -> categoryId = newId }
+                                newCategoryName = ""
+                                addingCategory = false
+                            },
+                        ) { Text("Toevoegen") }
                     }
                 }
                 if (accounts.isNotEmpty()) {
