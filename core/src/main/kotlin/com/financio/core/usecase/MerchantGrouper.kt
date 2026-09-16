@@ -10,9 +10,10 @@ package com.financio.core.usecase
  * matching: a POS-exported counterparty name almost always follows "<chain name> <store number>
  * <city> [country code]", so cutting at the first token that contains a digit and keeping
  * whatever came before it isolates the chain name with very low false-positive risk. A name with
- * no digit anywhere (an online merchant, a one-off payee, "T-Mobile") is left untouched - there's
- * nothing to cut, so it can never collide with an unrelated merchant that also happens to have no
- * digits in its name.
+ * no digit anywhere (an online merchant, a one-off payee, "T-Mobile") has nothing to cut, so it's
+ * treated as its own candidate canonical form - it only ever groups with a digit-bearing variant
+ * that reduces to that exact same name (a generic "Albert Heijn" order alongside "Albert Heijn
+ * 2200 Gorinchem NLD" visits), never with another unrelated no-digit merchant.
  *
  * This intentionally only ever *suggests* groups - [candidateGroups] is read-only analysis, never
  * a merge itself. A false negative (two branches that vary only by city, with no store number at
@@ -38,11 +39,19 @@ object MerchantGrouper {
             .filter { it.canonicalName.length >= MIN_CANONICAL_LENGTH && it.rawNames.size >= 2 }
             .sortedBy { it.canonicalName }
 
-    /** "Albert Heijn 2200 Gorinchem NLD" -> "Albert Heijn"; null when there's no digit-bearing token to cut at, or nothing would remain before it. */
+    /**
+     * "Albert Heijn 2200 Gorinchem NLD" -> "Albert Heijn"; the name itself when it has no
+     * digit-bearing token to cut at (so it can still match a variant that does); null when the
+     * very first token already contains a digit, leaving nothing to cut before it.
+     */
     private fun chainPrefix(name: String): String? {
-        val tokens = name.trim().split(Regex("\\s+"))
+        val trimmed = name.trim()
+        val tokens = trimmed.split(Regex("\\s+"))
         val cutIndex = tokens.indexOfFirst { token -> token.any { it.isDigit() } }
-        if (cutIndex <= 0) return null // no digit token at all, or the very first token already has one
-        return tokens.subList(0, cutIndex).joinToString(" ")
+        return when {
+            cutIndex == 0 -> null
+            cutIndex > 0 -> tokens.subList(0, cutIndex).joinToString(" ")
+            else -> trimmed
+        }
     }
 }
