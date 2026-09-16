@@ -85,6 +85,25 @@ object SubscriptionDetector {
             .mapNotNull { (name, group) -> uncertainFor(name, group) }
     }
 
+    /**
+     * A minimal [UncertainSubscription]-shaped summary for a counterparty the user adds
+     * themselves ("vaste last toevoegen") rather than one [detectUncertain] ever suggested - no
+     * pattern requirement at all, just whatever debits already exist for it. Null if there's no
+     * debit for [counterpartyName] at all.
+     */
+    fun manualSummary(counterpartyName: String, transactions: List<Transaction>): UncertainSubscription? {
+        val group = transactions.filter { it.amount.cents < 0 && it.counterpartyName == counterpartyName }
+        if (group.isEmpty()) return null
+        val sorted = group.sortedBy { it.date }
+        return UncertainSubscription(
+            counterpartyName = counterpartyName,
+            occurrences = sorted.size,
+            lastAmount = sorted.last().amount,
+            lastDate = sorted.last().date,
+            reason = "handmatig toegevoegd",
+        )
+    }
+
     private fun candidateGroups(transactions: List<Transaction>): Map<String, List<Transaction>> =
         transactions.filter { it.amount.cents < 0 }.groupBy { it.counterpartyName } // subscriptions are always expenses
 

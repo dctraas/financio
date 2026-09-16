@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,9 +19,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +57,7 @@ import java.util.Locale
 fun SubscriptionsScreen(onBackClick: () -> Unit, viewModel: SubscriptionsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var showCalendar by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -79,6 +84,11 @@ fun SubscriptionsScreen(onBackClick: () -> Unit, viewModel: SubscriptionsViewMod
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                TextButton(
+                    onClick = { showAddDialog = true },
+                    enabled = state.addableNames.isNotEmpty(),
+                    modifier = Modifier.padding(top = 12.dp),
+                ) { Text("+ Vaste last toevoegen") }
             }
             return@Scaffold
         }
@@ -111,7 +121,7 @@ fun SubscriptionsScreen(onBackClick: () -> Unit, viewModel: SubscriptionsViewMod
             }
 
             items(state.dueThisMonth, key = { "due-${it.counterpartyName}" }) { subscription ->
-                SubscriptionCard(subscription)
+                SubscriptionCard(subscription, onDismiss = { viewModel.dismiss(subscription.counterpartyName) })
             }
 
             if (state.upcomingLater.isNotEmpty()) {
@@ -121,7 +131,7 @@ fun SubscriptionsScreen(onBackClick: () -> Unit, viewModel: SubscriptionsViewMod
                     .forEach { (month, subscriptions) ->
                         item { MonthLabel(month) }
                         items(subscriptions, key = { "later-${it.counterpartyName}" }) { subscription ->
-                            SubscriptionCard(subscription)
+                            SubscriptionCard(subscription, onDismiss = { viewModel.dismiss(subscription.counterpartyName) })
                         }
                     }
             }
@@ -136,10 +146,26 @@ fun SubscriptionsScreen(onBackClick: () -> Unit, viewModel: SubscriptionsViewMod
             if (state.manuallyConfirmed.isNotEmpty()) {
                 item { SectionHeader("Handmatig bevestigd") }
                 items(state.manuallyConfirmed, key = { "manual-${it.counterpartyName}" }) { candidate ->
-                    ManuallyConfirmedRow(candidate)
+                    ManuallyConfirmedRow(candidate, onDismiss = { viewModel.dismiss(candidate.counterpartyName) })
                 }
             }
+
+            item {
+                TextButton(
+                    onClick = { showAddDialog = true },
+                    enabled = state.addableNames.isNotEmpty(),
+                    modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
+                ) { Text("+ Vaste last toevoegen") }
+            }
         }
+    }
+
+    if (showAddDialog) {
+        AddSubscriptionDialog(
+            candidates = state.addableNames,
+            onDismiss = { showAddDialog = false },
+            onPick = { name -> viewModel.confirm(name); showAddDialog = false },
+        )
     }
 }
 
@@ -259,7 +285,7 @@ private fun CalendarDayCell(day: Int, isToday: Boolean, isSelected: Boolean, sub
 }
 
 @Composable
-private fun SubscriptionCard(subscription: DetectedSubscription) {
+private fun SubscriptionCard(subscription: DetectedSubscription, onDismiss: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -269,9 +295,12 @@ private fun SubscriptionCard(subscription: DetectedSubscription) {
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
             .padding(16.dp),
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(subscription.counterpartyName, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text(subscription.lastAmount.toDisplayString(), fontWeight = FontWeight.SemiBold)
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = "Verwijder ${subscription.counterpartyName} als vaste last")
+            }
         }
         Text(
             "${subscription.occurrences}× gezien · verwacht rond ${subscription.estimatedNextDate.toShortDisplayString()}" +
@@ -333,12 +362,13 @@ private fun UncertainCard(candidate: UncertainSubscription, onConfirm: () -> Uni
 }
 
 @Composable
-private fun ManuallyConfirmedRow(candidate: UncertainSubscription) {
+private fun ManuallyConfirmedRow(candidate: UncertainSubscription, onDismiss: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(candidate.counterpartyName, fontWeight = FontWeight.SemiBold)
             Text(
                 "${candidate.occurrences}× gezien · laatst ${candidate.lastDate.toShortDisplayString()}",
@@ -347,5 +377,52 @@ private fun ManuallyConfirmedRow(candidate: UncertainSubscription) {
             )
         }
         Text(candidate.lastAmount.toDisplayString(), fontWeight = FontWeight.SemiBold)
+        IconButton(onClick = onDismiss) {
+            Icon(Icons.Filled.Close, contentDescription = "Verwijder ${candidate.counterpartyName} als vaste last")
+        }
     }
+}
+
+/** A searchable, tap-to-pick list of debit counterparties not already shown as a subscription - "vaste last toevoegen" for a merchant [com.financio.core.usecase.SubscriptionDetector] never flagged on its own. */
+@Composable
+private fun AddSubscriptionDialog(candidates: List<String>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(candidates, query) { candidates.filter { it.contains(query, ignoreCase = true) } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Vaste last toevoegen") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Zoeken…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (filtered.isEmpty()) {
+                    Text(
+                        "Niets gevonden.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 280.dp).padding(top = 8.dp)) {
+                        items(filtered, key = { it }) { name ->
+                            Text(
+                                name,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPick(name) }
+                                    .padding(vertical = 10.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },
+    )
 }

@@ -26,8 +26,10 @@ data class SubscriptionsUiState(
     val upcomingLater: List<DetectedSubscription> = emptyList(),
     /** Plausible-but-unconfirmed merchants, excluding ones already answered via [SubscriptionsViewModel.confirm]/[SubscriptionsViewModel.dismiss]. */
     val uncertain: List<UncertainSubscription> = emptyList(),
-    /** Twijfelgevallen the user said "ja" to - shown as their own simple list, since there's no estimated next date or cadence to show for something [SubscriptionDetector] itself never confirmed. */
+    /** Twijfelgevallen the user said "ja" to, plus anything added straight from [addableNames] - shown as one simple list, since there's no estimated next date or cadence to show for something [SubscriptionDetector] itself never confirmed. */
     val manuallyConfirmed: List<UncertainSubscription> = emptyList(),
+    /** Every debit counterparty not already shown above (confirmed, twijfelgeval, or manually added) or dismissed - the "vaste last toevoegen" picker's candidate list. */
+    val addableNames: List<String> = emptyList(),
 )
 
 /**
@@ -52,12 +54,24 @@ class SubscriptionsViewModel @Inject constructor(
         val today = LocalDate.now()
         val endOfMonth = today.withDayOfMonth(today.lengthOfMonth())
 
-        val confirmed = SubscriptionDetector.detect(transactions).sortedBy { it.estimatedNextDate }
+        // A dismissed name must stay hidden even though SubscriptionDetector.detect() re-detects
+        // it on every recompute - dismissedSubscriptionNames used to only ever get checked against
+        // the uncertain (twijfelgeval) list, never the auto-detected one, so "verwijderen" on an
+        // already-confirmed subscription had no effect at all.
+        val confirmed = SubscriptionDetector.detect(transactions)
+            .filter { it.counterpartyName !in dismissedNames }
+            .sortedBy { it.estimatedNextDate }
         val (due, later) = confirmed.partition { !it.estimatedNextDate.isAfter(endOfMonth) }
 
         val uncertainByName = SubscriptionDetector.detectUncertain(transactions).associateBy { it.counterpartyName }
         val uncertain = uncertainByName.values.filter { it.counterpartyName !in confirmedNames && it.counterpartyName !in dismissedNames }
-        val manuallyConfirmed = confirmedNames.mapNotNull { uncertainByName[it] }
+        // uncertainByName[name] is null for a name confirmed straight from addableNames rather
+        // than from a twijfelgeval suggestion - manualSummary() covers that case from the raw
+        // transactions instead, so a fully manual addition doesn't just silently vanish.
+        val manuallyConfirmed = confirmedNames.mapNotNull { name -> uncertainByName[name] ?: SubscriptionDetector.manualSummary(name, transactions) }
+
+        val shownNames = (confirmed.map { it.counterpartyName } + uncertain.map { it.counterpartyName } + manuallyConfirmed.map { it.counterpartyName }).toSet()
+        val addableNames = transactions.filter { it.amount.cents < 0 }.map { it.counterpartyName }.distinct().filter { it !in shownNames }.sorted()
 
         SubscriptionsUiState(
             loaded = true,
@@ -66,6 +80,7 @@ class SubscriptionsViewModel @Inject constructor(
             upcomingLater = later,
             uncertain = uncertain,
             manuallyConfirmed = manuallyConfirmed,
+            addableNames = addableNames,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SubscriptionsUiState())
 
