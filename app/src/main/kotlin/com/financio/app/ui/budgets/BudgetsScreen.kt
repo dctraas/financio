@@ -30,6 +30,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,7 +56,14 @@ fun BudgetsScreen(onCategoryClick: (Long) -> Unit = {}, viewModel: BudgetsViewMo
     val state by viewModel.uiState.collectAsState()
     var editingCategory by remember { mutableStateOf<CategoryLimitEdit?>(null) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Budget") }) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Budget") },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            )
+        },
+    ) { padding ->
         LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             item {
                 PeriodNavigator(
