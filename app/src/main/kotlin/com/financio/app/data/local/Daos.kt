@@ -127,6 +127,14 @@ interface SavingsGoalDao {
     @Query("DELETE FROM savings_goals WHERE id = :goalId")
     suspend fun delete(goalId: Long)
 
+    /** Full edit ("bewerken") of an existing goal's own fields - never touches [SavingsGoalEntity.archived] or [SavingsGoalEntity.manualAdjustmentCents], which have their own dedicated actions. */
+    @Query(
+        "UPDATE savings_goals SET name = :name, targetAmountCents = :targetAmountCents, " +
+            "categoryId = :categoryId, linkedAccountId = :linkedAccountId, targetDate = :targetDate " +
+            "WHERE id = :goalId",
+    )
+    suspend fun update(goalId: Long, name: String, targetAmountCents: Long, categoryId: Long, linkedAccountId: Long?, targetDate: String?)
+
     @Query("UPDATE savings_goals SET archived = :archived WHERE id = :goalId")
     suspend fun setArchived(goalId: Long, archived: Boolean)
 

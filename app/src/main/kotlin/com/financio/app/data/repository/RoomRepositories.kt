@@ -235,6 +235,10 @@ class RoomSavingsGoalRepository @Inject constructor(
         dao.delete(goalId)
     }
 
+    override suspend fun updateGoal(goalId: Long, name: String, targetAmount: Money, categoryId: Long, linkedAccountId: Long?, targetDate: LocalDate?) {
+        dao.update(goalId, name, targetAmount.cents, categoryId, linkedAccountId, targetDate?.toString())
+    }
+
     override suspend fun setArchived(goalId: Long, archived: Boolean) {
         dao.setArchived(goalId, archived)
     }

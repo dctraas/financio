@@ -54,11 +54,17 @@ import com.financio.core.model.Money
 import com.financio.core.model.SavingsGoal
 import java.time.LocalDate
 
+/** Which of the three ways [GoalDialog] can be opened - "Nieuw spaardoel", "Nieuw doel hiermee" (roll-forward from an achieved goal), or "Spaardoel bewerken" (tapping an existing goal). */
+private sealed interface GoalDialogMode {
+    data object Add : GoalDialogMode
+    data class RollForward(val previous: SavingsGoal) : GoalDialogMode
+    data class Edit(val goal: SavingsGoal) : GoalDialogMode
+}
+
 @Composable
 fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
-    var addingGoal by remember { mutableStateOf(false) }
-    var rollForwardFrom by remember { mutableStateOf<SavingsGoal?>(null) }
+    var dialogMode by remember { mutableStateOf<GoalDialogMode?>(null) }
     var deleting by remember { mutableStateOf<SavingsGoalRow?>(null) }
     var toppingUp by remember { mutableStateOf<SavingsGoalRow?>(null) }
     var showArchived by remember { mutableStateOf(false) }
@@ -74,7 +80,7 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
         },
         floatingActionButton = {
             if (state.categories.isNotEmpty()) {
-                FloatingActionButton(onClick = { addingGoal = true }) {
+                FloatingActionButton(onClick = { dialogMode = GoalDialogMode.Add }) {
                     Icon(Icons.Filled.Add, contentDescription = "Spaardoel toevoegen")
                 }
             }
@@ -97,6 +103,7 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
                     SavingsGoalCard(
                         row = row,
                         averageMonthlyLeftover = state.averageMonthlyLeftover,
+                        onClick = { dialogMode = GoalDialogMode.Edit(row.goal) },
                         onTopUpClick = { toppingUp = row },
                         onDeleteClick = { deleting = row },
                     )
@@ -106,8 +113,9 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
                     items(state.achievedRows, key = { "achieved-${it.goal.id}" }) { row ->
                         AchievedGoalCard(
                             row = row,
+                            onClick = { dialogMode = GoalDialogMode.Edit(row.goal) },
                             onArchiveClick = { viewModel.archiveGoal(row.goal.id) },
-                            onRollForwardClick = { rollForwardFrom = row.goal },
+                            onRollForwardClick = { dialogMode = GoalDialogMode.RollForward(row.goal) },
                         )
                     }
                 }
@@ -122,7 +130,11 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
                     }
                     if (showArchived) {
                         items(state.archivedRows, key = { "archived-${it.goal.id}" }) { row ->
-                            ArchivedGoalRow(row, onDeleteClick = { deleting = row })
+                            ArchivedGoalRow(
+                                row,
+                                onClick = { dialogMode = GoalDialogMode.Edit(row.goal) },
+                                onDeleteClick = { deleting = row },
+                            )
                         }
                     }
                 }
@@ -130,30 +142,19 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
         }
     }
 
-    if (addingGoal) {
-        AddGoalDialog(
+    dialogMode?.let { mode ->
+        GoalDialog(
             categories = state.categories,
             accounts = state.accounts,
-            prefill = null,
-            onDismiss = { addingGoal = false },
+            mode = mode,
+            onDismiss = { dialogMode = null },
             onAddCategory = viewModel::addCategory,
             onSave = { name, target, categoryId, linkedAccountId, targetDate ->
-                viewModel.addGoal(name, target, categoryId, linkedAccountId, targetDate)
-                addingGoal = false
-            },
-        )
-    }
-
-    rollForwardFrom?.let { previous ->
-        AddGoalDialog(
-            categories = state.categories,
-            accounts = state.accounts,
-            prefill = previous,
-            onDismiss = { rollForwardFrom = null },
-            onAddCategory = viewModel::addCategory,
-            onSave = { name, target, categoryId, linkedAccountId, targetDate ->
-                viewModel.addGoal(name, target, categoryId, linkedAccountId, targetDate)
-                rollForwardFrom = null
+                when (mode) {
+                    is GoalDialogMode.Edit -> viewModel.editGoal(mode.goal.id, name, target, categoryId, linkedAccountId, targetDate)
+                    else -> viewModel.addGoal(name, target, categoryId, linkedAccountId, targetDate)
+                }
+                dialogMode = null
             },
         )
     }
@@ -193,6 +194,7 @@ private fun SectionHeader(title: String) {
 private fun SavingsGoalCard(
     row: SavingsGoalRow,
     averageMonthlyLeftover: Money?,
+    onClick: () -> Unit,
     onTopUpClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
@@ -203,6 +205,7 @@ private fun SavingsGoalCard(
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
             .padding(16.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
@@ -284,7 +287,7 @@ private fun SavingsGoalCard(
 }
 
 @Composable
-private fun AchievedGoalCard(row: SavingsGoalRow, onArchiveClick: () -> Unit, onRollForwardClick: () -> Unit) {
+private fun AchievedGoalCard(row: SavingsGoalRow, onClick: () -> Unit, onArchiveClick: () -> Unit, onRollForwardClick: () -> Unit) {
     val statusColors = LocalBudgetStatusColors.current
     Column(
         modifier = Modifier
@@ -293,6 +296,7 @@ private fun AchievedGoalCard(row: SavingsGoalRow, onArchiveClick: () -> Unit, on
             .clip(RoundedCornerShape(14.dp))
             .background(statusColors.ok.copy(alpha = 0.10f))
             .border(1.dp, statusColors.ok, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
             .padding(16.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -334,9 +338,9 @@ private fun AchievedGoalCard(row: SavingsGoalRow, onArchiveClick: () -> Unit, on
 }
 
 @Composable
-private fun ArchivedGoalRow(row: SavingsGoalRow, onDeleteClick: () -> Unit) {
+private fun ArchivedGoalRow(row: SavingsGoalRow, onClick: () -> Unit, onDeleteClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column {
@@ -402,23 +406,49 @@ private fun formatOneDecimal(value: Double): String {
 }
 
 @Composable
-private fun AddGoalDialog(
+private fun GoalDialog(
     categories: List<Category>,
     accounts: List<Account>,
-    prefill: SavingsGoal?,
+    mode: GoalDialogMode,
     onDismiss: () -> Unit,
     onAddCategory: (name: String, onCreated: (Long) -> Unit) -> Unit,
     onSave: (name: String, target: Money, categoryId: Long, linkedAccountId: Long?, targetDate: LocalDate?) -> Unit,
 ) {
-    var name by remember { mutableStateOf(prefill?.let { "${it.name} (vervolg)" } ?: "") }
-    var targetText by remember { mutableStateOf("") }
-    var categoryId by remember { mutableStateOf(prefill?.categoryId ?: categories.firstOrNull()?.id) }
+    // Roll-forward only carries over the categorie/rekening (a fresh goal wants its own naam,
+    // doelbedrag and streefdatum) - editing carries over every field, since it's the same goal.
+    var name by remember {
+        mutableStateOf(
+            when (mode) {
+                is GoalDialogMode.RollForward -> "${mode.previous.name} (vervolg)"
+                is GoalDialogMode.Edit -> mode.goal.name
+                GoalDialogMode.Add -> ""
+            },
+        )
+    }
+    var targetText by remember { mutableStateOf(if (mode is GoalDialogMode.Edit) formatEuroInput(mode.goal.targetAmount) else "") }
+    var categoryId by remember {
+        mutableStateOf(
+            when (mode) {
+                is GoalDialogMode.RollForward -> mode.previous.categoryId
+                is GoalDialogMode.Edit -> mode.goal.categoryId
+                GoalDialogMode.Add -> categories.firstOrNull()?.id
+            },
+        )
+    }
     var categoryMenuOpen by remember { mutableStateOf(false) }
     var addingCategory by remember { mutableStateOf(false) }
     var newCategoryName by remember { mutableStateOf("") }
-    var linkedAccountId by remember { mutableStateOf(prefill?.linkedAccountId) }
+    var linkedAccountId by remember {
+        mutableStateOf(
+            when (mode) {
+                is GoalDialogMode.RollForward -> mode.previous.linkedAccountId
+                is GoalDialogMode.Edit -> mode.goal.linkedAccountId
+                GoalDialogMode.Add -> null
+            },
+        )
+    }
     var accountMenuOpen by remember { mutableStateOf(false) }
-    var targetDateText by remember { mutableStateOf("") }
+    var targetDateText by remember { mutableStateOf(if (mode is GoalDialogMode.Edit) mode.goal.targetDate?.toString() ?: "" else "") }
 
     val target = parseEuroInput(targetText)
     val targetDate = if (targetDateText.isBlank()) null else runCatching { LocalDate.parse(targetDateText) }.getOrNull()
@@ -427,7 +457,15 @@ private fun AddGoalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (prefill != null) "Nieuw doel hiermee" else "Nieuw spaardoel") },
+        title = {
+            Text(
+                when (mode) {
+                    GoalDialogMode.Add -> "Nieuw spaardoel"
+                    is GoalDialogMode.RollForward -> "Nieuw doel hiermee"
+                    is GoalDialogMode.Edit -> "Spaardoel bewerken"
+                },
+            )
+        },
         text = {
             Column {
                 OutlinedTextField(
@@ -529,11 +567,15 @@ private fun AddGoalDialog(
             TextButton(
                 enabled = isValid,
                 onClick = { onSave(name.trim(), target!!, categoryId!!, linkedAccountId, targetDate) },
-            ) { Text("Toevoegen") }
+            ) { Text(if (mode is GoalDialogMode.Edit) "Opslaan" else "Toevoegen") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },
     )
 }
+
+/** The reverse of [parseEuroInput] - "23,45", no thousands separators, for prefilling the doelbedrag field when editing an existing goal. */
+private fun formatEuroInput(money: Money): String =
+    "${money.cents / 100},${(money.cents % 100).toString().padStart(2, '0')}"
 
 @Composable
 private fun ManualTopUpDialog(goalName: String, onDismiss: () -> Unit, onSave: (Money) -> Unit) {
