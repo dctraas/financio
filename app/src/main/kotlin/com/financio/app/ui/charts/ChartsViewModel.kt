@@ -348,12 +348,12 @@ class ChartsViewModel @Inject constructor(
             }
     }
 
-    /** "Ja, dit is dezelfde onderneming" — every name in [candidate]'s group resolves to its canonical name from now on, in every category's breakdown. */
+    /** "Ja, dit is dezelfde tegenpartij" — every name in [candidate]'s group resolves to its canonical name from now on, in every category's breakdown. */
     fun confirmMerchantGroup(candidate: MerchantGrouper.MerchantGroupCandidate) {
         appPreferences.confirmMerchantGroup(candidate.canonicalName, candidate.rawNames)
     }
 
-    /** "Nee, dit zijn verschillende ondernemingen" — stops suggesting this canonical name again. */
+    /** "Nee, dit zijn verschillende tegenpartijen" — stops suggesting this canonical name again. */
     fun dismissMerchantGroup(candidate: MerchantGrouper.MerchantGroupCandidate) {
         appPreferences.dismissMerchantGroup(candidate.canonicalName)
     }

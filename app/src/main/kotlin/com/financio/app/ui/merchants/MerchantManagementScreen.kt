@@ -42,9 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
 /**
- * The management screen behind Inzicht's inline "Dit lijkt dezelfde onderneming" prompts (R7):
- * every confirmed onderneming with its members, every automatic suggestion not yet answered, and
- * a way to build a new onderneming by hand from any counterparty name that isn't grouped yet.
+ * The management screen behind Inzicht's inline "Dit lijkt dezelfde tegenpartij" prompts (R7):
+ * every confirmed tegenpartij with its members, every automatic suggestion not yet answered, and
+ * a way to build a new tegenpartij by hand from any counterparty name that isn't grouped yet.
  */
 @Composable
 fun MerchantManagementScreen(onBackClick: () -> Unit, viewModel: MerchantManagementViewModel = hiltViewModel()) {
@@ -55,7 +55,7 @@ fun MerchantManagementScreen(onBackClick: () -> Unit, viewModel: MerchantManagem
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ondernemingen") },
+                title = { Text("Tegenpartijen") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
                 },
@@ -68,7 +68,7 @@ fun MerchantManagementScreen(onBackClick: () -> Unit, viewModel: MerchantManagem
         LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             item {
                 Text(
-                    "Rekeninghouders die bij dezelfde winkelketen of onderneming horen — bijv. \"Albert " +
+                    "Rekeninghouders die bij dezelfde winkelketen of tegenpartij horen — bijv. \"Albert " +
                         "Heijn 2200 Gorinchem\" en \"Albert Heijn 1359 Gouda\" — kun je hier samenvoegen, " +
                         "zodat Inzicht ze als één rij telt.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -88,11 +88,11 @@ fun MerchantManagementScreen(onBackClick: () -> Unit, viewModel: MerchantManagem
                 }
             }
 
-            item { SectionHeader("Ondernemingen") }
+            item { SectionHeader("Tegenpartijen") }
             if (state.confirmedGroups.isEmpty()) {
                 item {
                     Text(
-                        "Nog geen ondernemingen samengesteld.",
+                        "Nog geen tegenpartijen samengesteld.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
@@ -112,7 +112,7 @@ fun MerchantManagementScreen(onBackClick: () -> Unit, viewModel: MerchantManagem
                     onClick = { showCreateDialog = true },
                     enabled = state.unassignedNames.isNotEmpty(),
                     modifier = Modifier.padding(vertical = 12.dp),
-                ) { Text("+ Nieuwe onderneming samenstellen") }
+                ) { Text("+ Nieuwe tegenpartij samenstellen") }
             }
         }
     }
@@ -225,7 +225,7 @@ private fun MemberRow(name: String, onRemove: () -> Unit) {
     }
 }
 
-/** A searchable, tap-to-pick list of counterparty names not part of any onderneming yet — used both to add one name to an existing onderneming and, filtered live, inside [CreateGroupDialog]. */
+/** A searchable, tap-to-pick list of counterparty names not part of any tegenpartij yet — used both to add one name to an existing tegenpartij and, filtered live, inside [CreateGroupDialog]. */
 @Composable
 private fun NamePickerDialog(title: String, candidates: List<String>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
@@ -269,7 +269,7 @@ private fun NamePickerDialog(title: String, candidates: List<String>, onDismiss:
     )
 }
 
-/** Name field plus a checklist of unassigned counterparty names — building a brand-new onderneming from scratch. */
+/** Name field plus a checklist of unassigned counterparty names — building a brand-new tegenpartij from scratch. */
 @Composable
 private fun CreateGroupDialog(candidates: List<String>, onDismiss: () -> Unit, onCreate: (String, List<String>) -> Unit) {
     var name by remember { mutableStateOf("") }
@@ -279,13 +279,13 @@ private fun CreateGroupDialog(candidates: List<String>, onDismiss: () -> Unit, o
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nieuwe onderneming") },
+        title = { Text("Nieuwe tegenpartij") },
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    placeholder = { Text("Naam van de onderneming") },
+                    placeholder = { Text("Naam van de tegenpartij") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
