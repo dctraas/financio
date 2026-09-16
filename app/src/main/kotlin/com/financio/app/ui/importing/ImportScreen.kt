@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.toShortDisplayString
 import com.financio.core.model.Account
@@ -57,7 +61,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 @Composable
-fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel()) {
+fun ImportScreen(onDone: () -> Unit, onGoToInsights: () -> Unit = onDone, viewModel: ImportViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
@@ -71,6 +75,10 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
     // resets to false only when a genuinely new import starts, not on every choice.
     val categorizeKey = (state as? ImportUiState.Ready)?.preview
     var categorizing by remember(categorizeKey) { mutableStateOf(false) }
+    // Screen 04's two finishing buttons both call ImportViewModel.confirm(), which only then
+    // flips the state to Imported below - this just remembers which one was tapped so that
+    // transition goes to the right place instead of always the generic onDone().
+    var goToInsightsAfterImport by remember(categorizeKey) { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -81,7 +89,9 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
     }
 
     LaunchedEffect(state) {
-        if (state is ImportUiState.Imported) onDone()
+        if (state is ImportUiState.Imported) {
+            if (goToInsightsAfterImport) onGoToInsights() else onDone()
+        }
     }
 
     Scaffold(
@@ -138,6 +148,8 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
                     padding = padding,
                     viewModel = viewModel,
                     onExit = { categorizing = false },
+                    onConfirmGoToInsights = { goToInsightsAfterImport = true; viewModel.confirm() },
+                    onConfirmGoToday = { viewModel.confirm() },
                 )
             } else {
                 ReadyContent(current, padding, viewModel, onStartCategorizing = { categorizing = true })
@@ -151,13 +163,15 @@ fun ImportScreen(onDone: () -> Unit, viewModel: ImportViewModel = hiltViewModel(
 }
 
 /**
- * The one screen that decides whether someone ever uses the app at all (R12): the critical step —
- * exporting from Mijn ING — happens entirely outside this app, in the user's own bank environment,
- * where nothing can be steered after the fact. So this leads with exactly where to click, which
- * format, and which period, instead of the single terse line a returning user (see
- * [ImportViewModel.hasAnyTransactions]) doing their Nth import actually wants.
+ * Screen 01 "Onboarding" from the September 2026 layout-redesign handoff — the one screen that
+ * decides whether someone ever uses the app at all (R12). Leads with exactly the one thing that
+ * actually differentiates Financio from Monarch/YNAB (on-device, no server, ever), in three short
+ * bullets, rather than the previous version's full "how to export from Mijn ING" walkthrough - a
+ * returning user (see [ImportViewModel.hasAnyTransactions]) never saw that walkthrough anyway,
+ * and a first-time user still gets it if their file fails to parse (the [FailedContent] recovery
+ * screen), just not spent here on the one screen that has to convert someone in a single glance.
  *
- * Deliberately doesn't offer a bundled "voorbeelddata" demo mode, unlike the original redesign
+ * Deliberately doesn't offer a bundled "Eerst rondkijken met voorbeelddata" demo mode from the
  * mockup: that would mean either seeding fake-looking transactions into the same real, encrypted
  * database a genuine import writes to (a real risk of permanently mixing demo and real financial
  * history if anything about clearing it later went wrong), or a second, fully parallel
@@ -171,52 +185,80 @@ private fun FirstLaunchContent(padding: PaddingValues, onPickFile: () -> Unit) {
             .fillMaxSize()
             .padding(padding)
             .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+            .padding(horizontal = 20.dp),
     ) {
-        Text(
-            "Geen account, geen bankkoppeling. Je bankexport wordt hier op dit toestel " +
-                "ingelezen en versleuteld opgeslagen — Financio heeft geen server en geen " +
-                "internettoegang, dus je gegevens verlaten dit toestel nooit.",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Spacer(Modifier.weight(1f))
 
-        Text(
-            "Zo exporteer je je transacties uit Mijn ING",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 28.dp, bottom = 12.dp),
-        )
-        NumberedStep(1, "Open Mijn ING (app of website) en ga naar de rekening die je wilt importeren.")
-        NumberedStep(2, "Kies \"Afschriften\" of \"Exporteren\".")
-        NumberedStep(3, "Kies als periode \"Afgelopen 2 jaar\" — dat geeft de beste resultaten voor abonnementen-detectie en gemiddeldes, ook al importeer je zelf misschien maar voor een paar maanden.")
-        NumberedStep(4, "Kies CSV of MT940 als bestandsformaat en download het bestand.")
-
-        Text(
-            "Financio categoriseert automatisch ongeveer 80% van je transacties. De rest kies " +
-                "je zelf — dat kost een paar minuten, eenmalig. Daarna hoeft dat nooit meer.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 24.dp, bottom = 20.dp),
-        )
-
-        Button(onClick = onPickFile, modifier = Modifier.fillMaxWidth()) { Text("Bestand kiezen") }
-    }
-}
-
-@Composable
-private fun NumberedStep(number: Int, text: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
         Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
+            Modifier.size(64.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center,
         ) {
-            Text(number.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold)
+            Text("F", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold, fontSize = 26.sp)
         }
-        Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 12.dp).weight(1f))
+
+        Text(
+            "Zie waar je geld heen gaat",
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 32.sp,
+            lineHeight = 38.sp,
+            modifier = Modifier.padding(top = 24.dp),
+        )
+        Text(
+            "Upload een bestand van je bank. Financio zet je transacties in categorieën en " +
+                "laat de trends zien — zonder bankkoppeling.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 16.sp,
+            lineHeight = 26.sp,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 24.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                .padding(18.dp),
+        ) {
+            listOf(
+                "Alles staat versleuteld op dit toestel",
+                "Geen account, geen server, geen internet",
+                "Je kunt altijd alles exporteren of wissen",
+            ).forEachIndexed { index, line ->
+                if (index > 0) Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.primaryContainer))
+                    Text(line, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
+                }
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        // Purely decorative, matching the mockup's paginatie-stipjes - this app only ever has the
+        // one onboarding screen, there's nothing behind dot 2/3 to swipe to.
+        Row(Modifier.align(Alignment.CenterHorizontally).padding(bottom = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(22.dp).height(5.dp).clip(RoundedCornerShape(999.dp)).background(MaterialTheme.colorScheme.primary))
+            repeat(2) {
+                Box(
+                    Modifier
+                        .padding(start = 6.dp)
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outline),
+                )
+            }
+        }
+
+        Button(
+            onClick = onPickFile,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+        ) { Text("Bestand kiezen", fontWeight = FontWeight.SemiBold) }
+
+        Spacer(Modifier.height(20.dp))
     }
 }
 
