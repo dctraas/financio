@@ -12,6 +12,7 @@ import com.financio.app.data.local.MIGRATION_1_2
 import com.financio.app.data.local.MIGRATION_2_3
 import com.financio.app.data.local.MIGRATION_3_4
 import com.financio.app.data.local.MIGRATION_4_5
+import com.financio.app.data.local.MIGRATION_5_6
 import com.financio.app.data.local.SavingsGoalDao
 import com.financio.app.data.local.TransactionDao
 import dagger.Module
