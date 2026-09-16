@@ -1,10 +1,14 @@
 name: Debug-build (testen op je telefoon)
 
-# Bouwt een installeerbare debug-APK bij elke push naar main (dus na elke gemergede PR), en
-# publiceert 'm als bijlage bij een vast "debug-latest"-release — zodat er altijd één link is
-# waarachter de nieuwste testversie staat, zonder een zip te hoeven uitpakken zoals bij een
-# gewoon Actions-artifact. Handig zolang Android Studio niet binnen handbereik is: download de
-# .apk op je telefoon en tik 'm open om te installeren.
+# Draait :core's unit tests en bouwt een installeerbare debug-APK bij elke push naar main (dus na
+# elke gemergede PR), en publiceert die APK als bijlage bij een vast "debug-latest"-release —
+# zodat er altijd één link is waarachter de nieuwste testversie staat, zonder een zip te hoeven
+# uitpakken zoals bij een gewoon Actions-artifact. Handig zolang Android Studio niet binnen
+# handbereik is: download de .apk op je telefoon en tik 'm open om te installeren.
+#
+# De unit-teststap draait bewust vóór de APK-build: dit is de enige plek waar :core's tests
+# (SubscriptionDetector, RuleMatcher, BalanceForecastCalculator, etc.) ooit echt uitgevoerd
+# worden - assembleDebug alleen compileert geen enkele testbron.
 on:
   push:
     branches: [main]
@@ -34,6 +38,9 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
+
+      - name: Unit tests draaien (:core)
+        run: ./gradlew :core:test --stacktrace
 
       - name: Debug-APK bouwen
         run: ./gradlew :app:assembleDebug --stacktrace
