@@ -9,10 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
+import com.financio.app.data.local.TextSize
 import com.financio.app.data.local.ThemeMode
 
 /** Semantic budget-status colors — kept separate from Material's color scheme so "over budget"
@@ -20,7 +23,7 @@ import com.financio.app.data.local.ThemeMode
 data class BudgetStatusColors(val ok: Color, val warning: Color, val over: Color)
 
 @Composable
-fun FinancioTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+fun FinancioTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, textSize: TextSize = TextSize.STANDARD, content: @Composable () -> Unit) {
     val darkTheme = when (themeMode) {
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
@@ -114,8 +117,15 @@ fun FinancioTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, content: @Composable 
     // regardless of which Material role a given screen happens to pull its color from.
     val statusColors = BudgetStatusColors(ok = tokens.accent, warning = tokens.amber, over = tokens.rose)
 
-    MaterialTheme(colorScheme = colorScheme, typography = financioTypography) {
-        CompositionLocalProvider(LocalBudgetStatusColors provides statusColors, content = content)
+    // Every text style in financioTypography (and Material3's own defaults) is defined in sp,
+    // which already scales with LocalDensity.fontScale at measure/draw time - overriding just
+    // that one field of the ambient Density here is enough to scale every screen's text app-wide,
+    // with no per-screen changes needed.
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density = density.density, fontScale = textSize.fontScale)) {
+        MaterialTheme(colorScheme = colorScheme, typography = financioTypography) {
+            CompositionLocalProvider(LocalBudgetStatusColors provides statusColors, content = content)
+        }
     }
 }
 

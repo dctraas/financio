@@ -3,6 +3,7 @@ package com.financio.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.data.local.AppPreferences
+import com.financio.app.data.local.TextSize
 import com.financio.app.data.local.ThemeMode
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
@@ -23,6 +24,7 @@ data class SettingsUiState(
     val biometricLockEnabled: Boolean = true,
     val notificationsEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val textSize: TextSize = TextSize.STANDARD,
     val categories: List<Category> = emptyList(),
     val rules: List<CategoryRule> = emptyList(),
     val limitsByCategory: Map<Long, Money> = emptyMap(),
@@ -60,8 +62,9 @@ class SettingsViewModel @Inject constructor(
         },
         appPreferences.notificationsEnabled,
         appPreferences.themeMode,
-    ) { snapshot, notificationsEnabled, themeMode ->
-        snapshot.copy(notificationsEnabled = notificationsEnabled, themeMode = themeMode)
+        appPreferences.textSize,
+    ) { snapshot, notificationsEnabled, themeMode, textSize ->
+        snapshot.copy(notificationsEnabled = notificationsEnabled, themeMode = themeMode, textSize = textSize)
     }
 
     val uiState: StateFlow<SettingsUiState> = combine(coreState, appPreferences.monthStartDay) { snapshot, monthStartDay ->
@@ -86,6 +89,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         appPreferences.setThemeMode(mode)
+    }
+
+    fun setTextSize(size: TextSize) {
+        appPreferences.setTextSize(size)
     }
 
     fun setMonthStartDay(day: Int) {

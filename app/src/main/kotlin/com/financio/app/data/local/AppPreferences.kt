@@ -8,6 +8,13 @@ import kotlinx.coroutines.flow.asStateFlow
 /** Light/dark follows the device by default (SYSTEM); LIGHT/DARK pin it regardless of the device setting. */
 enum class ThemeMode { LIGHT, DARK, SYSTEM }
 
+/** [fontScale] multiplies every sp-based text size app-wide - see [com.financio.app.ui.theme.FinancioTheme]. */
+enum class TextSize(val fontScale: Float) {
+    SMALL(0.9f),
+    STANDARD(1.0f),
+    LARGE(1.15f),
+}
+
 /**
  * Device-local app settings — not synced, not part of the encrypted transaction database.
  * SharedPreferences is fine here: there's a handful of booleans, all read once at startup.
@@ -50,6 +57,18 @@ class AppPreferences(context: Context) {
     fun setThemeMode(mode: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
         _themeMode.value = mode
+    }
+
+    private val _textSize = MutableStateFlow(
+        prefs.getString(KEY_TEXT_SIZE, null)?.let { stored ->
+            runCatching { TextSize.valueOf(stored) }.getOrNull()
+        } ?: DEFAULT_TEXT_SIZE,
+    )
+    val textSize: StateFlow<TextSize> = _textSize.asStateFlow()
+
+    fun setTextSize(size: TextSize) {
+        prefs.edit().putString(KEY_TEXT_SIZE, size.name).apply()
+        _textSize.value = size
     }
 
     /**
@@ -159,6 +178,7 @@ class AppPreferences(context: Context) {
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_TEXT_SIZE = "text_size"
         private const val KEY_MONTH_START_DAY = "month_start_day"
         private const val KEY_CONFIRMED_SUBSCRIPTIONS = "confirmed_subscription_names"
         private const val KEY_DISMISSED_SUBSCRIPTIONS = "dismissed_subscription_names"
@@ -169,6 +189,7 @@ class AppPreferences(context: Context) {
         private const val DEFAULT_BIOMETRIC_LOCK = true
         private const val DEFAULT_NOTIFICATIONS = false
         private val DEFAULT_THEME_MODE = ThemeMode.SYSTEM
+        private val DEFAULT_TEXT_SIZE = TextSize.STANDARD
         private const val DEFAULT_MONTH_START_DAY = 1
     }
 }

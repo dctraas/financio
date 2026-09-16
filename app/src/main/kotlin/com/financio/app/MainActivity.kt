@@ -36,7 +36,7 @@ class MainActivity : FragmentActivity() {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val settingsState by settingsViewModel.uiState.collectAsState()
 
-            FinancioTheme(themeMode = settingsState.themeMode) {
+            FinancioTheme(themeMode = settingsState.themeMode, textSize = settingsState.textSize) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     AppLockGate(
                         biometricLockEnabled = settingsState.biometricLockEnabled,
