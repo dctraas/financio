@@ -73,12 +73,17 @@ sealed interface ImportUiState {
      * The file's own account (see [com.financio.core.importer.DetectedAccount]) matched no
      * account the app already knows about. [suggestedName] prefills the new-account form when
      * the file provided one (a savings account's "Rekening naam"); otherwise a generic default.
+     * [rawIdentifier] is what the file actually gave for the account - an IBAN for a checking
+     * account or an MT940 export, or an internal ING code (e.g. "L866-14401") for a savings
+     * account with no visible IBAN in its own export - so the new-account form can prefill it
+     * under whichever field actually describes it, rather than always calling it an IBAN.
      * [existingAccounts] backs the escape hatch for a false positive — "dit is eigenlijk een
      * bestaande rekening" — for the one case the zero-transaction backfill heuristic can't cover
      * safely: re-importing into an already-used sole account before it's ever been learned.
      */
     data class AccountDetected(
         val suggestedName: String,
+        val rawIdentifier: String,
         val existingAccounts: List<Account>,
     ) : ImportUiState
 
@@ -171,6 +176,7 @@ class ImportViewModel @Inject constructor(
             pendingDetectedAccount = detected
             _uiState.value = ImportUiState.AccountDetected(
                 suggestedName = detected.suggestedName ?: "Nieuwe rekening",
+                rawIdentifier = detected.rawIdentifier,
                 existingAccounts = knownAccounts,
             )
         }
