@@ -154,6 +154,7 @@ fun FinancioNavHost() {
                     initialCategoryId = categoryId,
                     onGoToSubscriptionsClick = { navController.navigate(Destination.Subscriptions.route) },
                     onManageMerchantsClick = { navController.navigate(Destination.MerchantManagement.route) },
+                    onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
                 )
             }
             composable(Destination.Meer.route) {

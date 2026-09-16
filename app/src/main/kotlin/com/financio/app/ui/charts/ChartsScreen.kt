@@ -29,7 +29,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,8 +47,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.categoryColorFor
+import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.core.model.Money
+import com.financio.core.model.Transaction
 import com.financio.core.usecase.MerchantGrouper
 import java.time.YearMonth
 
@@ -55,6 +59,7 @@ fun ChartsScreen(
     initialCategoryId: Long? = null,
     onGoToSubscriptionsClick: () -> Unit,
     onManageMerchantsClick: () -> Unit,
+    onOpenDetail: (Long) -> Unit,
     viewModel: ChartsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -186,7 +191,7 @@ fun ChartsScreen(
                         }
 
                         if (state.counterpartyBreakdown.isNotEmpty()) {
-                            CounterpartyBreakdownSection(state.counterpartyBreakdown, onManageMerchantsClick)
+                            CounterpartyBreakdownSection(state.counterpartyBreakdown, onManageMerchantsClick, onOpenDetail)
                         }
                     }
                 }
@@ -300,25 +305,45 @@ private fun SpikeInsightCard(insight: String) {
     }
 }
 
-/** The selected category's spend for the period on screen, broken down by counterparty - "waar komt dit vandaan?", independent of whether it's actually a spike. */
+/**
+ * The selected category's spend for the period on screen, broken down by counterparty - "waar
+ * komt dit vandaan?", independent of whether it's actually a spike. Tapping a row expands it
+ * in place to show the actual transactions behind that counterparty's total, each opening the
+ * usual transaction detail screen - no separate screen for this, per the earlier scoping.
+ */
 @Composable
-private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onManageMerchantsClick: () -> Unit) {
+private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onManageMerchantsClick: () -> Unit, onOpenDetail: (Long) -> Unit) {
+    var expandedNames by remember { mutableStateOf(setOf<String>()) }
     Column(Modifier.padding(top = 24.dp)) {
         Text("Waar komt dit vandaan?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         breakdown.forEach { entry ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+            val isExpanded = entry.counterpartyName in expandedNames
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        expandedNames = if (isExpanded) expandedNames - entry.counterpartyName else expandedNames + entry.counterpartyName
+                    }
+                    .padding(vertical = 6.dp),
             ) {
-                Column(Modifier.weight(1f, fill = false)) {
-                    Text(entry.counterpartyName, style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        entry.previousAverage?.let { "gemiddeld ${it.toDisplayString()}" } ?: "nieuw",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f, fill = false)) {
+                        Text("${entry.counterpartyName} ${if (isExpanded) "▴" else "▾"}", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            entry.previousAverage?.let { "gemiddeld ${it.toDisplayString()}" } ?: "nieuw",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(entry.amount.toDisplayString(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 }
-                Text(entry.amount.toDisplayString(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                if (isExpanded) {
+                    Column(Modifier.padding(start = 12.dp, top = 4.dp)) {
+                        entry.transactions.forEach { transaction ->
+                            CounterpartyTransactionRow(transaction, onClick = { onOpenDetail(transaction.id) })
+                        }
+                    }
+                }
             }
         }
         Text(
@@ -328,6 +353,21 @@ private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onM
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 8.dp).clickable(onClick = onManageMerchantsClick),
         )
+    }
+}
+
+@Composable
+private fun CounterpartyTransactionRow(transaction: Transaction, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            transaction.date.toShortDisplayString(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(transaction.amount.toDisplayString(), style = MaterialTheme.typography.bodySmall)
     }
 }
 
