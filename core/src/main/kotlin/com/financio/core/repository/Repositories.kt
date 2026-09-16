@@ -4,6 +4,7 @@ import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
+import com.financio.core.model.MatchType
 import com.financio.core.model.Money
 import com.financio.core.model.SavingsGoal
 import com.financio.core.model.Transaction
@@ -73,6 +74,9 @@ interface CategoryRepository {
     fun observeRules(): Flow<List<CategoryRule>>
     suspend fun addRule(rule: CategoryRule)
     suspend fun addRules(rules: List<CategoryRule>)
+
+    /** The "regel bewerken" dialog's save action - [ruleId]'s category, match type and pattern change; priority is untouched (see [reorderRules] for that). */
+    suspend fun updateRule(ruleId: Long, categoryId: Long, matchType: MatchType, pattern: String)
 
     /** Returns the new category's id. */
     suspend fun addCategory(name: String, colorHex: String): Long

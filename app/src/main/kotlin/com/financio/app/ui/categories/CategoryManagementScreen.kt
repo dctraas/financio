@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -71,6 +70,10 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
     var newCategoryName by remember { mutableStateOf("") }
     var showAddRuleDialog by remember { mutableStateOf(false) }
     var rulePendingDelete by remember { mutableStateOf<CategoryRule?>(null) }
+    // An id rather than a snapshot of the CategoryRule, so the edit dialog's up/down move
+    // buttons re-derive their row (and its now-current priority) from live state on every
+    // moveRule() call instead of acting on a stale copy taken when the dialog opened.
+    var editingRuleId by remember { mutableStateOf<Long?>(null) }
     var renamingCategory by remember { mutableStateOf<Category?>(null) }
     var pickingColorFor by remember { mutableStateOf<Category?>(null) }
 
@@ -117,9 +120,10 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
             when (state.tab) {
                 CategoryManagementTab.RULES -> RulesTab(
                     state = state,
-                    viewModel = viewModel,
                     onAddRuleClick = { showAddRuleDialog = true },
+                    onRuleClick = { editingRuleId = it.id },
                     onDeleteRuleClick = { rulePendingDelete = it },
+                    onApplyRetroactivelyClick = viewModel::requestRuleApplicationPreview,
                 )
                 CategoryManagementTab.CATEGORIES -> CategoriesTab(
                     state = state,
@@ -144,6 +148,25 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
                 showAddRuleDialog = false
             },
         )
+    }
+
+    editingRuleId?.let { ruleId ->
+        val index = state.ruleRows.indexOfFirst { it.rule.id == ruleId }
+        if (index >= 0) {
+            EditRuleDialog(
+                rule = state.ruleRows[index].rule,
+                categories = state.categories,
+                canMoveUp = index > 0,
+                canMoveDown = index < state.ruleRows.size - 1,
+                onMoveUp = { viewModel.moveRule(ruleId, -1) },
+                onMoveDown = { viewModel.moveRule(ruleId, 1) },
+                onDismiss = { editingRuleId = null },
+                onSave = { categoryId, matchType, pattern ->
+                    viewModel.updateRule(ruleId, categoryId, matchType, pattern)
+                    editingRuleId = null
+                },
+            )
+        }
     }
 
     rulePendingDelete?.let { rule ->
@@ -207,11 +230,36 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
 @Composable
 private fun RulesTab(
     state: CategoryManagementUiState,
-    viewModel: CategoryManagementViewModel,
     onAddRuleClick: () -> Unit,
+    onRuleClick: (CategoryRule) -> Unit,
     onDeleteRuleClick: (CategoryRule) -> Unit,
+    onApplyRetroactivelyClick: () -> Unit,
 ) {
+    var query by remember { mutableStateOf("") }
+    // Priority still decides which rule wins (see RuleMatcher) and drives the up/down move
+    // buttons in the edit dialog, but browsing/searching the list is easier A-Z than in whatever
+    // order rules happened to be created/reordered in.
+    val sortedRows = remember(state.ruleRows) { state.ruleRows.sortedBy { it.rule.pattern.lowercase() } }
+    val visibleRows = if (query.isBlank()) {
+        sortedRows
+    } else {
+        sortedRows.filter { row ->
+            row.rule.pattern.contains(query, ignoreCase = true) || row.categoryName?.contains(query, ignoreCase = true) == true
+        }
+    }
+
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        if (state.ruleRows.isNotEmpty()) {
+            item {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Zoek op patroon of categorie") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
+                )
+            }
+        }
         if (state.ruleRows.isEmpty()) {
             item {
                 Text(
@@ -221,14 +269,19 @@ private fun RulesTab(
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
+        } else if (visibleRows.isEmpty()) {
+            item {
+                Text(
+                    "Geen regels gevonden voor \"$query\".",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            }
         } else {
-            itemsIndexed(state.ruleRows, key = { _, row -> row.rule.id }) { index, row ->
+            items(visibleRows, key = { it.rule.id }) { row ->
                 RuleCard(
                     row = row,
-                    canMoveUp = index > 0,
-                    canMoveDown = index < state.ruleRows.size - 1,
-                    onMoveUp = { viewModel.moveRule(row.rule.id, -1) },
-                    onMoveDown = { viewModel.moveRule(row.rule.id, 1) },
+                    onClick = { onRuleClick(row.rule) },
                     onDelete = { onDeleteRuleClick(row.rule) },
                 )
             }
@@ -243,7 +296,7 @@ private fun RulesTab(
             // what's already there" action - a new/aangepaste regel toepassen op transacties die al
             // bestonden voordat de regel er was.
             TextButton(
-                onClick = viewModel::requestRuleApplicationPreview,
+                onClick = onApplyRetroactivelyClick,
                 enabled = state.rules.isNotEmpty(),
                 modifier = Modifier.padding(bottom = 24.dp),
             ) { Text("Regels met terugwerkende kracht toepassen →") }
@@ -252,14 +305,7 @@ private fun RulesTab(
 }
 
 @Composable
-private fun RuleCard(
-    row: RuleRow,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDelete: () -> Unit,
-) {
+private fun RuleCard(row: RuleRow, onClick: () -> Unit, onDelete: () -> Unit) {
     val warningColor = LocalBudgetStatusColors.current.warning
     Column(
         modifier = Modifier
@@ -267,6 +313,7 @@ private fun RuleCard(
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(if (row.conflict != null) warningColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -284,19 +331,11 @@ private fun RuleCard(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            Column {
-                IconButton(onClick = onMoveUp, enabled = canMoveUp) {
-                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Regel omhoog")
-                }
-                IconButton(onClick = onMoveDown, enabled = canMoveDown) {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Regel omlaag")
-                }
-            }
             IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Verwijder regel voor ${row.rule.pattern}") }
         }
         row.conflict?.let { conflict ->
             Text(
-                "botst met regel ${conflict.otherRulePriority} — ${conflict.overlapCount} " +
+                "botst met regel '${conflict.otherRulePattern}' — ${conflict.overlapCount} " +
                     "${if (conflict.overlapCount == 1) "transactie overlapt" else "transacties overlappen"}",
                 style = MaterialTheme.typography.bodySmall,
                 color = warningColor,
@@ -305,6 +344,91 @@ private fun RuleCard(
             )
         }
     }
+}
+
+@Composable
+private fun EditRuleDialog(
+    rule: CategoryRule,
+    categories: List<Category>,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onDismiss: () -> Unit,
+    onSave: (categoryId: Long, matchType: MatchType, pattern: String) -> Unit,
+) {
+    var selectedCategoryId by remember { mutableStateOf<Long?>(rule.categoryId) }
+    var matchType by remember { mutableStateOf(rule.matchType) }
+    var pattern by remember { mutableStateOf(rule.pattern) }
+    var categoryMenuOpen by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Regel bewerken") },
+        text = {
+            Column {
+                Text("Categorie", style = MaterialTheme.typography.labelMedium)
+                Column {
+                    Text(
+                        categories.firstOrNull { it.id == selectedCategoryId }?.name ?: "Kies categorie ▾",
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.fillMaxWidth().clickable { categoryMenuOpen = true }.padding(vertical = 8.dp),
+                    )
+                    DropdownMenu(expanded = categoryMenuOpen, onDismissRequest = { categoryMenuOpen = false }) {
+                        categories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.name) },
+                                onClick = { selectedCategoryId = category.id; categoryMenuOpen = false },
+                            )
+                        }
+                    }
+                }
+
+                Text("Type", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)) {
+                    FilterChip(
+                        selected = matchType == MatchType.KEYWORD,
+                        onClick = { matchType = MatchType.KEYWORD },
+                        label = { Text("Trefwoord") },
+                    )
+                    FilterChip(
+                        selected = matchType == MatchType.COUNTERPARTY_EXACT,
+                        onClick = { matchType = MatchType.COUNTERPARTY_EXACT },
+                        label = { Text("Tegenrekening") },
+                    )
+                }
+
+                OutlinedTextField(
+                    value = pattern,
+                    onValueChange = { pattern = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Text("Volgorde", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 12.dp))
+                Text(
+                    "Bepaalt welke regel wint als meerdere regels dezelfde transactie raken.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(modifier = Modifier.padding(top = 4.dp)) {
+                    IconButton(onClick = onMoveUp, enabled = canMoveUp) {
+                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Regel omhoog")
+                    }
+                    IconButton(onClick = onMoveDown, enabled = canMoveDown) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Regel omlaag")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { selectedCategoryId?.let { onSave(it, matchType, pattern) } },
+                enabled = selectedCategoryId != null && pattern.isNotBlank(),
+            ) { Text("Opslaan") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },
+    )
 }
 
 @Composable

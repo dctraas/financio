@@ -33,8 +33,8 @@ data class RuleRow(
     val conflict: RuleConflict?,
 )
 
-/** [otherRulePriority] is the shadowed rule's own priority number, [overlapCount] how many transactions both rules' patterns actually match. */
-data class RuleConflict(val otherRulePriority: Int, val overlapCount: Int)
+/** [otherRulePattern] is the shadowed rule's own pattern text, [overlapCount] how many transactions both rules' patterns actually match. */
+data class RuleConflict(val otherRulePattern: String, val overlapCount: Int)
 
 data class CategoryRow(val category: Category, val spentThisMonth: Money)
 
@@ -120,17 +120,28 @@ class CategoryManagementViewModel @Inject constructor(
     ): CategoryManagementUiState {
         val categoriesById = categories.associateBy { it.id }
         val sortedRules = rules.sortedBy { it.priority }
-        val matcher = RuleMatcher(rules)
-        val winningRuleIdByTransaction = transactions.associate { it.id to matcher.matchingRule(it)?.id }
-        val actualMatchCounts = winningRuleIdByTransaction.values.filterNotNull().groupingBy { it }.eachCount()
-        val rawMatchesByRuleId = sortedRules.associate { rule -> rule.id to transactions.filter { matchesRule(rule, it) }.map { it.id }.toSet() }
+
+        // Single pass over transactions × rules instead of two: one for RuleMatcher.matchingRule's
+        // per-transaction winner (actualMatchCount) and a separate one for rawMatchesByRuleId's
+        // per-rule .filter (conflict detection) - both needed the exact same matches() calls.
+        val actualMatchCounts = mutableMapOf<Long, Int>()
+        val rawMatchesByRuleId = sortedRules.associate { it.id to mutableSetOf<Long>() }
+        for (transaction in transactions) {
+            var winningRuleId: Long? = null
+            for (rule in sortedRules) {
+                if (!matchesRule(rule, transaction)) continue
+                rawMatchesByRuleId.getValue(rule.id).add(transaction.id)
+                if (winningRuleId == null) winningRuleId = rule.id
+            }
+            winningRuleId?.let { actualMatchCounts[it] = (actualMatchCounts[it] ?: 0) + 1 }
+        }
 
         val ruleRows = sortedRules.map { rule ->
             val laterRules = sortedRules.filter { it.priority > rule.priority }
             val conflict = laterRules.firstNotNullOfOrNull { other ->
                 if (other.categoryId == rule.categoryId) return@firstNotNullOfOrNull null
                 val overlap = rawMatchesByRuleId.getValue(rule.id).intersect(rawMatchesByRuleId.getValue(other.id))
-                if (overlap.isEmpty()) null else RuleConflict(other.priority, overlap.size)
+                if (overlap.isEmpty()) null else RuleConflict(other.pattern, overlap.size)
             }
             RuleRow(
                 rule = rule,
@@ -208,6 +219,13 @@ class CategoryManagementViewModel @Inject constructor(
 
     fun deleteRule(ruleId: Long) {
         viewModelScope.launch { categoryRepository.deleteRule(ruleId) }
+    }
+
+    /** The "regel bewerken" dialog's save action. */
+    fun updateRule(ruleId: Long, categoryId: Long, matchType: MatchType, pattern: String) {
+        val trimmed = pattern.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch { categoryRepository.updateRule(ruleId, categoryId, matchType, trimmed) }
     }
 
     /** Moves [ruleId] one spot up (-1) or down (+1) in priority order and persists the whole new order - the up/down alternative to dragging a row. */
