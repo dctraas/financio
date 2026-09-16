@@ -3,6 +3,7 @@ package com.financio.app.ui.charts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -151,7 +152,10 @@ fun ChartsScreen(
                             points = state.points,
                             limit = state.limit,
                             average = state.average,
-                            onBarClick = { period -> viewModel.goToPeriod(period) },
+                            onBarClick = { period -> viewModel.selectPeriod(period) },
+                            onSwipePrevious = viewModel::goToPreviousPeriod,
+                            onSwipeNext = viewModel::goToNextPeriod,
+                            canSwipeNext = state.canGoToNextPeriod,
                             modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 20.dp),
                         )
                         Column(Modifier.padding(top = 8.dp)) {
@@ -477,7 +481,16 @@ private fun ModeSwitch(mode: ChartMode, onModeChange: (ChartMode) -> Unit) {
 }
 
 @Composable
-private fun BarChart(points: List<ChartPoint>, limit: Money?, average: Money?, onBarClick: (YearMonth) -> Unit, modifier: Modifier = Modifier) {
+private fun BarChart(
+    points: List<ChartPoint>,
+    limit: Money?,
+    average: Money?,
+    onBarClick: (YearMonth) -> Unit,
+    onSwipePrevious: () -> Unit,
+    onSwipeNext: () -> Unit,
+    canSwipeNext: Boolean,
+    modifier: Modifier = Modifier,
+) {
     if (points.isEmpty()) return
     val statusColors = LocalBudgetStatusColors.current
     val barColor = MaterialTheme.colorScheme.outline
@@ -499,7 +512,26 @@ private fun BarChart(points: List<ChartPoint>, limit: Money?, average: Money?, o
         }
     }
 
-    Canvas(modifier.then(tapModifier)) {
+    // A left/right swipe shifts the whole window one period, same action as the ‹ › arrows above
+    // the chart - kept as its own pointerInput (touch-slop-gated drag detection) rather than
+    // merged into the tap detector above: a plain tap never accumulates enough movement to
+    // trigger detectHorizontalDragGestures at all, so the two coexist without conflict.
+    val swipeModifier = Modifier.pointerInput(canSwipeNext) {
+        var draggedPx = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { draggedPx = 0f },
+            onHorizontalDrag = { change, dragAmount -> change.consume(); draggedPx += dragAmount },
+            onDragEnd = {
+                val threshold = 48.dp.toPx()
+                when {
+                    draggedPx <= -threshold && canSwipeNext -> onSwipeNext()
+                    draggedPx >= threshold -> onSwipePrevious()
+                }
+            },
+        )
+    }
+
+    Canvas(modifier.then(tapModifier).then(swipeModifier)) {
         val labelHeight = 28.dp.toPx()
         val valueLabelHeight = 16.dp.toPx()
         val chartHeight = size.height - labelHeight - valueLabelHeight
@@ -533,8 +565,8 @@ private fun BarChart(points: List<ChartPoint>, limit: Money?, average: Money?, o
             val x = gap / 2f + index * (barWidth + gap)
             val isOverLimit = limit != null && point.amount.cents > limit.cents
             val color = when {
-                point.isCurrent && isOverLimit -> overColor
-                point.isCurrent -> currentColor
+                point.isSelected && isOverLimit -> overColor
+                point.isSelected -> currentColor
                 else -> barColor.copy(alpha = 0.35f)
             }
             drawRoundRect(
@@ -561,7 +593,7 @@ private fun BarChart(points: List<ChartPoint>, limit: Money?, average: Money?, o
                 x + barWidth / 2f,
                 size.height - 6.dp.toPx(),
                 android.graphics.Paint().apply {
-                    this.color = if (point.isCurrent) point.labelPaintColor(isOverLimit, overColor, currentColor).toArgb()
+                    this.color = if (point.isSelected) point.labelPaintColor(isOverLimit, overColor, currentColor).toArgb()
                     else labelColor.toArgb()
                     textAlign = android.graphics.Paint.Align.CENTER
                     textSize = 11.sp.toPx()

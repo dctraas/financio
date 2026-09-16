@@ -32,7 +32,7 @@ import kotlin.math.abs
 
 enum class ChartMode { MONTH_OVER_MONTH, YEAR_OVER_YEAR }
 
-data class ChartPoint(val label: String, val amount: Money, val isCurrent: Boolean, val period: YearMonth)
+data class ChartPoint(val label: String, val amount: Money, val isSelected: Boolean, val period: YearMonth)
 
 /**
  * One category's spend for the overview's donut + top-4 — see [ChartsViewModel.overviewFor].
@@ -133,48 +133,61 @@ class ChartsViewModel @Inject constructor(
     // whole 6-month/4-year window, which is how you get to see a month or year further back than
     // the fixed trailing window this screen used to show with no way to move it.
     private val referenceMonth = MutableStateFlow(YearMonth.now())
+    // Which bar within the current window is highlighted and drives currentTotal/deltaLabel/the
+    // counterparty breakdown - null means "default to the rightmost one" (the window's own
+    // anchor). Tapping a bar sets this WITHOUT moving referenceMonth - see selectPeriod(). Reset
+    // to null by every action that changes what window/category is even on screen, so a stale
+    // selection never survives navigating away from it.
+    private val selectedPeriod = MutableStateFlow<YearMonth?>(null)
     private val categories = categoryRepository.observeCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val uiState: StateFlow<ChartsUiState> = combine(
-        categories, selectedCategoryId, mode, referenceMonth,
-    ) { cats, selected, m, anchor -> ChartQuery(cats, selected, m, anchor) }
+        categories, selectedCategoryId, mode, referenceMonth, selectedPeriod,
+    ) { cats, selected, m, anchor, selectedPer -> ChartQuery(cats, selected, m, anchor, selectedPer) }
         .flatMapLatest { query ->
             val categoryId = query.categoryId
             if (categoryId == null) {
                 overviewFor(query.categories, query.anchor)
             } else {
-                seriesFor(query.categories, categoryId, query.mode, query.anchor)
+                seriesFor(query.categories, categoryId, query.mode, query.anchor, query.selectedPeriod)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChartsUiState())
 
     fun selectCategory(categoryId: Long) {
         selectedCategoryId.value = categoryId
+        selectedPeriod.value = null
     }
 
     /** Back to the overview - the "Overzicht" chip, or after picking a donut segment once already viewing one category's trend. */
     fun clearCategorySelection() {
         selectedCategoryId.value = null
+        selectedPeriod.value = null
     }
 
     fun selectMode(newMode: ChartMode) {
         mode.value = newMode
+        selectedPeriod.value = null
     }
 
+    /** Shifts the whole window one period back - the ‹ arrow, or a right-swipe on the chart. */
     fun goToPreviousPeriod() {
         referenceMonth.value = shift(referenceMonth.value, mode.value, -1)
+        selectedPeriod.value = null
     }
 
+    /** Shifts the whole window one period forward - the › arrow, or a left-swipe on the chart. */
     fun goToNextPeriod() {
         moveTo(shift(referenceMonth.value, mode.value, +1))
+        selectedPeriod.value = null
     }
 
-    /** Tapping a bar re-centers the whole trailing window on that bar's own period, making it the new rightmost one. */
-    fun goToPeriod(period: YearMonth) {
-        moveTo(period)
+    /** Tapping a bar highlights that bar's own period - the window itself never moves, only goToPreviousPeriod/goToNextPeriod do that. */
+    fun selectPeriod(period: YearMonth) {
+        selectedPeriod.value = period
     }
 
-    /** Never lets the anchor move past "now" — a tapped bar is already ≤ now, but goToNextPeriod's step might not be. */
+    /** Never lets the anchor move past "now" — goToNextPeriod's step might land after it. */
     private fun moveTo(candidate: YearMonth) {
         if (!candidate.isAfter(YearMonth.now())) referenceMonth.value = candidate
     }
@@ -189,6 +202,7 @@ class ChartsViewModel @Inject constructor(
         val categoryId: Long?,
         val mode: ChartMode,
         val anchor: YearMonth,
+        val selectedPeriod: YearMonth?,
     )
 
     /**
@@ -322,8 +336,13 @@ class ChartsViewModel @Inject constructor(
         )
     }
 
-    private fun seriesFor(cats: List<Category>, categoryId: Long, m: ChartMode, anchor: YearMonth): Flow<ChartsUiState> {
+    private fun seriesFor(cats: List<Category>, categoryId: Long, m: ChartMode, anchor: YearMonth, selectedPeriod: YearMonth?): Flow<ChartsUiState> {
         val periods = periodsFor(m, anchor)
+        // selectedPeriod is only ever set to a value selectPeriod() copied straight out of this
+        // exact periods list (see ChartsScreen's onBarClick), and every action that changes the
+        // window/mode/category resets it to null first - so an index lookup here always either
+        // finds an exact match or falls back to the rightmost bar, never silently mismatches.
+        val selectedIndex = selectedPeriod?.let { periods.indexOf(it) }?.takeIf { it >= 0 } ?: periods.lastIndex
         // observeCategorySpent - the same "spent" number Budget's progress bars use, see that
         // method's doc comment for why a single unified calculation replaced the two this screen
         // and Budget each used to compute separately.
@@ -336,8 +355,8 @@ class ChartsViewModel @Inject constructor(
                     appPreferences.confirmedMerchantAliases,
                     appPreferences.dismissedMerchantGroups,
                 ) { budgets, transactions, splits, aliases, dismissedGroups ->
-                    val partial = buildState(cats, categoryId, m, anchor, periods, amounts)
-                    val breakdown = breakdownFor(transactions, splits, categoryId, periods, m, amounts, aliases)
+                    val partial = buildState(cats, categoryId, m, anchor, periods, amounts, selectedIndex)
+                    val breakdown = breakdownFor(transactions, splits, categoryId, periods, m, amounts, aliases, selectedIndex)
                     partial.copy(
                         limit = budgets.firstOrNull { it.categoryId == categoryId }?.limit,
                         counterpartyBreakdown = breakdown.list,
@@ -382,7 +401,7 @@ class ChartsViewModel @Inject constructor(
 
     private data class Breakdown(val list: List<CounterpartySpend>, val insight: String?, val rawCounterpartyNames: Set<String>)
 
-    /** The rightmost period's spend by counterparty (merged by confirmed alias, see [mergeByAlias]), plus each one's own average over the other periods on screen - see [CounterpartySpend]. */
+    /** The selected period's spend by counterparty (merged by confirmed alias, see [mergeByAlias]), plus each one's own average over the other periods on screen - see [CounterpartySpend]. */
     private fun breakdownFor(
         transactions: List<Transaction>,
         splitsByTransaction: Map<Long, List<TransactionSplit>>,
@@ -391,27 +410,28 @@ class ChartsViewModel @Inject constructor(
         m: ChartMode,
         amounts: List<Money>,
         aliases: Map<String, String>,
+        selectedIndex: Int,
     ): Breakdown {
-        val priorPeriods = periods.dropLast(1)
-        val currentRaw = spendByCounterparty(transactions, splitsByTransaction, categoryId, periods.last(), m)
+        val otherPeriods = periods.filterIndexed { index, _ -> index != selectedIndex }
+        val currentRaw = spendByCounterparty(transactions, splitsByTransaction, categoryId, periods[selectedIndex], m)
         val currentByCounterparty = mergeByAlias(currentRaw, aliases)
-        val priorByCounterpartyPerPeriod = priorPeriods.map { p ->
+        val otherByCounterpartyPerPeriod = otherPeriods.map { p ->
             mergeByAlias(spendByCounterparty(transactions, splitsByTransaction, categoryId, p, m), aliases)
         }
 
         val list = currentByCounterparty.entries
             .map { (name, cents) ->
-                val seenBefore = priorByCounterpartyPerPeriod.any { name in it }
-                val previousAverage = if (priorPeriods.isEmpty() || !seenBefore) {
+                val seenBefore = otherByCounterpartyPerPeriod.any { name in it }
+                val previousAverage = if (otherPeriods.isEmpty() || !seenBefore) {
                     null
                 } else {
-                    Money(priorByCounterpartyPerPeriod.sumOf { it[name] ?: 0L } / priorPeriods.size)
+                    Money(otherByCounterpartyPerPeriod.sumOf { it[name] ?: 0L } / otherPeriods.size)
                 }
                 CounterpartySpend(name, Money(cents), previousAverage)
             }
             .sortedByDescending { it.amount.cents }
 
-        return Breakdown(list, spikeInsightFor(list, amounts, m), currentRaw.keys)
+        return Breakdown(list, spikeInsightFor(list, amounts, m, selectedIndex), currentRaw.keys)
     }
 
     private fun spendByCounterparty(
@@ -454,12 +474,12 @@ class ChartsViewModel @Inject constructor(
      * a wider window than the overview badge's fixed trailing 3 months - two different views, each
      * using whatever window it already has on hand, not a hard inconsistency.
      */
-    private fun spikeInsightFor(breakdown: List<CounterpartySpend>, amounts: List<Money>, m: ChartMode): String? {
+    private fun spikeInsightFor(breakdown: List<CounterpartySpend>, amounts: List<Money>, m: ChartMode, selectedIndex: Int): String? {
         if (amounts.size < 2) return null
-        val current = amounts.last().cents
-        val priorAmounts = amounts.dropLast(1)
-        val priorAverage = priorAmounts.sumOf { it.cents } / priorAmounts.size
-        if (priorAverage <= 0 || current <= priorAverage * SPIKE_RATIO_NUM / SPIKE_RATIO_DEN || current - priorAverage < SPIKE_MIN_EXTRA_CENTS) {
+        val current = amounts[selectedIndex].cents
+        val otherAmounts = amounts.filterIndexed { index, _ -> index != selectedIndex }
+        val otherAverage = otherAmounts.sumOf { it.cents } / otherAmounts.size
+        if (otherAverage <= 0 || current <= otherAverage * SPIKE_RATIO_NUM / SPIKE_RATIO_DEN || current - otherAverage < SPIKE_MIN_EXTRA_CENTS) {
             return null
         }
         val topDriver = breakdown.maxByOrNull { it.amount.cents - (it.previousAverage?.cents ?: 0L) } ?: return null
@@ -484,12 +504,13 @@ class ChartsViewModel @Inject constructor(
         anchor: YearMonth,
         periods: List<YearMonth>,
         amounts: List<Money>,
+        selectedIndex: Int,
     ): ChartsUiState {
         val points = periods.zip(amounts).mapIndexed { index, (period, amount) ->
-            ChartPoint(label = labelFor(period, m), amount = amount, isCurrent = index == periods.lastIndex, period = period)
+            ChartPoint(label = labelFor(period, m), amount = amount, isSelected = index == selectedIndex, period = period)
         }
-        val current = amounts.lastOrNull() ?: Money.ZERO
-        val previous = amounts.getOrNull(amounts.lastIndex - 1)
+        val current = amounts.getOrNull(selectedIndex) ?: Money.ZERO
+        val previous = amounts.getOrNull(selectedIndex - 1)
         val categoryName = cats.firstOrNull { it.id == categoryId }?.name
         val isPositiveDirection = categoryName != null && categoryName.lowercase() in positiveDirectionCategories
         val deltaLabel = previous?.let { prev ->
