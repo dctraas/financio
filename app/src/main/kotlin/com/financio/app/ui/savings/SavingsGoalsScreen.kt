@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -56,7 +55,7 @@ import com.financio.core.model.SavingsGoal
 import java.time.LocalDate
 
 @Composable
-fun SavingsGoalsScreen(onBackClick: () -> Unit, viewModel: SavingsGoalsViewModel = hiltViewModel()) {
+fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var addingGoal by remember { mutableStateOf(false) }
     var rollForwardFrom by remember { mutableStateOf<SavingsGoal?>(null) }
@@ -70,9 +69,6 @@ fun SavingsGoalsScreen(onBackClick: () -> Unit, viewModel: SavingsGoalsViewModel
         topBar = {
             TopAppBar(
                 title = { Text("Spaardoelen") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },

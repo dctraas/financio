@@ -22,7 +22,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -52,7 +56,7 @@ import com.financio.core.model.Category
 import com.financio.core.model.Money
 
 @Composable
-fun BudgetsScreen(onCategoryClick: (Long) -> Unit = {}, viewModel: BudgetsViewModel = hiltViewModel()) {
+fun BudgetsScreen(onBackClick: () -> Unit, onCategoryClick: (Long) -> Unit = {}, viewModel: BudgetsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var editingCategory by remember { mutableStateOf<CategoryLimitEdit?>(null) }
 
@@ -60,6 +64,9 @@ fun BudgetsScreen(onCategoryClick: (Long) -> Unit = {}, viewModel: BudgetsViewMo
         topBar = {
             TopAppBar(
                 title = { Text("Budget") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },

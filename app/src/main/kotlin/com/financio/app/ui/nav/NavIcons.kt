@@ -6,6 +6,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
@@ -64,20 +65,6 @@ fun TransactionsIcon(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun BudgetsIcon(modifier: Modifier = Modifier) {
-    val color = LocalContentColor.current
-    Canvas(modifier.size(24.dp)) {
-        scale(size.width / DESIGN_SIZE, size.height / DESIGN_SIZE, pivot = Offset.Zero) {
-            val stroke = Stroke(width = iconStrokeWidth)
-            val center = Offset(DESIGN_SIZE / 2f, DESIGN_SIZE / 2f)
-            drawCircle(color, radius = 8f, center = center, style = stroke)
-            drawCircle(color, radius = 4.5f, center = center, style = stroke)
-            drawCircle(color, radius = 1f, center = center)
-        }
-    }
-}
-
-@Composable
 fun ChartsIcon(modifier: Modifier = Modifier) {
     val color = LocalContentColor.current
     Canvas(modifier.size(24.dp)) {
@@ -90,8 +77,25 @@ fun ChartsIcon(modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+fun SavingsGoalsIcon(modifier: Modifier = Modifier) {
+    val color = LocalContentColor.current
+    Canvas(modifier.size(24.dp)) {
+        scale(size.width / DESIGN_SIZE, size.height / DESIGN_SIZE, pivot = Offset.Zero) {
+            drawLine(color, Offset(7f, 4f), Offset(7f, 20f), strokeWidth = iconStrokeWidth, cap = StrokeCap.Round)
+            val flag = Path().apply {
+                moveTo(7f, 5f)
+                lineTo(17f, 8f)
+                lineTo(7f, 11f)
+                close()
+            }
+            drawPath(flag, color)
+        }
+    }
+}
+
 /** "Meer" catch-all tab — three dots, the usual overflow/"more" affordance, not a gear: this tab is
- * mostly Vaste lasten/Spaardoelen/Rekeningen/Categorieën now, settings is just one row inside it. */
+ * mostly Vaste lasten/Budget/Rekeningen/Categorieën now, settings is just one row inside it. */
 @Composable
 fun MeerIcon(modifier: Modifier = Modifier) {
     val color = LocalContentColor.current

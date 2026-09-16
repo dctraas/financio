@@ -32,7 +32,7 @@ import java.time.LocalDate
 @Composable
 fun MeerScreen(
     onSubscriptionsClick: () -> Unit,
-    onSavingsGoalsClick: () -> Unit,
+    onBudgetsClick: () -> Unit,
     onAccountsClick: () -> Unit,
     onManageCategoriesClick: () -> Unit,
     onMerchantManagementClick: () -> Unit,
@@ -78,13 +78,13 @@ fun MeerScreen(
                     modifier = Modifier.weight(1f),
                 )
                 MeerTile(
-                    title = "Spaardoelen",
-                    summary = if (state.savingsGoalCount > 0) {
-                        "${state.savingsGoalCount} · ${state.savingsTotalSaved.toDisplayString()} gespaard"
+                    title = "Budget",
+                    summary = if (state.budgetCount > 0) {
+                        "${state.budgetCount} ${if (state.budgetCount == 1) "limiet ingesteld" else "limieten ingesteld"}"
                     } else {
-                        "Nog geen doelen"
+                        "Nog geen limieten"
                     },
-                    onClick = onSavingsGoalsClick,
+                    onClick = onBudgetsClick,
                     modifier = Modifier.weight(1f),
                 )
             }
