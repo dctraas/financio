@@ -117,7 +117,7 @@ fun SubscriptionsScreen(onBackClick: () -> Unit, viewModel: SubscriptionsViewMod
             }
 
             if (showCalendar) {
-                item { SubscriptionCalendar(state.dueThisMonth) }
+                item { SubscriptionCalendar(state.dueThisMonth, onDismiss = viewModel::dismiss) }
             }
 
             items(state.dueThisMonth, key = { "due-${it.counterpartyName}" }) { subscription ->
@@ -197,7 +197,7 @@ private fun MonthLabel(month: YearMonth) {
  * of its own to show here without a bigger change to how that split works.
  */
 @Composable
-private fun SubscriptionCalendar(dueThisMonth: List<DetectedSubscription>) {
+private fun SubscriptionCalendar(dueThisMonth: List<DetectedSubscription>, onDismiss: (String) -> Unit) {
     val month = YearMonth.now()
     val byDay = dueThisMonth.groupBy { it.estimatedNextDate.dayOfMonth }
     var selectedDay by remember { mutableStateOf<Int?>(null) }
@@ -240,7 +240,7 @@ private fun SubscriptionCalendar(dueThisMonth: List<DetectedSubscription>) {
         selectedDay?.let { day ->
             byDay[day]?.let { subscriptions ->
                 Column(Modifier.padding(top = 12.dp)) {
-                    subscriptions.forEach { subscription -> SubscriptionCard(subscription) }
+                    subscriptions.forEach { subscription -> SubscriptionCard(subscription, onDismiss = { onDismiss(subscription.counterpartyName) }) }
                 }
             }
         }
