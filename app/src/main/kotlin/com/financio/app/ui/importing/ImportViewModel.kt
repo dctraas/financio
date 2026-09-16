@@ -8,6 +8,7 @@ import com.financio.core.categorize.LearnedRule
 import com.financio.core.importer.UnrecognizedFormatException
 import com.financio.core.model.Account
 import com.financio.core.model.Category
+import com.financio.core.model.Transaction
 import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.TransactionRepository
@@ -24,22 +25,37 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * One category decision made during import review — for the whole counterparty group ([keyword]
+ * null), or scoped to just the transactions within it whose description contains [keyword] (see
+ * [ImportViewModel.assignCategoryToKeyword]). A counterparty like the Belastingdienst can send
+ * transactions for more than one purpose under one name (motorrijtuigenbelasting vs.
+ * kinderopvangtoeslag), so a group's transactions aren't necessarily all-or-nothing.
+ */
+data class ManualCategoryChoice(val counterpartyName: String, val categoryId: Long, val keyword: String? = null) {
+    /** Mirrors [com.financio.core.model.MatchType.KEYWORD]'s own matching exactly, so a transaction resolved here behaves identically to how the rule [ImportViewModel.confirm] learns from it will match in the future. */
+    fun matches(transaction: Transaction): Boolean =
+        transaction.counterpartyName == counterpartyName &&
+            (keyword == null || "${transaction.counterpartyName} ${transaction.description}".contains(keyword, ignoreCase = true))
+}
+
 sealed interface ImportUiState {
     data object PickFile : ImportUiState
     data object Loading : ImportUiState
 
     /**
-     * [manualCategoryChoices] maps a counterparty name — one of [ImportPreview.needsCategoryGrouped]'s
-     * groups — to the category the user picked for it, applying to *every* transaction sharing
-     * that name in this batch. [skippedGroups] tracks which groups the user explicitly moved past
-     * without a choice, purely so the card stack knows which one to show next - it changes nothing
-     * about what gets imported (see [ImportViewModel.confirm]: every transaction in [preview] is
-     * imported regardless, skipped or not, chosen or not).
+     * [manualCategoryChoices] is every category decision made so far, in the order they were made
+     * — a transaction resolves to the *first* choice that [ManualCategoryChoice.matches] it, so an
+     * earlier keyword-scoped choice for part of a group still wins even after a later, broader
+     * choice covers the rest of that same counterparty. [skippedGroups] tracks which groups the
+     * user explicitly moved past without a choice, purely so the card stack knows which one to
+     * show next - it changes nothing about what gets imported (see [ImportViewModel.confirm]:
+     * every transaction in [preview] is imported regardless, skipped or not, chosen or not).
      */
     data class Ready(
         val preview: ImportPreview,
         val accountName: String,
-        val manualCategoryChoices: Map<String, Long> = emptyMap(),
+        val manualCategoryChoices: List<ManualCategoryChoice> = emptyList(),
         val skippedGroups: Set<String> = emptySet(),
         /** How many already-imported transactions use each category — ranks the top-4 chips by the user's own habits instead of category-creation order. */
         val categoryUsageFrequency: Map<Long, Int> = emptyMap(),
@@ -135,7 +151,23 @@ class ImportViewModel @Inject constructor(
         val current = _uiState.value
         if (current !is ImportUiState.Ready) return
         _uiState.value = current.copy(
-            manualCategoryChoices = current.manualCategoryChoices + (counterpartyName to categoryId),
+            manualCategoryChoices = current.manualCategoryChoices + ManualCategoryChoice(counterpartyName, categoryId),
+        )
+    }
+
+    /**
+     * "Splitsen op trefwoord" — scopes this choice to just the transactions in [counterpartyName]'s
+     * group whose description contains [keyword], instead of the whole group, so the rest can
+     * still get their own (different) category on a follow-up card instead of being forced into
+     * this same one.
+     */
+    fun assignCategoryToKeyword(counterpartyName: String, keyword: String, categoryId: Long) {
+        val current = _uiState.value
+        if (current !is ImportUiState.Ready) return
+        val trimmed = keyword.trim()
+        if (trimmed.isBlank()) return
+        _uiState.value = current.copy(
+            manualCategoryChoices = current.manualCategoryChoices + ManualCategoryChoice(counterpartyName, categoryId, trimmed),
         )
     }
 
@@ -158,9 +190,9 @@ class ImportViewModel @Inject constructor(
         if (current !is ImportUiState.Ready) return
         viewModelScope.launch {
             val manuallyCategorized = current.preview.needsCategory.map { transaction ->
-                current.manualCategoryChoices[transaction.counterpartyName]?.let { categoryId ->
-                    transaction.copy(categoryId = categoryId)
-                } ?: transaction
+                current.manualCategoryChoices.firstOrNull { it.matches(transaction) }
+                    ?.let { choice -> transaction.copy(categoryId = choice.categoryId) }
+                    ?: transaction
             }
             val toImport = current.preview.ready + manuallyCategorized
 
@@ -172,8 +204,11 @@ class ImportViewModel @Inject constructor(
 
             importStatementUseCase.confirm(toImport)
 
-            current.manualCategoryChoices.forEach { (counterpartyName, categoryId) ->
-                categoryRepository.addRule(LearnedRule.from(categoryId, counterpartyName))
+            // A keyword-scoped choice learns a rule on just that keyword, not the bare
+            // counterparty name — otherwise the rule would wrongly capture the counterparty's
+            // other, differently-categorized transactions too (see ManualCategoryChoice).
+            current.manualCategoryChoices.forEach { choice ->
+                categoryRepository.addRule(LearnedRule.from(choice.categoryId, choice.keyword ?: choice.counterpartyName))
             }
 
             affectedCategoryIds.forEach { categoryId ->

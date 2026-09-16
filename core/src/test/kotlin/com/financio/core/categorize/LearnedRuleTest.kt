@@ -8,7 +8,7 @@ class LearnedRuleTest {
 
     @Test
     fun `builds a keyword rule at the learned-rule priority`() {
-        val rule = LearnedRule.from(categoryId = 3, counterpartyName = "Bol.com")
+        val rule = LearnedRule.from(categoryId = 3, pattern = "Bol.com")
 
         assertEquals(3L, rule.categoryId)
         assertEquals(MatchType.KEYWORD, rule.matchType)
@@ -18,7 +18,7 @@ class LearnedRuleTest {
 
     @Test
     fun `a subsequent transaction from the same merchant now matches via RuleMatcher`() {
-        val rule = LearnedRule.from(categoryId = 3, counterpartyName = "Bol.com")
+        val rule = LearnedRule.from(categoryId = 3, pattern = "Bol.com")
         val matcher = RuleMatcher(listOf(rule))
 
         val nextPurchase = com.financio.core.model.ParsedTransaction(

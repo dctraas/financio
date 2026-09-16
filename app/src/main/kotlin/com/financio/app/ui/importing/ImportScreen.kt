@@ -27,6 +27,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -265,7 +266,7 @@ private fun ReadyContent(
     val preview = state.preview
     val groups = preview.needsCategoryGrouped
     val topCategoryIds = state.categoryUsageFrequency.entries.sortedByDescending { it.value }.take(4).map { it.key }
-    val remainingGroups = groups.filter { it.counterpartyName !in state.manualCategoryChoices && it.counterpartyName !in state.skippedGroups }
+    val remainingGroups = computeRemainingGroups(groups, state.manualCategoryChoices, state.skippedGroups)
     var showDuplicateInfo by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(padding)) {
@@ -297,6 +298,7 @@ private fun ReadyContent(
                         categories = categories,
                         topCategoryIds = topCategoryIds,
                         onSelect = { categoryId -> viewModel.assignCategory(current.counterpartyName, categoryId) },
+                        onSplitByKeyword = { keyword, categoryId -> viewModel.assignCategoryToKeyword(current.counterpartyName, keyword, categoryId) },
                         onSkip = { viewModel.skip(current.counterpartyName) },
                     )
                 }
@@ -321,6 +323,19 @@ private fun ReadyContent(
         )
     }
 }
+
+/**
+ * Which groups still need a review card, and which of each group's own transactions are still
+ * pending — a group whose transactions are only *partly* resolved (see [ManualCategoryChoice])
+ * reappears here as a smaller card containing just the rest, instead of disappearing entirely or
+ * staying stuck at its original full size.
+ */
+private fun computeRemainingGroups(groups: List<UncategorizedGroup>, choices: List<ManualCategoryChoice>, skippedGroups: Set<String>): List<UncategorizedGroup> =
+    groups.mapNotNull { group ->
+        if (group.counterpartyName in skippedGroups) return@mapNotNull null
+        val pending = group.transactions.filter { transaction -> choices.none { it.matches(transaction) } }
+        if (pending.isEmpty()) null else UncategorizedGroup(group.counterpartyName, pending)
+    }
 
 /** Period + account + format, replacing a raw filename that told you nothing about what's actually in the file. */
 @Composable
@@ -393,9 +408,16 @@ private fun CounterpartyCard(
     categories: List<Category>,
     topCategoryIds: List<Long>,
     onSelect: (Long) -> Unit,
+    onSplitByKeyword: (keyword: String, categoryId: Long) -> Unit,
     onSkip: () -> Unit,
 ) {
     var showAllCategories by remember(group.counterpartyName) { mutableStateOf(false) }
+    // Keyed on the group's own identity (name + size), not just its name: once a keyword split
+    // resolves part of the group, the follow-up card is the *same* counterparty name but a
+    // smaller remainder - this should start back in "kies een categorie" mode, not stay stuck
+    // showing the keyword field from the card it replaced.
+    var splitting by remember(group.counterpartyName, group.count) { mutableStateOf(false) }
+    var keyword by remember(group.counterpartyName, group.count) { mutableStateOf("") }
     val rawDescription = group.transactions.firstOrNull()?.description
 
     Column(
@@ -424,29 +446,86 @@ private fun CounterpartyCard(
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
         )
 
-        val topCategories = categories.filter { it.id in topCategoryIds }
-            .sortedBy { topCategoryIds.indexOf(it.id) }
-        val shown = if (showAllCategories) categories else topCategories
+        if (!splitting) {
+            val topCategories = categories.filter { it.id in topCategoryIds }
+                .sortedBy { topCategoryIds.indexOf(it.id) }
+            val shown = if (showAllCategories) categories else topCategories
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(shown, key = { it.id }) { category ->
-                FilterChip(selected = false, onClick = { onSelect(category.id) }, label = { Text(category.name) })
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(shown, key = { it.id }) { category ->
+                    FilterChip(selected = false, onClick = { onSelect(category.id) }, label = { Text(category.name) })
+                }
             }
-        }
-        if (!showAllCategories && categories.size > topCategories.size) {
+            if (!showAllCategories && categories.size > topCategories.size) {
+                Text(
+                    "Alle ${categories.size} →",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { showAllCategories = true }.padding(top = 10.dp),
+                )
+            }
+
+            // Only worth offering once there's more than one transaction to actually split -
+            // splitting a single-transaction group would just be a roundabout way to categorize
+            // it, not a real "meerdere soorten transacties" situation like the Belastingdienst
+            // sending both motorrijtuigenbelasting and kinderopvangtoeslag under one name.
+            if (group.count > 1) {
+                Text(
+                    "Bevat dit meerdere soorten transacties? Splitsen op trefwoord →",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { splitting = true }.padding(top = 12.dp),
+                )
+            }
+
             Text(
-                "Alle ${categories.size} →",
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { showAllCategories = true }.padding(top = 10.dp),
+                "Overslaan →",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clickable(onClick = onSkip).padding(top = 16.dp),
+            )
+        } else {
+            val matchCount = if (keyword.isBlank()) {
+                0
+            } else {
+                group.transactions.count { "${it.counterpartyName} ${it.description}".contains(keyword, ignoreCase = true) }
+            }
+            OutlinedTextField(
+                value = keyword,
+                onValueChange = { keyword = it },
+                label = { Text("Woord in de omschrijving") },
+                placeholder = { Text("bijv. motorrijtuigenbelasting") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (keyword.isNotBlank()) {
+                Text(
+                    "Raakt nu $matchCount van de ${group.count} transacties.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            Text(
+                "Kies een categorie voor deze transacties:",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(categories, key = { it.id }) { category ->
+                    FilterChip(
+                        selected = false,
+                        onClick = { onSplitByKeyword(keyword, category.id) },
+                        label = { Text(category.name) },
+                        enabled = keyword.isNotBlank(),
+                    )
+                }
+            }
+            Text(
+                "Terug",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clickable { splitting = false }.padding(top = 12.dp),
             )
         }
-
-        Text(
-            "Overslaan →",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.clickable(onClick = onSkip).padding(top = 16.dp),
-        )
     }
 }
 

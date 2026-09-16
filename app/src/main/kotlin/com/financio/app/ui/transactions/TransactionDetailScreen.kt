@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.ui.common.CategorizationConflictDialog
 import com.financio.app.ui.common.CategorySquare
 import com.financio.app.ui.common.toShortDisplayString
 import com.financio.core.model.Category
@@ -84,12 +85,7 @@ fun TransactionDetailScreen(
                     categoryName = state.categoryName,
                     isSplit = state.splits.isNotEmpty(),
                     categories = state.categories,
-                    onCategorySelect = { categoryId ->
-                        viewModel.setCategory(categoryId)
-                        if (state.otherTransactionsWithSameCounterparty > 0) {
-                            bulkApplyPrompt = DetailBulkApplyPrompt(transaction.counterpartyName, categoryId, state.otherTransactionsWithSameCounterparty)
-                        }
-                    },
+                    onCategorySelect = { categoryId -> viewModel.setCategory(categoryId) },
                 )
             }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
@@ -118,6 +114,28 @@ fun TransactionDetailScreen(
             item { NoteEditor(transaction, onSave = viewModel::setNote) }
             item { Spacer(Modifier.height(32.dp)) }
         }
+    }
+
+    // Only fires once setCategory() actually persisted - never after a keyword-scoped conflict
+    // resolution, where bulk-applying to every same-counterparty transaction would defeat the
+    // whole point of scoping the new rule down in the first place (see AppliedCategorization).
+    LaunchedEffect(state.appliedCategorization) {
+        val applied = state.appliedCategorization ?: return@LaunchedEffect
+        if (state.otherTransactionsWithSameCounterparty > 0) {
+            bulkApplyPrompt = DetailBulkApplyPrompt(applied.transaction.counterpartyName, applied.categoryId, state.otherTransactionsWithSameCounterparty)
+        }
+        viewModel.consumeAppliedCategorization()
+    }
+
+    state.categorizationConflict?.let { conflict ->
+        CategorizationConflictDialog(
+            counterpartyName = conflict.transaction.counterpartyName,
+            existingCategoryName = conflict.existingCategoryName,
+            previewCount = viewModel::previewConflictKeywordCount,
+            onApplyToAll = viewModel::resolveConflictForAll,
+            onApplyToKeyword = viewModel::resolveConflictWithKeyword,
+            onDismiss = viewModel::cancelConflict,
+        )
     }
 
     bulkApplyPrompt?.let { prompt ->

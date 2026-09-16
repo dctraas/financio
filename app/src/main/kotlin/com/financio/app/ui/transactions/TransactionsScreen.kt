@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.ui.common.CategorizationConflictDialog
 import com.financio.app.ui.common.CategorySquare
 import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
@@ -159,21 +161,40 @@ fun TransactionsScreen(onImportClick: () -> Unit, onOpenDetail: (Long) -> Unit, 
             onSelect = { categoryId ->
                 viewModel.categorize(transaction, categoryId)
                 categorizing = null
-                // Computed from what's already loaded, not a fresh query: good enough to decide
-                // whether the follow-up prompt is worth showing at all.
-                // Scoped to the same account as the bulk-apply itself (see applyCategoryToCounterparty) -
-                // matters once "alle rekeningen" is the active filter and other accounts are in view too.
-                val otherCount = state.transactions.count {
-                    it.accountId == transaction.accountId && it.counterpartyName == transaction.counterpartyName && it.id != transaction.id
-                }
-                if (otherCount > 0) {
-                    bulkApplyPrompt = BulkApplyPrompt(transaction.accountId, transaction.counterpartyName, categoryId, otherCount)
-                }
             },
             onSplitClick = {
                 categorizing = null
                 splitting = transaction
             },
+        )
+    }
+
+    // Only fires once categorize() actually persisted - never after a keyword-scoped conflict
+    // resolution, where bulk-applying to every same-counterparty transaction would defeat the
+    // whole point of scoping the new rule down in the first place (see AppliedCategorization).
+    LaunchedEffect(state.appliedCategorization) {
+        val applied = state.appliedCategorization ?: return@LaunchedEffect
+        // Computed from what's already loaded, not a fresh query: good enough to decide whether
+        // the follow-up prompt is worth showing at all. Scoped to the same account as the
+        // bulk-apply itself (see applyCategoryToCounterparty) - matters once "alle rekeningen" is
+        // the active filter and other accounts are in view too.
+        val otherCount = state.transactions.count {
+            it.accountId == applied.transaction.accountId && it.counterpartyName == applied.transaction.counterpartyName && it.id != applied.transaction.id
+        }
+        if (otherCount > 0) {
+            bulkApplyPrompt = BulkApplyPrompt(applied.transaction.accountId, applied.transaction.counterpartyName, applied.categoryId, otherCount)
+        }
+        viewModel.consumeAppliedCategorization()
+    }
+
+    state.categorizationConflict?.let { conflict ->
+        CategorizationConflictDialog(
+            counterpartyName = conflict.transaction.counterpartyName,
+            existingCategoryName = conflict.existingCategoryName,
+            previewCount = viewModel::previewConflictKeywordCount,
+            onApplyToAll = viewModel::resolveConflictForAll,
+            onApplyToKeyword = viewModel::resolveConflictWithKeyword,
+            onDismiss = viewModel::cancelConflict,
         )
     }
 
