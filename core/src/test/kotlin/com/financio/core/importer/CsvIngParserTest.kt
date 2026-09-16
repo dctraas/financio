@@ -129,6 +129,41 @@ class CsvIngParserTest {
     }
 
     @Test
+    fun `parses a savings-account export whose header spells the amount and description columns differently`() {
+        // A real "Oranje Spaarrekening" export: "Omschrijving" instead of "Naam / Omschrijving",
+        // "Bedrag" instead of "Bedrag (EUR)", and an ISO-formatted date - none of which the
+        // checking-account format above uses. Reported as an import failure where the error
+        // screen's "is this the date column?" recovery did nothing, because the date column was
+        // never the actual problem.
+        val savingsAccountCsv = """
+            "Datum";"Omschrijving";"Rekening";"Rekening naam";"Tegenrekening";"Af Bij";"Bedrag";"Valuta";"Mutatiesoort";"Mededelingen";"Saldo na mutatie"
+            "2026-09-15";"Overboeking naar betaalrekening NL14INGB0008028652";"L866-14401";"Oranje Spaarrekening";"NL14INGB0008028652";"Af";"200,00";"EUR";"Opname";"";"8387,49"
+        """.trimIndent()
+
+        val txn = CsvIngParser().parse(savingsAccountCsv, accountId = 1).single()
+        assertEquals(LocalDate.of(2026, 9, 15), txn.date)
+        assertEquals(Money(-20000), txn.amount)
+        assertEquals("NL14INGB0008028652", txn.counterpartyIban)
+        assertEquals("Overboeking naar betaalrekening NL14INGB0008028652", txn.counterpartyName)
+        assertEquals(Money(838749), txn.balanceAfter)
+    }
+
+    @Test
+    fun `also accepts an ISO-formatted date column, not just yyyyMMdd`() {
+        val isoDated = sampleCsv.replace("20260903", "2026-09-03")
+        val txn = CsvIngParser().parse(isoDated, accountId = 1).single()
+        assertEquals(LocalDate.of(2026, 9, 3), txn.date)
+    }
+
+    @Test
+    fun `an unparseable date value fails loudly rather than crashing with a raw exception`() {
+        val badDate = sampleCsv.replace("20260903", "03-09-2026")
+        assertThrows(UnrecognizedFormatException::class.java) {
+            CsvIngParser().parse(badDate, accountId = 1)
+        }
+    }
+
+    @Test
     fun `parses a real RFC 4180-quoted, semicolon-delimited ING export`() {
         // This is the actual "Mijn ING" export format, confirmed against a real download copied
         // straight from the source: every field wrapped in double quotes, ";" as the delimiter.

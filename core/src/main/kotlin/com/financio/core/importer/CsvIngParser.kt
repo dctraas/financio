@@ -24,6 +24,12 @@ import java.time.format.DateTimeFormatter
  * Known simplification: does not support a delimiter or newline embedded inside a quoted field
  * value — true for every ING export seen so far, since names/descriptions use ING's own
  * separators (colons, spaces) internally, never a literal ";".
+ *
+ * A savings-account export uses slightly different header names than a checking account's for
+ * two of the required columns ("Omschrijving" instead of "Naam / Omschrijving", "Bedrag" instead
+ * of "Bedrag (EUR)") — [COLUMN_ALIASES] tries every known name per column before giving up,
+ * rather than only ever accepting the checking-account spelling. It also writes its date column
+ * as ISO "2026-09-03" rather than a checking account's "20260903" — see [parseDate].
  */
 class CsvIngParser : BankStatementParser {
 
@@ -36,9 +42,9 @@ class CsvIngParser : BankStatementParser {
         val delimiter = detectDelimiter(lines.first())
         val header = splitCsvLine(lines.first(), delimiter).map { it.trim() }
         val columnIndex = REQUIRED_COLUMNS.associateWith { column ->
-            val autoIndex = header.indexOf(column)
+            val autoIndex = COLUMN_ALIASES.getValue(column).firstNotNullOfOrNull { alias -> header.indexOf(alias).takeIf { it >= 0 } }
             when {
-                autoIndex >= 0 -> autoIndex
+                autoIndex != null -> autoIndex
                 // Only the date column has a manual-override recovery path (see the interface's
                 // doc comment) - every other missing column still fails outright.
                 column == COL_DATE && dateColumnOverrideIndex != null -> dateColumnOverrideIndex
@@ -56,6 +62,11 @@ class CsvIngParser : BankStatementParser {
 
         return lines.drop(1).map { line -> parseLine(line, delimiter, columnIndex, tagIndex, accountId) }
     }
+
+    /** A checking account exports "20260903"; a savings account's own export seen so far uses ISO "2026-09-03" instead - tries both rather than assuming every ING export shares one date format. */
+    private fun parseDate(raw: String): LocalDate =
+        DATE_FORMATS.firstNotNullOfOrNull { format -> runCatching { LocalDate.parse(raw, format) }.getOrNull() }
+            ?: throw UnrecognizedFormatException("Onbekende datumnotatie: '$raw'")
 
     private fun detectDelimiter(headerLine: String): Char =
         CANDIDATE_DELIMITERS.firstOrNull { delimiter ->
@@ -102,7 +113,7 @@ class CsvIngParser : BankStatementParser {
         val fields = splitCsvLine(line, delimiter)
         fun col(name: String): String = fields.getOrElse(columnIndex.getValue(name)) { "" }.trim()
 
-        val date = LocalDate.parse(col(COL_DATE), DATE_FORMAT)
+        val date = parseDate(col(COL_DATE))
         // "Bedrag (EUR)" is always a positive magnitude; direction comes from the separate Af/Bij column.
         val magnitude = Money(kotlin.math.abs(Money.parseCommaDecimal(col(COL_AMOUNT)).cents))
         val direction = col(COL_DIRECTION)
@@ -145,7 +156,18 @@ class CsvIngParser : BankStatementParser {
         private val REQUIRED_COLUMNS = listOf(
             COL_DATE, COL_NAME, COL_COUNTERPARTY, COL_DIRECTION, COL_AMOUNT, COL_NOTES, COL_BALANCE,
         )
+        // Each required column's own name first, then any other header spelling ING is known to
+        // export it under - see the class doc comment for which account type uses which.
+        private val COLUMN_ALIASES: Map<String, List<String>> = mapOf(
+            COL_DATE to listOf(COL_DATE),
+            COL_NAME to listOf(COL_NAME, "Omschrijving"),
+            COL_COUNTERPARTY to listOf(COL_COUNTERPARTY),
+            COL_DIRECTION to listOf(COL_DIRECTION),
+            COL_AMOUNT to listOf(COL_AMOUNT, "Bedrag"),
+            COL_NOTES to listOf(COL_NOTES),
+            COL_BALANCE to listOf(COL_BALANCE),
+        )
         private val CANDIDATE_DELIMITERS = listOf('\t', ';')
-        private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd")
+        private val DATE_FORMATS: List<DateTimeFormatter> = listOf(DateTimeFormatter.ofPattern("yyyyMMdd"), DateTimeFormatter.ISO_LOCAL_DATE)
     }
 }
