@@ -13,6 +13,7 @@ import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
+import com.financio.core.model.MatchType
 import com.financio.core.model.Money
 import com.financio.core.model.SavingsGoal
 import com.financio.core.model.Transaction
@@ -106,6 +107,10 @@ class RoomCategoryRepository @Inject constructor(
 
     override suspend fun addRules(rules: List<CategoryRule>) {
         ruleDao.insertAll(rules.map { it.toRuleEntity() })
+    }
+
+    override suspend fun updateRule(ruleId: Long, categoryId: Long, matchType: MatchType, pattern: String) {
+        ruleDao.update(ruleId, categoryId, matchType.name, pattern)
     }
 
     override suspend fun addCategory(name: String, colorHex: String): Long =

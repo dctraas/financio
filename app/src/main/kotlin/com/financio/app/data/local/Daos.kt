@@ -70,6 +70,10 @@ interface CategoryRuleDao {
     /** The "sleep om de volgorde te wijzigen" reorder action: whichever rules moved get their priority rewritten to match the new list order (1-indexed). */
     @Query("UPDATE category_rules SET priority = :priority WHERE id = :ruleId")
     suspend fun setPriority(ruleId: Long, priority: Int)
+
+    /** The "regel bewerken" dialog's save action - priority is untouched, use [setPriority] to reorder. */
+    @Query("UPDATE category_rules SET categoryId = :categoryId, matchType = :matchType, pattern = :pattern WHERE id = :ruleId")
+    suspend fun update(ruleId: Long, categoryId: Long, matchType: String, pattern: String)
 }
 
 @Dao
