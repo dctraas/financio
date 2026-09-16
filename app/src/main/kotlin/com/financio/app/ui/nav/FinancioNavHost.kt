@@ -195,7 +195,18 @@ fun FinancioNavHost() {
                     onBackupExportClick = { navController.navigate(Destination.BackupExport.route) },
                 )
             }
-            composable(Destination.Import.route) { ImportScreen(onDone = { navController.popBackStack() }) }
+            composable(Destination.Import.route) {
+                ImportScreen(
+                    onDone = { navController.popBackStack() },
+                    onGoToInsights = {
+                        navController.navigate("charts") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+            }
             composable(
                 route = Destination.TransactionDetail.route,
                 arguments = listOf(navArgument(ARG_TRANSACTION_ID) { type = NavType.LongType }),
