@@ -346,7 +346,7 @@ private fun CategorizeBody(
 
         if (!splitting) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, top = 14.dp, bottom = 20.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 20.dp)) {
                 if (suggestedCategory != null) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
