@@ -287,10 +287,15 @@ private fun AccountDetectedContent(
     onLinkToExisting: (accountId: Long) -> Unit,
     onCancel: () -> Unit,
 ) {
+    // A checking account's "Rekening" column and an MT940 :25: tag are both real IBANs; a savings
+    // account's own export instead gives an internal ING code like "L866-14401" - showing that
+    // under "IBAN" would just be wrong, so the field (and its label) follow what was actually
+    // detected instead of always assuming an IBAN.
+    val isIban = remember(state.rawIdentifier) { looksLikeIban(state.rawIdentifier) }
     var name by remember { mutableStateOf(state.suggestedName) }
-    var iban by remember { mutableStateOf("") }
+    var accountNumber by remember { mutableStateOf(state.rawIdentifier) }
     var showExistingPicker by remember { mutableStateOf(false) }
-    val isValid = name.isNotBlank() && iban.isNotBlank()
+    val isValid = name.isNotBlank() && accountNumber.isNotBlank()
 
     Column(
         Modifier
@@ -317,16 +322,24 @@ private fun AccountDetectedContent(
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
-            value = iban,
-            onValueChange = { iban = it },
-            label = { Text("IBAN (gemaskeerd)") },
-            placeholder = { Text("bijv. NL•• INGB •••• •• 1234") },
+            value = accountNumber,
+            onValueChange = { accountNumber = it },
+            label = { Text(if (isIban) "IBAN" else "Rekeningnummer") },
+            placeholder = { Text(if (isIban) "bijv. NL91 INGB 0008 0286 52" else "bijv. L866-14401") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
+        if (!isIban) {
+            Text(
+                "Dit bestand geeft geen IBAN voor deze rekening, alleen dit interne rekeningnummer.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
 
         Button(
-            onClick = { onConfirm(name.trim(), iban.trim()) },
+            onClick = { onConfirm(name.trim(), accountNumber.trim()) },
             enabled = isValid,
             modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
         ) { Text("Rekening toevoegen") }
@@ -370,6 +383,10 @@ private fun AccountDetectedContent(
         )
     }
 }
+
+/** ISO 13616 shape (2-letter country + 2 check digits + up to 30 alphanumeric BBAN) - just enough to tell a real IBAN (checking accounts, every MT940 :25: tag) apart from a savings account export's internal ING code like "L866-14401", which doesn't fit this at all. */
+private val IBAN_PATTERN = Regex("^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$")
+private fun looksLikeIban(value: String): Boolean = IBAN_PATTERN.matches(value.trim().uppercase())
 
 @Composable
 private fun ReadyContent(
