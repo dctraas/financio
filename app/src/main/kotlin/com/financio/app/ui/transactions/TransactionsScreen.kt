@@ -2,9 +2,11 @@ package com.financio.app.ui.transactions
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,31 +15,26 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,17 +48,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.CategorizationConflictDialog
 import com.financio.app.ui.common.CategorySquare
-import com.financio.app.ui.common.toShortDisplayString
+import com.financio.app.ui.common.toSignedMagnitudeString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
+import com.financio.app.ui.theme.LocalFinancioColors
 import com.financio.core.model.Category
 import com.financio.core.model.Money
 import com.financio.core.model.Transaction
 import com.financio.core.model.TransactionSplit
 import com.financio.core.usecase.SplitValidation
 import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
 private data class BulkApplyPrompt(val accountId: Long, val counterpartyName: String, val categoryId: Long, val otherCount: Int)
 
@@ -90,34 +91,18 @@ fun TransactionsScreen(
     var categorizing by remember { mutableStateOf<Transaction?>(null) }
     var splitting by remember { mutableStateOf<Transaction?>(null) }
     var bulkApplyPrompt by remember { mutableStateOf<BulkApplyPrompt?>(null) }
-    var searchExpanded by remember { mutableStateOf(false) }
-    var filterSheetOpen by remember { mutableStateOf(false) }
-
-    // Whether the compact filter icon needs its "something is active" dot - the whole point of
-    // hiding the controls behind an icon is that the icon itself still tells you when they're
-    // doing something.
-    val filtersActive = state.categoryFilter != CategoryFilter.All ||
-        state.sort != TransactionSort.DATE_DESC ||
-        state.selectedAccountId != null
+    var categorySheetOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("Financio", fontWeight = FontWeight.Bold) },
-                    actions = {
-                        IconButton(onClick = onImportClick) { Icon(Icons.Filled.Add, contentDescription = "Importeren") }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                )
-                CompactChrome(
-                    searchExpanded = searchExpanded,
-                    searchQuery = state.searchQuery,
-                    filtersActive = filtersActive,
-                    onSearchIconClick = { searchExpanded = true },
-                    onSearchQueryChange = viewModel::setSearchQuery,
-                    onSearchClose = { searchExpanded = false; viewModel.setSearchQuery("") },
-                    onFilterIconClick = { filterSheetOpen = true },
+            Column(Modifier.background(MaterialTheme.colorScheme.background)) {
+                TransactionsHeader(sort = state.sort, onSortSelect = viewModel::setSort)
+                SearchField(query = state.searchQuery, onQueryChange = viewModel::setSearchQuery)
+                FilterChipsRow(
+                    state = state,
+                    onSelectAll = { viewModel.setCategoryFilter(CategoryFilter.All) },
+                    onSelectUncategorized = { viewModel.setCategoryFilter(CategoryFilter.Uncategorized) },
+                    onOpenCategorySheet = { categorySheetOpen = true },
                 )
             }
         },
@@ -129,13 +114,19 @@ fun TransactionsScreen(
         } else {
             val listItems = groupedItems(state.transactions, state.sort)
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-                items(listItems, key = { item ->
+                itemsIndexed(listItems, key = { _, item ->
                     when (item) {
                         is TransactionListItem.DayHeader -> "header-${item.date}"
                         is TransactionListItem.CounterpartyHeader -> "header-${item.counterpartyName}"
                         is TransactionListItem.Row -> item.transaction.id
                     }
-                }) { item ->
+                }) { index, item ->
+                    // A divider only ever separates two rows within the same group - never right
+                    // under a header (its own bottom spacing already reads as a boundary) and
+                    // never between the last row of one group and the next header.
+                    if (item is TransactionListItem.Row && listItems.getOrNull(index - 1) is TransactionListItem.Row) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 20.dp))
+                    }
                     when (item) {
                         is TransactionListItem.DayHeader -> DayHeaderRow(item.date, item.netCents)
                         is TransactionListItem.CounterpartyHeader -> CounterpartyHeaderRow(item.counterpartyName, item.count)
@@ -147,8 +138,9 @@ fun TransactionsScreen(
                                 isSplit = transaction.id in state.splitTransactionIds,
                                 splits = state.splitsByTransaction[transaction.id].orEmpty(),
                                 categoriesById = state.categoriesById,
-                                // Tap opens the detail screen; long-press keeps the quick
-                                // category-change flow that used to be behind a plain tap.
+                                // Tap opens the detail screen; long-press (or the "Categorie
+                                // kiezen" pill's own tap, for an uncategorized row) keeps the
+                                // quick category-change flow that used to be behind a plain tap.
                                 onClick = { onOpenDetail(transaction.id) },
                                 onLongClick = { categorizing = transaction },
                             )
@@ -159,10 +151,10 @@ fun TransactionsScreen(
         }
     }
 
-    if (filterSheetOpen) {
+    if (categorySheetOpen) {
         val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(onDismissRequest = { filterSheetOpen = false }, sheetState = sheetState) {
-            TransactionFilterSheet(state = state, viewModel = viewModel)
+        ModalBottomSheet(onDismissRequest = { categorySheetOpen = false }, sheetState = sheetState) {
+            CategorySheet(state = state, viewModel = viewModel, onDismiss = { categorySheetOpen = false })
         }
     }
 
@@ -264,24 +256,28 @@ private fun groupedItems(transactions: List<Transaction>, sort: TransactionSort)
     else -> transactions.map { TransactionListItem.Row(it) }
 }
 
+/** "MA 14 SEPTEMBER" — always the full weekday+date, no "Vandaag"/"Gisteren" special-casing, per the schermontwerp spec. */
+private fun LocalDate.dayHeaderLabel(): String =
+    "${dayOfWeek.getDisplayName(TextStyle.SHORT, Locale("nl")).uppercase()} $dayOfMonth ${month.getDisplayName(TextStyle.FULL, Locale("nl")).uppercase()}"
+
 @Composable
 private fun DayHeaderRow(date: LocalDate, netCents: Long) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             date.dayHeaderLabel(),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = LocalFinancioColors.current.inkFaint,
         )
         Text(
-            Money(netCents).toSignedDisplayString(),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Money(netCents).toSignedMagnitudeString(),
+            fontSize = 12.sp,
+            color = LocalFinancioColors.current.inkFaint,
         )
     }
 }
@@ -290,110 +286,197 @@ private fun DayHeaderRow(date: LocalDate, netCents: Long) {
 @Composable
 private fun CounterpartyHeaderRow(counterpartyName: String, count: Int) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            counterpartyName,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            counterpartyName.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = LocalFinancioColors.current.inkFaint,
             modifier = Modifier.weight(1f, fill = false),
         )
         Text(
             if (count == 1) "1 transactie" else "$count transacties",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            color = LocalFinancioColors.current.inkFaint,
         )
     }
 }
 
-private fun LocalDate.dayHeaderLabel(): String {
-    val today = LocalDate.now()
-    return when (this) {
-        today -> "Vandaag"
-        today.minusDays(1) -> "Gisteren"
-        else -> toShortDisplayString()
+@Composable
+private fun TransactionsHeader(sort: TransactionSort, onSortSelect: (TransactionSort) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Transacties", style = MaterialTheme.typography.titleLarge)
+        SortButton(sort, onSortSelect)
+    }
+}
+
+@Composable
+private fun SortButton(sort: TransactionSort, onSelect: (TransactionSort) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .height(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Sorteren", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            TransactionSort.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = { onSelect(option); expanded = false },
+                )
+            }
+        }
+        // No checkmark glyph in the trimmed icon set available here (same reasoning as the SplitDialog's plain "✕") - bolding the active option is enough of a signal in a short list.
+    }
+}
+
+/** 48dp, always visible - the redesign drops the old tap-to-expand search icon in favor of a field that's just always there. */
+@Composable
+private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 12.dp)
+            .height(48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        val iconColor = MaterialTheme.colorScheme.onSurfaceVariant
+        androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides iconColor) { SearchIcon() }
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) {
+                Text(
+                    "Zoek op winkel of omschrijving",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onBackground),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
 /**
- * The redesign's "chrome shrunk from 160px to 40px": two round icon buttons instead of an
- * always-visible search field, filter-chip row and sort text. Tapping search swaps this same
- * 40dp-tall row for an inline text field instead of pushing content down further.
+ * "Alles · N", "Zonder categorie · N" (always amber-tinted, whether active or not - the schermontwerp
+ * reserves that tint for this one filter, matching the same convention as Vandaag's task card and
+ * the import flow's "needs a category" status card) and "Categorie" (opens [CategorySheet], and
+ * shows the picked category's own name+count once one is selected, instead of the generic label).
  */
 @Composable
-private fun CompactChrome(
-    searchExpanded: Boolean,
-    searchQuery: String,
-    filtersActive: Boolean,
-    onSearchIconClick: () -> Unit,
-    onSearchQueryChange: (String) -> Unit,
-    onSearchClose: () -> Unit,
-    onFilterIconClick: () -> Unit,
+private fun FilterChipsRow(
+    state: TransactionsUiState,
+    onSelectAll: () -> Unit,
+    onSelectUncategorized: () -> Unit,
+    onOpenCategorySheet: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+    val specific = state.categoryFilter as? CategoryFilter.Specific
+    val categoryChipLabel = specific
+        ?.let { filter -> state.categoriesById[filter.categoryId]?.name }
+        ?.let { name -> "$name · ${state.categoryCounts[specific.categoryId] ?: 0}" }
+        ?: "Categorie"
+
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (searchExpanded) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-                placeholder = { Text("Zoeken op naam, omschrijving of tag") },
-                singleLine = true,
-                trailingIcon = {
-                    IconButton(onClick = onSearchClose) { Icon(Icons.Filled.Close, contentDescription = "Zoeken sluiten") }
-                },
-                modifier = Modifier.weight(1f),
+        item {
+            val active = state.categoryFilter == CategoryFilter.All
+            FilterPill(
+                "Alles · ${state.totalCount}",
+                selected = active,
+                containerColor = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                borderColor = if (active) null else MaterialTheme.colorScheme.outline,
+                onClick = onSelectAll,
             )
-        } else {
-            RoundIconButton(onClick = onSearchIconClick, contentDescription = "Zoeken") { SearchIcon() }
-            Box {
-                RoundIconButton(onClick = onFilterIconClick, contentDescription = "Filteren") { FilterIcon() }
-                if (filtersActive) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .align(Alignment.TopEnd)
-                            .clip(CircleShape)
-                            .background(LocalBudgetStatusColors.current.warning),
-                    )
-                }
-            }
+        }
+        item {
+            FilterPill(
+                "Zonder categorie · ${state.uncategorizedCount}",
+                selected = state.categoryFilter == CategoryFilter.Uncategorized,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                borderColor = MaterialTheme.colorScheme.secondary,
+                onClick = onSelectUncategorized,
+            )
+        }
+        item {
+            FilterPill(
+                categoryChipLabel,
+                selected = specific != null,
+                containerColor = if (specific != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                contentColor = if (specific != null) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                borderColor = if (specific != null) null else MaterialTheme.colorScheme.outline,
+                onClick = onOpenCategorySheet,
+            )
         }
     }
 }
 
 @Composable
-private fun RoundIconButton(onClick: () -> Unit, contentDescription: String, content: @Composable () -> Unit) {
-    Box(
+private fun FilterPill(
+    label: String,
+    selected: Boolean,
+    containerColor: androidx.compose.ui.graphics.Color,
+    contentColor: androidx.compose.ui.graphics.Color,
+    borderColor: androidx.compose.ui.graphics.Color?,
+    onClick: () -> Unit,
+) {
+    Row(
         modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+            .clip(RoundedCornerShape(999.dp))
+            .background(containerColor)
+            .let { if (borderColor != null) it.border(1.dp, borderColor, RoundedCornerShape(999.dp)) else it }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        content()
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = contentColor,
+        )
     }
 }
 
 /**
- * The account filter, category filter chips and sort choice — previously always visible above the
- * list, now tucked behind the filter icon's bottom sheet.
+ * "Categorie" chip's bottom sheet: the full category list (spec), plus - since it isn't part of
+ * the mockup's single-account scenario but is real, already-shipped functionality - the account
+ * switcher that used to live in the old filter sheet, shown only once there's more than one
+ * account to choose from.
  */
 @Composable
-private fun TransactionFilterSheet(state: TransactionsUiState, viewModel: TransactionsViewModel) {
-    var sortMenuOpen by remember { mutableStateOf(false) }
-
-    // ModalBottomSheet doesn't scroll its content on its own (same lesson as AlertDialog above) -
-    // on a small screen with several categories, the sheet would otherwise just cut off.
+private fun CategorySheet(state: TransactionsUiState, viewModel: TransactionsViewModel, onDismiss: () -> Unit) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-        Text("Filteren en sorteren", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Categorie", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
         if (state.accounts.size > 1) {
             Text(
@@ -420,68 +503,41 @@ private fun TransactionFilterSheet(state: TransactionsUiState, viewModel: Transa
             }
         }
 
-        Text(
-            "Categorie",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                FilterChip(
-                    selected = state.categoryFilter == CategoryFilter.All,
-                    onClick = { viewModel.setCategoryFilter(CategoryFilter.All) },
-                    label = { Text("Alle (${state.totalCount})") },
-                )
-            }
-            item {
-                FilterChip(
-                    selected = state.categoryFilter == CategoryFilter.Uncategorized,
-                    onClick = { viewModel.setCategoryFilter(CategoryFilter.Uncategorized) },
-                    label = { Text("Niet gecategoriseerd (${state.uncategorizedCount})") },
-                )
-            }
-            items(state.categories, key = { it.id }) { category ->
-                FilterChip(
-                    selected = state.categoryFilter == CategoryFilter.Specific(category.id),
-                    onClick = { viewModel.setCategoryFilter(CategoryFilter.Specific(category.id)) },
-                    label = { Text("${category.name} (${state.categoryCounts[category.id] ?: 0})") },
-                )
+        CategorySheetRow("Alle transacties", selected = state.categoryFilter == CategoryFilter.All, count = state.totalCount) {
+            viewModel.setCategoryFilter(CategoryFilter.All)
+            onDismiss()
+        }
+        CategorySheetRow("Zonder categorie", selected = state.categoryFilter == CategoryFilter.Uncategorized, count = state.uncategorizedCount) {
+            viewModel.setCategoryFilter(CategoryFilter.Uncategorized)
+            onDismiss()
+        }
+        state.categories.forEach { category ->
+            CategorySheetRow(
+                category.name,
+                selected = state.categoryFilter == CategoryFilter.Specific(category.id),
+                count = state.categoryCounts[category.id] ?: 0,
+            ) {
+                viewModel.setCategoryFilter(CategoryFilter.Specific(category.id))
+                onDismiss()
             }
         }
+    }
+}
 
+@Composable
+private fun CategorySheetRow(name: String, selected: Boolean, count: Int, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
-            "Sorteren",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+            name,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         )
-        Box {
-            Text(
-                "${state.sort.label} ▾",
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { sortMenuOpen = true }.padding(vertical = 4.dp),
-            )
-            DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
-                TransactionSort.entries.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.label) },
-                        onClick = { viewModel.setSort(option); sortMenuOpen = false },
-                    )
-                }
-            }
-        }
-
-        if (state.categoryFilter != CategoryFilter.All || state.sort != TransactionSort.DATE_DESC) {
-            Text(
-                "Filters wissen",
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = viewModel::clearFilters).padding(top = 20.dp),
-            )
-        }
+        Text(count.toString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -588,13 +644,12 @@ private fun TransactionRow(
     // A split transaction has its own categoryId nulled (see TransactionDao.setSplits), so without
     // isSplit it would look identical to a genuinely uncategorized one here.
     val uncategorized = categoryName == null && !isSplit
-    val warningColor = LocalBudgetStatusColors.current.warning
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         CategorySquare(categoryName, isSplit = isSplit)
@@ -602,7 +657,7 @@ private fun TransactionRow(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     transaction.counterpartyName,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.weight(1f, fill = false),
                 )
@@ -610,20 +665,46 @@ private fun TransactionRow(
                 // Financio's categories, so it's shown alongside rather than folded into one.
                 transaction.tag?.let { tag -> TagChip(tag) }
             }
-            Text(
-                if (isSplit) splitSubtitle(splits, categoriesById, transaction) else subtitleFor(categoryName, transaction),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (uncategorized) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (uncategorized) warningColor else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            when {
+                uncategorized -> UncategorizedPill(onClick = onLongClick)
+                isSplit -> Text(
+                    splitSubtitle(splits, categoriesById),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                else -> Text(
+                    categoryName.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         val isIncome = transaction.amount.cents > 0
         Text(
-            transaction.amount.toSignedDisplayString(),
-            fontWeight = FontWeight.SemiBold,
+            transaction.amount.toSignedMagnitudeString(),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (isIncome) FontWeight.SemiBold else FontWeight.Medium,
             color = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+/** The "needs attention" signal itself lives here now, not on [CategorySquare] anymore - tapping it opens the same quick categorize dialog a long-press on the row does. */
+@Composable
+private fun UncategorizedPill(onClick: () -> Unit) {
+    Text(
+        "Categorie kiezen",
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .border(1.dp, MaterialTheme.colorScheme.secondary, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
 }
 
 @Composable
@@ -638,20 +719,11 @@ private fun TagChip(tag: String) {
     )
 }
 
-/** "Boodschappen · 4 sep" when categorized, or an unmissable "Tik om te categoriseren · 4 sep" when not. */
-private fun subtitleFor(categoryName: String?, transaction: Transaction): String {
-    val label = categoryName ?: "Tik om te categoriseren"
-    return "$label · ${transaction.date.toShortDisplayString()}"
-}
-
-/** "Verzorging €14,95 · Vakantie €10,00 · 4 sep" — the actual parts, not just the word "Gesplitst". */
-private fun splitSubtitle(splits: List<TransactionSplit>, categoriesById: Map<Long, Category>, transaction: Transaction): String {
-    if (splits.isEmpty()) return "Gesplitst · ${transaction.date.toShortDisplayString()}"
-    val parts = splits.joinToString(" · ") { split ->
-        val name = categoriesById[split.categoryId]?.name ?: "Onbekend"
-        "$name ${split.amount.toDisplayString()}"
-    }
-    return "$parts · ${transaction.date.toShortDisplayString()}"
+/** "Uit eten · gesplitst in 2" — the first part's category plus the count, not just the word "Gesplitst". */
+private fun splitSubtitle(splits: List<TransactionSplit>, categoriesById: Map<Long, Category>): String {
+    if (splits.isEmpty()) return "Gesplitst"
+    val firstCategoryName = categoriesById[splits.first().categoryId]?.name ?: "Gesplitst"
+    return "$firstCategoryName · gesplitst in ${splits.size}"
 }
 
 /**
