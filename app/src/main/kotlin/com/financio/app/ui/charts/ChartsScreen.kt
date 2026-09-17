@@ -2,29 +2,34 @@ package com.financio.app.ui.charts
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,17 +43,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.ui.common.SegmentedBar
 import com.financio.app.ui.common.categoryColorFor
 import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
+import com.financio.app.ui.theme.LocalFinancioColors
 import com.financio.core.model.Money
 import com.financio.core.model.Transaction
 import com.financio.core.usecase.MerchantGrouper
@@ -68,240 +77,301 @@ fun ChartsScreen(
         initialCategoryId?.let { viewModel.selectCategory(it) }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Inzicht") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-            )
-        },
-    ) { padding ->
+    Scaffold { padding ->
         if (state.categories.isEmpty()) {
-            Column(Modifier.fillMaxSize().padding(padding).padding(32.dp)) {
-                Text("Nog geen categorieën", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(
-                    "Zodra transacties gecategoriseerd zijn, verschijnt hier het overzicht.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        } else {
-            Column(Modifier.fillMaxSize().padding(padding).padding(vertical = 12.dp)) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    item {
-                        FilterChip(
-                            selected = state.selectedCategoryId == null,
-                            onClick = viewModel::clearCategorySelection,
-                            label = { Text("Overzicht") },
-                        )
-                    }
-                    items(state.categories, key = { it.id }) { category ->
-                        FilterChip(
-                            selected = category.id == state.selectedCategoryId,
-                            onClick = { viewModel.selectCategory(category.id) },
-                            label = { Text(category.name) },
-                        )
-                    }
-                }
+            EmptyCharts(padding)
+            return@Scaffold
+        }
 
-                // Scrollable: the "Waarom hoger dan normaal?" card and the counterparty
-                // breakdown list below the chart are variable-length and, together with the
-                // Bespaartips list on the overview, can easily run past one screen's height -
-                // without this the extra content used to just get clipped at the bottom edge
-                // instead of being reachable at all.
-                Column(
-                    Modifier
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                ) {
+        val selectedCategoryName = state.categories.firstOrNull { it.id == state.selectedCategoryId }?.name
+
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (selectedCategoryName == null) {
+                Text(
+                    "Inzicht",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 16.dp),
+                )
+            } else {
+                CategoryHeader(categoryName = selectedCategoryName, onBackClick = viewModel::clearCategorySelection)
+            }
+
+            // The "Waarom hoger dan normaal?" card and the counterparty breakdown below the chart
+            // are variable-length and, together with the overview's Bespaartip, can easily run
+            // past one screen's height - without this the extra content just got clipped instead
+            // of being reachable at all.
+            Column(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+            ) {
+                if (selectedCategoryName == null) {
                     PeriodNavigator(
                         label = state.referenceLabel,
                         canGoToNextPeriod = state.canGoToNextPeriod,
                         onPrevious = viewModel::goToPreviousPeriod,
                         onNext = viewModel::goToNextPeriod,
                     )
-
-                    if (state.selectedCategoryId == null) {
-                        OverviewSection(
-                            spends = state.overviewSpends,
-                            incomeRatioLabel = state.incomeRatioLabel,
-                            savingsTips = state.savingsTips,
-                            onSegmentClick = viewModel::selectCategory,
-                            onTipClick = { tip ->
-                                if (tip.categoryId != null) viewModel.selectCategory(tip.categoryId) else onGoToSubscriptionsClick()
-                            },
+                    OverviewSection(
+                        state = state,
+                        onSegmentClick = viewModel::selectCategory,
+                        onTipClick = { tip ->
+                            if (tip.categoryId != null) viewModel.selectCategory(tip.categoryId) else onGoToSubscriptionsClick()
+                        },
+                    )
+                } else {
+                    ModeSwitch(mode = state.mode, onModeChange = viewModel::selectMode)
+                    CategoryHero(state)
+                    // No visible ‹ › here (unlike the overview) - the schermontwerp's own screen 10
+                    // mockup has none, relying entirely on swiping the chart itself (see BarChart).
+                    ChartCard(
+                        state = state,
+                        onBarClick = viewModel::selectPeriod,
+                        onSwipePrevious = viewModel::goToPreviousPeriod,
+                        onSwipeNext = viewModel::goToNextPeriod,
+                    )
+                    state.spikeInsight?.let { insight -> SpikeInsightCard(insight) }
+                    if (state.counterpartyBreakdown.isNotEmpty()) {
+                        CounterpartyBreakdownSection(state.counterpartyBreakdown, selectedCategoryName, onManageMerchantsClick, onOpenDetail)
+                    }
+                    state.mergeSuggestion?.let { suggestion ->
+                        MergeSuggestionCard(
+                            suggestion = suggestion,
+                            onConfirm = { viewModel.confirmMerchantGroup(suggestion) },
+                            onDismiss = { viewModel.dismissMerchantGroup(suggestion) },
                         )
-                    } else {
-                        ModeSwitch(mode = state.mode, onModeChange = viewModel::selectMode)
-
-                        Text(
-                            state.currentTotal.toDisplayString(),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 16.dp),
-                        )
-                        state.deltaLabel?.let { label ->
-                            val statusColors = LocalBudgetStatusColors.current
-                            Text(
-                                (if (state.deltaIsGood) "▲ " else "▼ ") + label,
-                                color = if (state.deltaIsGood) statusColors.ok else statusColors.over,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-
-                        BarChart(
-                            points = state.points,
-                            limit = state.limit,
-                            average = state.average,
-                            onBarClick = { period -> viewModel.selectPeriod(period) },
-                            onSwipePrevious = viewModel::goToPreviousPeriod,
-                            onSwipeNext = viewModel::goToNextPeriod,
-                            canSwipeNext = state.canGoToNextPeriod,
-                            modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 20.dp),
-                        )
-                        Column(Modifier.padding(top = 8.dp)) {
-                            state.average?.let {
-                                Text(
-                                    "Gestippelde grijze lijn = gemiddelde (${it.toDisplayString()})",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            state.limit?.let {
-                                Text(
-                                    "Gestippelde lijn = budgetlimiet (${it.toDisplayString()})",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
-                        state.spikeInsight?.let { insight -> SpikeInsightCard(insight) }
-
-                        state.mergeSuggestion?.let { suggestion ->
-                            MergeSuggestionCard(
-                                suggestion = suggestion,
-                                onConfirm = { viewModel.confirmMerchantGroup(suggestion) },
-                                onDismiss = { viewModel.dismissMerchantGroup(suggestion) },
-                            )
-                        }
-
-                        if (state.counterpartyBreakdown.isNotEmpty()) {
-                            CounterpartyBreakdownSection(state.counterpartyBreakdown, onManageMerchantsClick, onOpenDetail)
-                        }
                     }
                 }
+                Spacer(Modifier.height(24.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyCharts(padding: PaddingValues) {
+    Column(Modifier.fillMaxSize().padding(padding).padding(32.dp)) {
+        Text("Nog geen categorieën", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Zodra transacties gecategoriseerd zijn, verschijnt hier het overzicht.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+}
+
+/** "← + stip + categorienaam" — the redesign's plain sub-header convention (see CategorizeHeader/ImportTopBar), replacing the old "Overzicht" filter chip as the way back. */
+@Composable
+private fun CategoryHeader(categoryName: String, onBackClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+        ) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+        Box(Modifier.size(14.dp).clip(CircleShape).background(categoryColorFor(categoryName)))
+        Text(categoryName, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
 /**
- * The default view once no category is picked (R5): a donut of this month's categories plus a
- * top-4 list, replacing what used to be an arbitrarily-first-selected category's trend chart.
+ * A ▲/▼ direction (whether the value actually rose, independent of whether that's good news) plus
+ * a signed magnitude, in the color the redesign uses for "good"/"bad" everywhere else.
  */
 @Composable
-private fun OverviewSection(
-    spends: List<CategorySpend>,
-    incomeRatioLabel: String?,
-    savingsTips: List<SavingsTip>,
-    onSegmentClick: (Long) -> Unit,
-    onTipClick: (SavingsTip) -> Unit,
-) {
-    if (spends.isEmpty()) {
+private fun DeltaRow(label: String, isGood: Boolean, isIncrease: Boolean, modifier: Modifier = Modifier) {
+    val color = if (isGood) MaterialTheme.colorScheme.primary else LocalBudgetStatusColors.current.over
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(if (isIncrease) "▲" else "▼", color = color, fontSize = 10.sp)
         Text(
-            "Nog niets besteed deze maand.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 16.dp),
+            "${if (isIncrease) "+" else "−"} $label",
+            color = color,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 14.sp,
         )
-        return
     }
-    Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Donut(spends, onSegmentClick, modifier = Modifier.size(140.dp))
-        Column(Modifier.padding(start = 20.dp).weight(1f)) {
-            spends.take(4).forEach { entry ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { onSegmentClick(entry.category.id) }.padding(vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(Modifier.weight(1f, fill = false)) {
-                        Text(entry.category.name, style = MaterialTheme.typography.bodyMedium)
-                        // Same signal as a Bespaartip below, but visible at a glance without
-                        // reading the tips list - the two are meant to reinforce each other.
-                        if (entry.isAnomaly) {
-                            Text(
-                                "▲ ongewoon hoog",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = LocalBudgetStatusColors.current.over,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
-                    Text(entry.spent.toDisplayString(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+}
+
+@Composable
+private fun Chevron() {
+    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/**
+ * The default view once no category is picked (R5): a segmented bar of this month's categories
+ * plus a top-4 list, replacing the earlier donut - a bar reads better at 412dp width and is
+ * easier to label (see [com.financio.app.ui.common.SegmentedBar]'s own doc comment).
+ */
+@Composable
+private fun OverviewSection(state: ChartsUiState, onSegmentClick: (Long) -> Unit, onTipClick: (SavingsTip) -> Unit) {
+    Column(Modifier.padding(top = 20.dp)) {
+        Text("Uitgegeven deze maand", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            state.currentTotal.toDisplayString(),
+            fontSize = 40.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        state.deltaLabel?.let { label -> DeltaRow(label, state.deltaIsGood, state.deltaIsIncrease, modifier = Modifier.padding(top = 8.dp)) }
+        state.incomeRatioLabel?.let { label ->
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        }
+
+        // Inkomsten is never a "where did my money go" row - the ratio line above already covers
+        // income, and this list is specifically about spend.
+        val expenseSpends = state.overviewSpends.filterNot { it.category.name.equals("Inkomsten", ignoreCase = true) }
+        if (expenseSpends.isEmpty()) {
+            Text(
+                "Nog niets besteed deze maand.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 20.dp),
+            )
+            return
+        }
+
+        SegmentedBar(segments = segmentsFor(expenseSpends), height = 14.dp, modifier = Modifier.padding(top = 20.dp, bottom = 20.dp))
+
+        var showAll by remember(state.overviewSpends) { mutableStateOf(false) }
+        val shown = if (showAll) expenseSpends else expenseSpends.take(4)
+        shown.forEachIndexed { index, entry ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            OverviewCategoryRow(entry, onClick = { onSegmentClick(entry.category.id) })
+        }
+        if (!showAll && expenseSpends.size > 4) {
+            Text(
+                "Alle ${expenseSpends.size} categorieën",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 12.dp).clickable { showAll = true },
+            )
+        }
+
+        state.savingsTips.firstOrNull()?.let { tip ->
+            HighlightCard(
+                tip = tip,
+                categoryName = state.categories.firstOrNull { it.id == tip.categoryId }?.name,
+                onClick = { onTipClick(tip) },
+                modifier = Modifier.padding(top = 24.dp),
+            )
+        }
+    }
+}
+
+/** The segmented bar's "rest" bucket - a fixed neutral gray per the schermontwerp tokens, not theme-dependent (same reasoning as [com.financio.app.ui.theme.CategoryColors]' own hardcoded hexes). */
+private val restSegmentColor = Color(0xFFCFCBBF)
+
+/** Top 4 categories get their own segment; everything else folds into one muted "rest" segment. */
+private fun segmentsFor(spends: List<CategorySpend>): List<Pair<Color, Float>> {
+    val total = spends.sumOf { it.spent.cents }.coerceAtLeast(1)
+    val segments = spends.take(4).map { entry -> categoryColorFor(entry.category.name) to entry.spent.cents.toFloat() / total }.toMutableList()
+    val restCents = spends.drop(4).sumOf { it.spent.cents }
+    if (restCents > 0) segments += restSegmentColor to restCents.toFloat() / total
+    return segments
+}
+
+@Composable
+private fun OverviewCategoryRow(entry: CategorySpend, onClick: () -> Unit) {
+    val percentDelta = entry.trailingAverage?.takeIf { it.cents > 0 }?.let { avg -> ((entry.spent.cents - avg.cents) * 100 / avg.cents).toInt() }
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f, fill = false),
+        ) {
+            Box(Modifier.size(12.dp).clip(CircleShape).background(categoryColorFor(entry.category.name)))
+            Column {
+                Text(entry.category.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                entry.trailingAverage?.let {
+                    Text("gemiddeld ${it.toDisplayString()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-    }
-    incomeRatioLabel?.let { label ->
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 16.dp),
-        )
-    }
-    if (savingsTips.isNotEmpty()) {
-        Column(Modifier.padding(top = 24.dp)) {
-            Text("Bespaartips", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            savingsTips.forEach { tip -> SavingsTipRow(tip, onClick = { onTipClick(tip) }) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(horizontalAlignment = Alignment.End) {
+                Text(entry.spent.toDisplayString(), fontSize = 15.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.Monospace)
+                percentDelta?.let { pct ->
+                    Text(
+                        "${if (pct >= 0) "+" else ""}$pct%",
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (kotlin.math.abs(pct) > 25) LocalBudgetStatusColors.current.over else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Chevron()
         }
     }
 }
 
-/** "Boodschappen is opvallend hoog" etc — a tappable card per tip, same surfaceVariant-card look as MatchingRuleCard on the transaction detail screen. */
+/** "Opvallend" - at most one, the first (highest-impact) tip only; the rest wait for their turn next time this recomputes. */
 @Composable
-private fun SavingsTipRow(tip: SavingsTip, onClick: () -> Unit) {
+private fun HighlightCard(tip: SavingsTip, categoryName: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
+        modifier
             .fillMaxWidth()
-            .padding(top = 10.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(12.dp),
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
+            .padding(18.dp),
     ) {
-        Text(tip.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         Text(
-            tip.detail,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp),
+            "OPVALLEND",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = LocalFinancioColors.current.inkFaint,
+        )
+        Text(
+            "${tip.title} — ${tip.detail}",
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            categoryName?.let { "Bekijk $it" } ?: "Bekijk Vaste lasten",
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 12.dp).clickable(onClick = onClick),
         )
     }
 }
 
-/** The "waarom is dit hoger dan normaal" one-liner, shown right under a selected category's chart legend. */
+/** The "waarom is dit hoger dan normaal" one-liner - not part of the schermontwerp mockup itself (it predates this redesign pass), reskinned to the same white-card convention as everything else here rather than dropped. */
 @Composable
 private fun SpikeInsightCard(insight: String) {
-    val overColor = LocalBudgetStatusColors.current.over
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(overColor.copy(alpha = 0.12f))
-            .padding(12.dp),
+            .padding(top = 20.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
+            .padding(18.dp),
     ) {
         Text(
-            "Waarom hoger dan normaal? $insight",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
+            "Waarom hoger dan normaal?",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = LocalFinancioColors.current.inkFaint,
         )
+        Text(insight, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -312,11 +382,27 @@ private fun SpikeInsightCard(insight: String) {
  * usual transaction detail screen - no separate screen for this, per the earlier scoping.
  */
 @Composable
-private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onManageMerchantsClick: () -> Unit, onOpenDetail: (Long) -> Unit) {
+private fun CounterpartyBreakdownSection(
+    breakdown: List<CounterpartySpend>,
+    categoryName: String,
+    onManageMerchantsClick: () -> Unit,
+    onOpenDetail: (Long) -> Unit,
+) {
     var expandedNames by remember { mutableStateOf(setOf<String>()) }
-    Column(Modifier.padding(top = 24.dp)) {
-        Text("Waar komt dit vandaan?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        breakdown.forEach { entry ->
+    val maxAmount = breakdown.maxOf { it.amount.cents }.coerceAtLeast(1)
+    val barColor = categoryColorFor(categoryName)
+
+    Column(Modifier.padding(top = 28.dp)) {
+        Text(
+            "WAAR GAAT HET HEEN?",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = LocalFinancioColors.current.inkFaint,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        breakdown.forEachIndexed { index, entry ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             val isExpanded = entry.counterpartyName in expandedNames
             Column(
                 modifier = Modifier
@@ -324,21 +410,29 @@ private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onM
                     .clickable {
                         expandedNames = if (isExpanded) expandedNames - entry.counterpartyName else expandedNames + entry.counterpartyName
                     }
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 12.dp),
             ) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f, fill = false)) {
-                        Text("${entry.counterpartyName} ${if (isExpanded) "▴" else "▾"}", style = MaterialTheme.typography.bodyMedium)
+                    Text(entry.counterpartyName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(entry.amount.toDisplayString(), fontSize = 15.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)
                         Text(
-                            entry.previousAverage?.let { "gemiddeld ${it.toDisplayString()}" } ?: "nieuw",
-                            style = MaterialTheme.typography.bodySmall,
+                            if (entry.transactions.size == 1) "1 keer" else "${entry.transactions.size} keer",
+                            fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(entry.amount.toDisplayString(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 }
+                Box(
+                    Modifier
+                        .padding(top = 6.dp)
+                        .fillMaxWidth(fraction = (entry.amount.cents.toFloat() / maxAmount).coerceIn(0.03f, 1f))
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(barColor),
+                )
                 if (isExpanded) {
-                    Column(Modifier.padding(start = 12.dp, top = 4.dp)) {
+                    Column(Modifier.padding(start = 4.dp, top = 10.dp)) {
                         entry.transactions.forEach { transaction ->
                             CounterpartyTransactionRow(transaction, onClick = { onOpenDetail(transaction.id) })
                         }
@@ -350,7 +444,7 @@ private fun CounterpartyBreakdownSection(breakdown: List<CounterpartySpend>, onM
             "Tegenpartijen beheren →",
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 8.dp).clickable(onClick = onManageMerchantsClick),
         )
     }
@@ -382,33 +476,37 @@ private fun MergeSuggestionCard(suggestion: MerchantGrouper.MerchantGroupCandida
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(12.dp),
+            .padding(top = 20.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .border(1.dp, MaterialTheme.colorScheme.secondary, RoundedCornerShape(18.dp))
+            .padding(18.dp),
     ) {
-        Text("Dit lijkt dezelfde tegenpartij", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         Text(
-            "${joinNatural(suggestion.rawNames)} → \"${suggestion.canonicalName}\"",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp),
+            "${joinNatural(suggestion.rawNames)} lijken dezelfde winkel. Samenvoegen onder ${suggestion.canonicalName}?",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
-        Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Text(
-                "Ja, samenvoegen",
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.clickable(onClick = onConfirm),
-            )
-            Text(
-                "Nee, apart houden",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.clickable(onClick = onDismiss),
-            )
+        Row(modifier = Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable(onClick = onConfirm),
+                contentAlignment = Alignment.Center,
+            ) { Text("Samenvoegen", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold) }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) { Text("Apart houden", fontWeight = FontWeight.Bold) }
         }
     }
 }
@@ -420,102 +518,115 @@ private fun joinNatural(items: List<String>): String = when (items.size) {
     else -> items.dropLast(1).joinToString(", ") + " en " + items.last()
 }
 
-@Composable
-private fun Donut(spends: List<CategorySpend>, onSegmentClick: (Long) -> Unit, modifier: Modifier = Modifier) {
-    val totalCents = spends.sumOf { it.spent.cents }.coerceAtLeast(1)
-    // Precomputed once per composition so the tap handler (which runs outside recomposition, in
-    // its own coroutine) can look up which wedge a tap angle landed in without recalculating it.
-    val sweeps = remember(spends) {
-        var startAngle = -90f
-        spends.map { entry ->
-            val sweep = 360f * entry.spent.cents / totalCents
-            val wedge = Triple(entry.category.id, startAngle, startAngle + sweep)
-            startAngle += sweep
-            wedge
-        }
-    }
-    val strokeWidthDp = 20.dp
-
-    Canvas(
-        modifier
-            .pointerInput(sweeps) {
-                detectTapGestures { offset ->
-                    val center = Offset(size.width / 2f, size.height / 2f)
-                    val dx = offset.x - center.x
-                    val dy = offset.y - center.y
-                    var angle = Math.toDegrees(kotlin.math.atan2(dy, dx).toDouble()).toFloat()
-                    if (angle < -90f) angle += 360f
-                    sweeps.firstOrNull { (_, start, end) -> angle in start..end }?.let { (categoryId, _, _) -> onSegmentClick(categoryId) }
-                }
-            },
-    ) {
-        val strokeWidth = strokeWidthDp.toPx()
-        val arcSize = androidx.compose.ui.geometry.Size(size.width - strokeWidth, size.height - strokeWidth)
-        val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
-        spends.forEachIndexed { index, entry ->
-            val (_, start, end) = sweeps[index]
-            drawArc(
-                color = categoryColorFor(entry.category.name),
-                startAngle = start,
-                sweepAngle = end - start,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth),
-            )
-        }
-    }
-}
-
 /**
- * The bar chart used to always show a fixed trailing window ending "now", with no way to look
- * further back — this lets you shift that whole window, one month/year at a time. Text-based
- * ‹ › affordances, matching the rest of the app's plain-text link style (e.g. "Beheren →" in
- * Instellingen) rather than an icon whose availability in the trimmed icon set isn't guaranteed.
+ * The redesign's "witte balk" navigator - a bordered card instead of the previous plain-text row,
+ * only ever shown on the overview: the per-category screen relies entirely on swiping the chart
+ * (see [ChartCard]/[BarChart]), matching the schermontwerp's own screen 10 mockup, which has no
+ * visible ‹ › there at all.
  */
 @Composable
 private fun PeriodNavigator(label: String, canGoToNextPeriod: Boolean, onPrevious: () -> Unit, onNext: () -> Unit) {
     Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .height(52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.padding(top = 12.dp),
     ) {
+        Box(Modifier.size(44.dp).clickable(onClick = onPrevious), contentAlignment = Alignment.Center) {
+            Text("‹", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        }
         Text(
-            "‹",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable(onClick = onPrevious).padding(horizontal = 4.dp, vertical = 2.dp),
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
         )
-        Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "›",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (canGoToNextPeriod) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-            modifier = Modifier
-                .let { if (canGoToNextPeriod) it.clickable(onClick = onNext) else it }
-                .padding(horizontal = 4.dp, vertical = 2.dp),
-        )
+        Box(
+            modifier = Modifier.size(44.dp).let { if (canGoToNextPeriod) it.clickable(onClick = onNext) else it },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "›",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (canGoToNextPeriod) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+            )
+        }
     }
 }
 
 @Composable
 private fun ModeSwitch(mode: ChartMode, onModeChange: (ChartMode) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            FilterChip(
-                selected = mode == ChartMode.MONTH_OVER_MONTH,
-                onClick = { onModeChange(ChartMode.MONTH_OVER_MONTH) },
-                label = { Text("Maand-op-maand") },
-            )
-        }
-        item {
-            FilterChip(
-                selected = mode == ChartMode.YEAR_OVER_YEAR,
-                onClick = { onModeChange(ChartMode.YEAR_OVER_YEAR) },
-                label = { Text("Jaar-op-jaar") },
-            )
+    Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ModePill("Per maand", selected = mode == ChartMode.MONTH_OVER_MONTH, onClick = { onModeChange(ChartMode.MONTH_OVER_MONTH) })
+        ModePill("Per jaar", selected = mode == ChartMode.YEAR_OVER_YEAR, onClick = { onModeChange(ChartMode.YEAR_OVER_YEAR) })
+    }
+}
+
+@Composable
+private fun ModePill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+            .let { if (selected) it else it.border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(999.dp)) }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun CategoryHero(state: ChartsUiState) {
+    Column(Modifier.fillMaxWidth().padding(top = 16.dp)) {
+        Text(state.currentTotal.toDisplayString(), fontSize = 36.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+        state.deltaLabel?.let { label -> DeltaRow(label, state.deltaIsGood, state.deltaIsIncrease, modifier = Modifier.padding(top = 6.dp)) }
+    }
+}
+
+/** The bar chart in its own white card, with the average/limit legend below a divider - the schermontwerp's "grafiekkaart". */
+@Composable
+private fun ChartCard(state: ChartsUiState, onBarClick: (YearMonth) -> Unit, onSwipePrevious: () -> Unit, onSwipeNext: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 20.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
+            .padding(18.dp),
+    ) {
+        BarChart(
+            points = state.points,
+            limit = state.limit,
+            average = state.average,
+            onBarClick = onBarClick,
+            onSwipePrevious = onSwipePrevious,
+            onSwipeNext = onSwipeNext,
+            canSwipeNext = state.canGoToNextPeriod,
+            modifier = Modifier.fillMaxWidth().height(150.dp),
+        )
+        val legend = listOfNotNull(
+            state.average?.let { "gemiddelde ${it.toDisplayString()}" },
+            state.limit?.let { "limiet ${it.toDisplayString()}" },
+        ).joinToString(" · ")
+        if (legend.isNotEmpty()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(top = 14.dp))
+            Row(modifier = Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(14.dp).height(1.5.dp).background(MaterialTheme.colorScheme.outline))
+                Text(legend, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+            }
         }
     }
 }
@@ -535,7 +646,8 @@ private fun BarChart(
     val statusColors = LocalBudgetStatusColors.current
     val barColor = MaterialTheme.colorScheme.outline
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val averageLineColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val inkColor = MaterialTheme.colorScheme.onBackground
+    val averageLineColor = MaterialTheme.colorScheme.outline
     val overColor = statusColors.over
     val currentColor = statusColors.ok
 
@@ -617,15 +729,17 @@ private fun BarChart(
             )
 
             // The bar's own value, printed just above it - so you don't have to tap every bar to
-            // read its number the way the old chart required.
+            // read its number the way the old chart required. Bold + ink for the selected bar,
+            // per the schermontwerp's "geselecteerde 600/ink" spec.
             drawContext.canvas.nativeCanvas.drawText(
                 point.amount.toDisplayString(),
                 x + barWidth / 2f,
                 valueLabelHeight + chartHeight - barHeight - 4.dp.toPx(),
                 android.graphics.Paint().apply {
-                    this.color = labelColor.toArgb()
+                    this.color = (if (point.isSelected) inkColor else labelColor).toArgb()
                     textAlign = android.graphics.Paint.Align.CENTER
                     textSize = 9.sp.toPx()
+                    if (point.isSelected) isFakeBoldText = true
                 },
             )
             drawContext.canvas.nativeCanvas.drawText(
@@ -633,10 +747,10 @@ private fun BarChart(
                 x + barWidth / 2f,
                 size.height - 6.dp.toPx(),
                 android.graphics.Paint().apply {
-                    this.color = if (point.isSelected) point.labelPaintColor(isOverLimit, overColor, currentColor).toArgb()
-                    else labelColor.toArgb()
+                    this.color = if (point.isSelected) point.labelPaintColor(isOverLimit, overColor, currentColor).toArgb() else labelColor.toArgb()
                     textAlign = android.graphics.Paint.Align.CENTER
                     textSize = 11.sp.toPx()
+                    if (point.isSelected) isFakeBoldText = true
                 },
             )
         }
