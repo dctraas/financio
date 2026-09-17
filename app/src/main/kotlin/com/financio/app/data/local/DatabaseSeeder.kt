@@ -19,6 +19,9 @@ import javax.inject.Singleton
  * - a repair pass for budget rows already duplicated by a bug in how limits were saved (see
  *   [BudgetDao.deleteDuplicates]) — fixed going forward, but an install that already hit it needs
  *   its existing duplicate rows cleaned up too, not just the bug stopped.
+ * - the same shape of repair for category rules already duplicated by learning a rule from every
+ *   casing variant of the same counterparty name (see [CategoryRuleDao.deleteDuplicates] /
+ *   [com.financio.app.data.repository.RoomCategoryRepository.addRule]).
  *
  * Seeding is guarded by an existence/emptiness check rather than a uniqueness constraint: this is
  * a single local database with no concurrent writers, so "no account/categories yet" is a
@@ -41,6 +44,7 @@ class DatabaseSeeder @Inject constructor(
             seedDefaultAccount()
             seedDefaultCategories()
             budgetDao.deleteDuplicates()
+            categoryRuleDao.deleteDuplicates()
         }
     }
 
