@@ -28,6 +28,8 @@ data class VandaagUiState(
     /** Null when there's no balance to project from (no data yet, or more than one account — see [safeToSpendFor]'s own reasoning). */
     val forecast: BalanceForecastCalculator.Result? = null,
     val uncategorizedCount: Int = 0,
+    /** Distinct counterparties among the uncategorized transactions — the redesign's task card shows this as "9 groepen", matching how the categorize flow itself groups them. */
+    val uncategorizedGroupCount: Int = 0,
     val subscriptionCount: Int = 0,
     val subscriptionMonthlyTotal: Money = Money.ZERO,
     val nextSubscription: DetectedSubscription? = null,
@@ -66,7 +68,9 @@ class VandaagViewModel @Inject constructor(
         // Uncategorized excludes split transactions - a split transaction's own categoryId is
         // null by design (see TransactionDao.setSplits), but it's not "needs a category", it
         // already has several.
-        val uncategorizedCount = transactions.count { it.categoryId == null && it.id !in splitIds }
+        val uncategorizedTransactions = transactions.filter { it.categoryId == null && it.id !in splitIds }
+        val uncategorizedCount = uncategorizedTransactions.size
+        val uncategorizedGroupCount = uncategorizedTransactions.map { it.counterpartyName }.distinct().size
 
         val weekAgo = today.minusDays(6)
         val thisWeek = transactions
@@ -87,6 +91,7 @@ class VandaagViewModel @Inject constructor(
             safeToSpend = safeToSpendFor(transactions, accountCount, singleAccountSelected = false),
             forecast = forecastFor(transactions, accountCount, today, subscriptions),
             uncategorizedCount = uncategorizedCount,
+            uncategorizedGroupCount = uncategorizedGroupCount,
             subscriptionCount = dueThisMonth.size,
             subscriptionMonthlyTotal = Money(dueThisMonth.sumOf { kotlin.math.abs(it.averageAmount.cents) }),
             nextSubscription = subscriptions.filter { it.estimatedNextDate >= today }.minByOrNull { it.estimatedNextDate },
