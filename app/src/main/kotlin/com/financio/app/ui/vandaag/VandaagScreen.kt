@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.CategorySquare
 import com.financio.app.ui.common.toShortDisplayString
+import com.financio.app.ui.common.toSignedMagnitudeString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.app.ui.theme.LocalFinancioColors
 import com.financio.core.model.Transaction
@@ -371,9 +372,8 @@ private fun WeekRow(transaction: Transaction, categoryName: String?, onClick: ()
             )
         }
         val isIncome = transaction.amount.cents > 0
-        val magnitude = transaction.amount.toDisplayString().removePrefix("-").removePrefix("€")
         Text(
-            (if (isIncome) "+ " else "− ") + magnitude,
+            transaction.amount.toSignedMagnitudeString(),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (isIncome) FontWeight.SemiBold else FontWeight.Medium,
             color = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
