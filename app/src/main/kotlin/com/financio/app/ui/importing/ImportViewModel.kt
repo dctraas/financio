@@ -69,6 +69,8 @@ sealed interface ImportUiState {
     data class Ready(
         val preview: ImportPreview,
         val accountName: String,
+        /** [com.financio.core.model.Account.ibanMasked] - blank for an account that has none set, same as everywhere else this field is shown. */
+        val accountIban: String = "",
         val manualCategoryChoices: List<ManualCategoryChoice> = emptyList(),
         val skippedGroups: Set<String> = emptySet(),
         /** How many already-imported transactions use each category — ranks the top-4 chips by the user's own habits instead of category-creation order. */
@@ -240,8 +242,13 @@ class ImportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = try {
                 val preview = importStatementUseCase.preview(content, accountId, dateColumnOverrideIndex)
-                val accountName = accounts.value.firstOrNull { it.id == accountId }?.name ?: "Rekening"
-                ImportUiState.Ready(preview, accountName, categoryUsageFrequency = categoryUsageFrequency())
+                val account = accounts.value.firstOrNull { it.id == accountId }
+                ImportUiState.Ready(
+                    preview = preview,
+                    accountName = account?.name ?: "Rekening",
+                    accountIban = account?.ibanMasked ?: "",
+                    categoryUsageFrequency = categoryUsageFrequency(),
+                )
             } catch (e: UnrecognizedFormatException) {
                 ImportUiState.Failed(e.message ?: "Kon het bestand niet lezen.", e.rawLines, e.detectedColumns)
             } catch (e: Exception) {

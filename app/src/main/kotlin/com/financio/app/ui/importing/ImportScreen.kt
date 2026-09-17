@@ -24,18 +24,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,15 +57,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.toShortDisplayString
+import com.financio.app.ui.theme.LocalFinancioColors
 import com.financio.core.model.Account
-import com.financio.core.model.SourceFormat
 import com.financio.core.usecase.ImportPreview
 import com.financio.core.usecase.UncategorizedGroup
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
 @Composable
-fun ImportScreen(onDone: () -> Unit, onGoToInsights: () -> Unit = onDone, viewModel: ImportViewModel = hiltViewModel()) {
+fun ImportScreen(
+    onDone: () -> Unit,
+    onGoToInsights: () -> Unit = onDone,
+    onBackClick: () -> Unit = onDone,
+    viewModel: ImportViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val accounts by viewModel.accounts.collectAsState()
@@ -94,13 +103,16 @@ fun ImportScreen(onDone: () -> Unit, onGoToInsights: () -> Unit = onDone, viewMo
         }
     }
 
+    // Screen 01's onboarding is deliberately chrome-free (see FirstLaunchContent) - every other
+    // state gets the schermontwerp redesign's ← + "Importeren" header, except while screen 03
+    // "Categoriseren" is showing, which has its own (see CategorizeHeader).
+    val isFirstLaunchOnboarding = state is ImportUiState.PickFile && !hasAnyTransactions
+    val isCategorizing = state is ImportUiState.Ready && categorizing
+
     Scaffold(
         topBar = {
-            if (!(state is ImportUiState.Ready && categorizing)) {
-                TopAppBar(
-                    title = { Text("Importeren") },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                )
+            if (!isFirstLaunchOnboarding && !isCategorizing) {
+                ImportTopBar(onBackClick = onBackClick)
             }
         },
     ) { padding ->
@@ -159,6 +171,28 @@ fun ImportScreen(onDone: () -> Unit, onGoToInsights: () -> Unit = onDone, viewMo
                 Text("Geïmporteerd.")
             }
         }
+    }
+}
+
+/** The schermontwerp redesign's "← Schermtitel" header, sitting directly on the page background rather than a Material app bar strip - used the same way across every redesigned screen with a back action. */
+@Composable
+private fun ImportTopBar(onBackClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+        ) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+        Text("Importeren", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 16.dp))
     }
 }
 
@@ -448,6 +482,11 @@ private fun AccountDetectedContent(
 private val IBAN_PATTERN = Regex("^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$")
 private fun looksLikeIban(value: String): Boolean = IBAN_PATTERN.matches(value.trim().uppercase())
 
+/**
+ * Screen 02 "Importeren — resultaat" from the redesign handoff — the rekeningkaart, the two
+ * status cards, and the "grootste groepen" section are all read-only summary; the sticky bottom
+ * block is the only place a decision gets made (start categorizing, or import as-is for later).
+ */
 @Composable
 private fun ReadyContent(
     state: ImportUiState.Ready,
@@ -461,42 +500,35 @@ private fun ReadyContent(
     var showDuplicateInfo by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(padding)) {
-        Column(Modifier.padding(horizontal = 20.dp)) {
-            ImportHeader(preview, state.accountName)
-            SummaryTiles(preview, onDuplicateInfoClick = { showDuplicateInfo = true })
-        }
-
-        Box(Modifier.weight(1f).padding(horizontal = 20.dp)) {
-            if (remainingGroups.isEmpty()) {
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-                    Text(
-                        if (groups.isEmpty()) "Alles is automatisch gecategoriseerd." else "Alle tegenpartijen doorgenomen.",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            } else {
-                // The screen 03 "Categoriseren" flow (see CategorizeScreen.kt) takes over full-screen
-                // from here - the summary above already spelled out that 24 transactions are really
-                // just 9 decisions, so the button names that instead of a generic "doorgaan".
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-                    Text(
-                        "${remainingGroups.size} tegenpartij${if (remainingGroups.size == 1) "" else "en"} nog te categoriseren.",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Button(onClick = onStartCategorizing, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                        Text("Nu categoriseren · ${remainingGroups.size} groep${if (remainingGroups.size == 1) "" else "en"}")
-                    }
-                    TextButton(onClick = viewModel::confirm, modifier = Modifier.fillMaxWidth()) {
-                        Text("Later, zet ze in de lijst")
-                    }
-                }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+            AccountSummaryCard(preview, state.accountName, state.accountIban, onDuplicateInfoClick = { showDuplicateInfo = true })
+            StatusCards(preview, modifier = Modifier.padding(top = 16.dp))
+            if (groups.isNotEmpty()) {
+                LargestGroupsSection(groups.take(3), modifier = Modifier.padding(top = 24.dp, bottom = 20.dp))
             }
         }
 
         if (remainingGroups.isEmpty()) {
             StickyImportBar(total = preview.total, onImport = viewModel::confirm)
+        } else {
+            // The screen 03 "Categoriseren" flow (see CategorizeScreen.kt) takes over full-screen
+            // from here - the summary above already spelled out that 24 transactions are really
+            // just 9 decisions, so the button names that instead of a generic "doorgaan".
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+                Button(
+                    onClick = onStartCategorizing,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        "Nu categoriseren · ${remainingGroups.size} groep${if (remainingGroups.size == 1) "" else "en"}",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                TextButton(onClick = viewModel::confirm, modifier = Modifier.fillMaxWidth()) {
+                    Text("Later, zet ze in de lijst")
+                }
+            }
         }
     }
 
@@ -529,9 +561,9 @@ fun computeRemainingGroups(groups: List<UncategorizedGroup>, choices: List<Manua
         if (pending.isEmpty()) null else UncategorizedGroup(group.counterpartyName, pending)
     }
 
-/** Period + account + format, replacing a raw filename that told you nothing about what's actually in the file. */
+/** IBAN/naam + grote "N transacties gelezen" + periode en dubbele-teller - replaces the previous one-line "period · account · format" header. */
 @Composable
-private fun ImportHeader(preview: ImportPreview, accountName: String) {
+private fun AccountSummaryCard(preview: ImportPreview, accountName: String, accountIban: String, onDuplicateInfoClick: () -> Unit) {
     val allTransactions = preview.ready + preview.needsCategory
     val period = allTransactions.map { it.date }.let { dates ->
         if (dates.isEmpty()) null else {
@@ -540,50 +572,114 @@ private fun ImportHeader(preview: ImportPreview, accountName: String) {
             if (first == last) first.toShortDisplayString() else "${first.toShortDisplayString()} – ${last.toShortDisplayString()}"
         }
     }
-    val format = allTransactions.firstOrNull()?.sourceFormat?.let { if (it == SourceFormat.CSV) "CSV" else "MT940" }
 
-    Text(
-        listOfNotNull(period, accountName, format).joinToString(" · "),
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 12.dp, bottom = 12.dp),
-    )
-}
-
-@Composable
-private fun SummaryTiles(preview: ImportPreview, onDuplicateInfoClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
+            .padding(18.dp),
     ) {
-        SummaryTile("Gevonden", preview.foundInFile.toString(), modifier = Modifier.weight(1f))
-        SummaryTile("Automatisch", preview.ready.size.toString(), modifier = Modifier.weight(1f))
-        SummaryTile("Te kiezen", preview.needsCategoryGrouped.size.toString(), modifier = Modifier.weight(1f))
-        SummaryTile("Dubbel", preview.duplicateCount.toString(), modifier = Modifier.weight(1f), onInfoClick = onDuplicateInfoClick)
+        Text(
+            listOfNotNull(accountIban.takeIf { it.isNotBlank() }, accountName).joinToString(" · "),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "${preview.total} transacties gelezen",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        val duplicateLabel = if (preview.duplicateCount > 0) "${preview.duplicateCount} dubbele overgeslagen" else null
+        Text(
+            listOfNotNull(period, duplicateLabel).joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .let { if (duplicateLabel != null) it.clickable(onClick = onDuplicateInfoClick) else it },
+        )
     }
 }
 
 @Composable
-private fun SummaryTile(label: String, value: String, modifier: Modifier = Modifier, onInfoClick: (() -> Unit)? = null) {
-    Column(
-        modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(12.dp),
+private fun StatusCards(preview: ImportPreview, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        StatusCard(
+            count = preview.ready.size,
+            title = "automatisch herkend",
+            subtitle = "via je eigen regels",
+            countColor = MaterialTheme.colorScheme.primary,
+            containerColor = MaterialTheme.colorScheme.surface,
+            borderColor = MaterialTheme.colorScheme.outline,
+            subtitleColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (preview.needsCategoryGrouped.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            StatusCard(
+                count = preview.needsCategory.size,
+                title = "hebben een categorie nodig",
+                subtitle = "samengevat in ${preview.needsCategoryGrouped.size} groepen",
+                countColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                borderColor = MaterialTheme.colorScheme.secondary,
+                subtitleColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusCard(
+    count: Int,
+    title: String,
+    subtitle: String,
+    countColor: Color,
+    containerColor: Color,
+    borderColor: Color,
+    subtitleColor: Color,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(containerColor)
+            .border(1.dp, borderColor, RoundedCornerShape(18.dp))
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            onInfoClick?.let {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.outline)
-                        .clickable(onClick = it),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("?", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.surface)
-                }
+        Text(count.toString(), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = countColor, modifier = Modifier.width(54.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = subtitleColor, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
+}
+
+@Composable
+private fun LargestGroupsSection(groups: List<UncategorizedGroup>, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(
+            "GROOTSTE GROEPEN",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = LocalFinancioColors.current.inkFaint,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+        groups.forEachIndexed { index, group ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(group.counterpartyName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text(
+                    "${group.count} · ${group.totalAmount.toDisplayString()}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
