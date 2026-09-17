@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
+import java.time.YearMonth
 import javax.inject.Inject
 
 data class SubscriptionsUiState(
@@ -22,6 +23,8 @@ data class SubscriptionsUiState(
     /** Confirmed subscriptions whose next charge falls on or before the end of this month, chronological. */
     val dueThisMonth: List<DetectedSubscription> = emptyList(),
     val dueThisMonthTotal: Money = Money.ZERO,
+    /** Confirmed subscriptions whose most recent actual charge already fell in the current calendar month - "4 van 7 afschrijvingen zijn al geweest" pairs this with [dueThisMonth]'s own size for the total. */
+    val alreadyBilledThisMonthCount: Int = 0,
     /** Confirmed subscriptions whose next charge is further out - a yearly one due in November, say - chronological, shown on their real billing month. */
     val upcomingLater: List<DetectedSubscription> = emptyList(),
     /** Plausible-but-unconfirmed merchants, excluding ones already answered via [SubscriptionsViewModel.confirm]/[SubscriptionsViewModel.dismiss]. */
@@ -62,6 +65,7 @@ class SubscriptionsViewModel @Inject constructor(
             .filter { it.counterpartyName !in dismissedNames }
             .sortedBy { it.estimatedNextDate }
         val (due, later) = confirmed.partition { !it.estimatedNextDate.isAfter(endOfMonth) }
+        val alreadyBilledThisMonthCount = confirmed.count { YearMonth.from(it.lastDate) == YearMonth.from(today) }
 
         val uncertainByName = SubscriptionDetector.detectUncertain(transactions).associateBy { it.counterpartyName }
         val uncertain = uncertainByName.values.filter { it.counterpartyName !in confirmedNames && it.counterpartyName !in dismissedNames }
@@ -77,6 +81,7 @@ class SubscriptionsViewModel @Inject constructor(
             loaded = true,
             dueThisMonth = due,
             dueThisMonthTotal = Money(due.sumOf { kotlin.math.abs(it.averageAmount.cents) }),
+            alreadyBilledThisMonthCount = alreadyBilledThisMonthCount,
             upcomingLater = later,
             uncertain = uncertain,
             manuallyConfirmed = manuallyConfirmed,
