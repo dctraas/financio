@@ -20,10 +20,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.YearMonth
 import javax.inject.Inject
 
-enum class CategoryManagementTab { RULES, CATEGORIES }
+enum class CategoryManagementTab { CATEGORIES, RULES }
 
 /** How many transactions a rule matches, considering priority order (its real, current effect), plus whether it shadows a differently-categorized lower-priority rule. */
 data class RuleRow(
@@ -36,7 +35,7 @@ data class RuleRow(
 /** [otherRulePattern] is the shadowed rule's own pattern text, [overlapCount] how many transactions both rules' patterns actually match. */
 data class RuleConflict(val otherRulePattern: String, val overlapCount: Int)
 
-data class CategoryRow(val category: Category, val spentThisMonth: Money)
+data class CategoryRow(val category: Category, val ruleCount: Int, val transactionCount: Int)
 
 /** Live preview shown while composing a new rule, before it's saved - see [CategoryManagementViewModel.previewRule]. */
 data class RulePreview(
@@ -61,10 +60,13 @@ sealed interface UndoableAction {
         val rules: List<CategoryRule>,
         val reassignedTransactionIds: List<Long>,
     ) : UndoableAction
+
+    /** The swipe-to-delete gesture on a rule row commits immediately - this is its "Ongedaan maken". */
+    data class RuleDeleted(val rule: CategoryRule) : UndoableAction
 }
 
 data class CategoryManagementUiState(
-    val tab: CategoryManagementTab = CategoryManagementTab.RULES,
+    val tab: CategoryManagementTab = CategoryManagementTab.CATEGORIES,
     val categories: List<Category> = emptyList(),
     val rules: List<CategoryRule> = emptyList(),
     val ruleRows: List<RuleRow> = emptyList(),
@@ -93,7 +95,7 @@ class CategoryManagementViewModel @Inject constructor(
     private val budgetRepository: BudgetRepository,
 ) : ViewModel() {
 
-    private val tab = MutableStateFlow(CategoryManagementTab.RULES)
+    private val tab = MutableStateFlow(CategoryManagementTab.CATEGORIES)
     private val ruleApplicationPreview = MutableStateFlow<Int?>(null)
     private val ruleApplicationResult = MutableStateFlow<Int?>(null)
     private val categoryDeletePreview = MutableStateFlow<CategoryDeletePreview?>(null)
@@ -151,12 +153,12 @@ class CategoryManagementViewModel @Inject constructor(
             )
         }
 
-        val thisMonth = YearMonth.now()
         val categoryRows = categories.map { category ->
-            val spent = transactions
-                .filter { it.categoryId == category.id && YearMonth.from(it.date) == thisMonth }
-                .sumOf { kotlin.math.abs(it.amount.cents) }
-            CategoryRow(category, Money(spent))
+            CategoryRow(
+                category = category,
+                ruleCount = rules.count { it.categoryId == category.id },
+                transactionCount = transactions.count { it.categoryId == category.id },
+            )
         }
 
         return CategoryManagementUiState(
@@ -217,8 +219,13 @@ class CategoryManagementViewModel @Inject constructor(
         }
     }
 
+    /** Deletes immediately (the swipe gesture itself is the confirmation) but keeps the rule around for [undo]. */
     fun deleteRule(ruleId: Long) {
-        viewModelScope.launch { categoryRepository.deleteRule(ruleId) }
+        val rule = uiState.value.rules.firstOrNull { it.id == ruleId } ?: return
+        viewModelScope.launch {
+            categoryRepository.deleteRule(ruleId)
+            undoableAction.value = UndoableAction.RuleDeleted(rule)
+        }
     }
 
     /** The "regel bewerken" dialog's save action. */
@@ -365,6 +372,7 @@ class CategoryManagementViewModel @Inject constructor(
                     action.rules.forEach { rule -> categoryRepository.addRule(rule.copy(id = 0, categoryId = newCategoryId)) }
                     action.reassignedTransactionIds.forEach { transactionId -> transactionRepository.updateCategory(transactionId, newCategoryId) }
                 }
+                is UndoableAction.RuleDeleted -> categoryRepository.addRule(action.rule.copy(id = 0))
             }
             undoableAction.value = null
         }
