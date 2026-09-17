@@ -213,6 +213,7 @@ fun FinancioNavHost() {
                 TransactionDetailScreen(
                     onBackClick = { navController.popBackStack() },
                     onManageRulesClick = { navController.navigate(Destination.CategoryManagement.route) },
+                    onOpenTransaction = { transactionId -> navController.navigate("transaction/$transactionId") },
                 )
             }
             composable(Destination.CategoryManagement.route) { CategoryManagementScreen(onBackClick = { navController.popBackStack() }) }

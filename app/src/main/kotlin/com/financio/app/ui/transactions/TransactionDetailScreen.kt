@@ -1,17 +1,21 @@
 package com.financio.app.ui.transactions
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -26,8 +30,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,17 +40,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.CategorizationConflictDialog
 import com.financio.app.ui.common.CategorySquare
-import com.financio.app.ui.common.toShortDisplayString
+import com.financio.app.ui.common.categoryColorFor
+import com.financio.app.ui.common.toSignedMagnitudeString
+import com.financio.app.ui.theme.LocalFinancioColors
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
 import com.financio.core.model.MatchType
-import com.financio.core.model.Money
 import com.financio.core.model.Transaction
+import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * What a tap on a transaction row now opens (R3) — a full-screen detail instead of jumping
@@ -59,62 +68,46 @@ import com.financio.core.model.Transaction
 fun TransactionDetailScreen(
     onBackClick: () -> Unit,
     onManageRulesClick: () -> Unit,
+    onOpenTransaction: (Long) -> Unit,
     viewModel: TransactionDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
     val transaction = state.transaction
     // "Ook toepassen op de rest?" — the same follow-up Transacties' long-press flow shows, now
-    // triggered from this screen's own quick category dropdown too (see AmountHeader).
+    // triggered from this screen's own quick category dropdown too (see CategoryDetailRow).
     var bulkApplyPrompt by remember { mutableStateOf<DetailBulkApplyPrompt?>(null) }
+    var splitting by remember { mutableStateOf(false) }
+    var labelEditorOpen by remember { mutableStateOf(false) }
+    var deleteConfirmOpen by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(transaction?.counterpartyName ?: "Transactie") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-            )
-        },
-    ) { padding ->
+    Scaffold { padding ->
         if (!state.loaded || transaction == null) return@Scaffold
+        val isSplit = state.splits.isNotEmpty()
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
-            item {
-                AmountHeader(
-                    transaction = transaction,
-                    categoryName = state.categoryName,
-                    isSplit = state.splits.isNotEmpty(),
-                    categories = state.categories,
-                    onCategorySelect = { categoryId -> viewModel.setCategory(categoryId) },
-                )
-            }
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
-            if (state.splits.isNotEmpty()) {
-                item { SplitBreakdown(state.splits) }
-                item { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
-            }
-            item { DetailRow("Rekening", state.accountName ?: "—") }
-            item { DetailRow("Datum", transaction.date.toShortDisplayString()) }
-            transaction.tag?.let { tag -> item { DetailRow("Tag", tag) } }
-            item { DetailRow("Omschrijving", transaction.description) }
-            transaction.counterpartyIban?.let { iban -> item { DetailRow("Tegenrekening", iban) } }
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
-            state.counterpartyStats?.let { stats ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            DetailHeader(onBackClick = onBackClick, onDeleteClick = { deleteConfirmOpen = true })
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxSize().padding(horizontal = 20.dp)) {
+                item { AmountHero(transaction, state.categoryName, isSplit, state.accountName) }
                 item {
-                    Text(
-                        "Bij ${transaction.counterpartyName}: ${stats.count} transacties, gemiddeld ${stats.average.toDisplayString()}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 16.dp),
+                    DetailListGroup(
+                        rows = buildList {
+                            // A split transaction's category lives in its parts, not one single
+                            // value - edited via the "Splitsen" row below, not this one.
+                            if (!isSplit) {
+                                add { CategoryDetailRow(state.categoryName, state.categories, onSelect = viewModel::setCategory) }
+                            }
+                            add { SplitDetailRow(isSplit, state.splits.size, onClick = { splitting = true }) }
+                            add { LabelDetailRow(transaction.note, onClick = { labelEditorOpen = true }) }
+                        },
                     )
                 }
+                item { ActiveRuleCard(state.matchingRule, state.matchingRuleTransactionCount, onManageRulesClick) }
+                item { FromBankCard(transaction.description) }
+                state.nextTransactionId?.let { nextId ->
+                    item { NextTransactionButton(onClick = { onOpenTransaction(nextId) }) }
+                }
+                item { Spacer(Modifier.height(24.dp)) }
             }
-            item { MatchingRuleCard(state.matchingRule, onManageRulesClick) }
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
-            item { NoteEditor(transaction, onSave = viewModel::setNote) }
-            item { Spacer(Modifier.height(32.dp)) }
         }
     }
 
@@ -150,6 +143,46 @@ fun TransactionDetailScreen(
             onDismiss = { bulkApplyPrompt = null },
         )
     }
+
+    if (splitting && transaction != null) {
+        SplitDialog(
+            transaction = transaction,
+            categories = state.categories,
+            currentSplits = state.rawSplits,
+            onDismiss = { splitting = false },
+            onSave = { splits ->
+                viewModel.saveSplits(splits, fallbackCategoryId = transaction.categoryId)
+                splitting = false
+            },
+            onClear = {
+                viewModel.saveSplits(emptyList(), fallbackCategoryId = null)
+                splitting = false
+            },
+        )
+    }
+
+    if (labelEditorOpen && transaction != null) {
+        LabelEditorDialog(
+            initialValue = transaction.note ?: "",
+            onDismiss = { labelEditorOpen = false },
+            onSave = { note ->
+                viewModel.setNote(note)
+                labelEditorOpen = false
+            },
+        )
+    }
+
+    if (deleteConfirmOpen && transaction != null) {
+        DeleteConfirmDialog(
+            counterpartyName = transaction.counterpartyName,
+            onConfirm = {
+                viewModel.deleteTransaction()
+                deleteConfirmOpen = false
+                onBackClick()
+            },
+            onDismiss = { deleteConfirmOpen = false },
+        )
+    }
 }
 
 // "Detail"-prefixed to avoid colliding with TransactionsScreen.kt's own (differently-shaped)
@@ -174,82 +207,170 @@ private fun DetailBulkApplyDialog(prompt: DetailBulkApplyPrompt, onConfirm: () -
     )
 }
 
+/** "← / Verwijderen" — the redesign's plain header convention (see ImportTopBar/CategorizeHeader), with the destructive action taking the header's other slot instead of a menu. */
 @Composable
-private fun AmountHeader(
-    transaction: Transaction,
-    categoryName: String?,
-    isSplit: Boolean,
-    categories: List<Category>,
-    onCategorySelect: (Long) -> Unit,
-) {
-    var categoryMenuOpen by remember { mutableStateOf(false) }
-    val isIncome = transaction.amount.cents > 0
-
+private fun DetailHeader(onBackClick: () -> Unit, onDeleteClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CategorySquare(categoryName, isSplit = isSplit, size = 40.dp)
-        Column(Modifier.weight(1f)) {
-            Text(
-                transaction.amount.toSignedDisplayString(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-            )
-            if (isSplit) {
-                // A split transaction's category lives in its parts, not one single value — edited
-                // by long-pressing the row back in the list (see TransactionsScreen), not here.
-                Text(
-                    "Gesplitst over meerdere categorieën",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+        ) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+        Text(
+            "Verwijderen",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clickable(onClick = onDeleteClick),
+        )
+    }
+}
+
+private fun LocalDate.fullDisplayString(): String {
+    val weekday = dayOfWeek.getDisplayName(TextStyle.FULL, Locale("nl")).replaceFirstChar { it.uppercase() }
+    val monthName = month.getDisplayName(TextStyle.FULL, Locale("nl"))
+    return "$weekday $dayOfMonth $monthName $year"
+}
+
+@Composable
+private fun AmountHero(transaction: Transaction, categoryName: String?, isSplit: Boolean, accountName: String?) {
+    val isIncome = transaction.amount.cents > 0
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CategorySquare(categoryName, isSplit = isSplit, size = 38.dp)
+            Text(transaction.counterpartyName, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            transaction.amount.toSignedMagnitudeString(),
+            fontSize = 40.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        Text(
+            "${transaction.date.fullDisplayString()} · ${accountName ?: "onbekende rekening"}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun DetailListGroup(rows: List<@Composable () -> Unit>) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp)),
+    ) {
+        rows.forEachIndexed { index, row ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 18.dp))
+            row()
+        }
+    }
+}
+
+@Composable
+private fun DetailListRow(label: String, onClick: () -> Unit, trailing: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), content = trailing)
+    }
+}
+
+/** A plain "›" glyph rather than a chevron icon - same reasoning as SplitDialog's "✕": no build here to verify a chevron actually ships in the trimmed icon set. */
+@Composable
+private fun RowScope.Chevron() {
+    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun CategoryDetailRow(categoryName: String?, categories: List<Category>, onSelect: (Long) -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        DetailListRow(label = "Categorie", onClick = { menuOpen = true }) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(categoryColorFor(categoryName)))
+            Text(categoryName ?: "Nog niet gecategoriseerd", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Chevron()
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            categories.forEach { category ->
+                DropdownMenuItem(
+                    text = { Text(category.name) },
+                    onClick = { onSelect(category.id); menuOpen = false },
                 )
-            } else {
-                Box {
-                    Text(
-                        (categoryName ?: "Nog niet gecategoriseerd") + " ▾",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { categoryMenuOpen = true },
-                    )
-                    DropdownMenu(expanded = categoryMenuOpen, onDismissRequest = { categoryMenuOpen = false }) {
-                        categories.forEach { category ->
-                            DropdownMenuItem(
-                                text = { Text(category.name) },
-                                onClick = { onCategorySelect(category.id); categoryMenuOpen = false },
-                            )
-                        }
-                    }
-                }
             }
         }
     }
 }
 
 @Composable
-private fun SplitBreakdown(splits: List<Pair<Category?, Money>>) {
-    Column {
-        splits.forEach { (category, amount) ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(category?.name ?: "Onbekende categorie")
-                Text(amount.toDisplayString(), fontWeight = FontWeight.SemiBold)
-            }
+private fun SplitDetailRow(isSplit: Boolean, splitCount: Int, onClick: () -> Unit) {
+    DetailListRow(label = "Splitsen", onClick = onClick) {
+        Text(
+            if (isSplit) "Gesplitst in $splitCount" else "Niet gesplitst",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Chevron()
+    }
+}
+
+/** Reuses the transaction's own free-text note field ([Transaction.note]) - the redesign's "Label" row and the app's existing "Notitie" concept are the same one editable field, just relabeled and moved into this list group instead of a big box at the bottom of the screen. */
+@Composable
+private fun LabelDetailRow(note: String?, onClick: () -> Unit) {
+    DetailListRow(label = "Label", onClick = onClick) {
+        if (note.isNullOrBlank()) {
+            Text("Toevoegen", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+        } else {
+            Text(note, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Chevron()
         }
     }
 }
 
 @Composable
-private fun DetailRow(label: String, value: String) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 2.dp))
-    }
+private fun LabelEditorDialog(initialValue: String, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
+    var text by remember { mutableStateOf(initialValue) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Label") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                placeholder = { Text("Eigen label bij deze transactie") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = { TextButton(onClick = { onSave(text.ifBlank { null }) }) { Text("Opslaan") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },
+    )
+}
+
+@Composable
+private fun DeleteConfirmDialog(counterpartyName: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Transactie verwijderen?") },
+        text = { Text("De transactie bij $counterpartyName wordt definitief verwijderd. Dit kan niet ongedaan worden gemaakt.") },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Verwijderen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },
+    )
 }
 
 /**
@@ -258,25 +379,44 @@ private fun DetailRow(label: String, value: String) {
  * since there's no dedicated single-rule editor yet.
  */
 @Composable
-private fun MatchingRuleCard(rule: CategoryRule?, onManageRulesClick: () -> Unit) {
+private fun ActiveRuleCard(rule: CategoryRule?, transactionCount: Int, onManageRulesClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(16.dp),
+            .padding(bottom = 16.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(18.dp),
     ) {
-        Text("Categoriseerregel", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            if (rule != null) ruleDescription(rule) else "Geen regel — deze categorie is handmatig gekozen.",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            "ACTIEVE REGEL",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
         Text(
-            "Regels bewerken →",
-            color = MaterialTheme.colorScheme.primary,
+            if (rule != null) ruleDescription(rule) else "Geen regel — deze categorie is handmatig gekozen.",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        if (rule != null) {
+            Text(
+                if (transactionCount == 1) "Geldt voor 1 transactie" else "Geldt voor $transactionCount transacties",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Text(
+            "Regel aanpassen",
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.clickable(onClick = onManageRulesClick),
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            textDecoration = TextDecoration.Underline,
+            modifier = Modifier.padding(top = 12.dp).clickable(onClick = onManageRulesClick),
         )
     }
 }
@@ -286,36 +426,46 @@ private fun ruleDescription(rule: CategoryRule): String = when (rule.matchType) 
     MatchType.KEYWORD -> "Bevat \"${rule.pattern}\""
 }
 
-/**
- * New per-transaction field from the redesign (R3). Saved explicitly via a button rather than on
- * every keystroke — the same "commit on an explicit action, not per character" choice as the
- * budget limit fields elsewhere, to avoid writing to the encrypted database on every keypress.
- */
 @Composable
-private fun NoteEditor(transaction: Transaction, onSave: (String?) -> Unit) {
-    var text by remember(transaction.id) { mutableStateOf(transaction.note ?: "") }
-    var dirty by remember(transaction.id) { mutableStateOf(false) }
-
-    // A note loaded later than the first composition (e.g. right after opening this screen, before
-    // the Flow has emitted) must still land in the field once it arrives, but only if the user
-    // hasn't already started typing over it.
-    LaunchedEffect(transaction.note) {
-        if (!dirty) text = transaction.note ?: ""
-    }
-
-    Column {
-        Text("Notitie", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it; dirty = true },
-            placeholder = { Text("Eigen aantekening bij deze transactie") },
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+private fun FromBankCard(description: String) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        Text(
+            "VAN DE BANK",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = LocalFinancioColors.current.inkFaint,
+            modifier = Modifier.padding(bottom = 8.dp),
         )
-        if (dirty) {
-            TextButton(
-                onClick = { onSave(text); dirty = false },
-                modifier = Modifier.padding(top = 4.dp),
-            ) { Text("Opslaan") }
-        }
+        Text(
+            description,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                .padding(16.dp),
+        )
+    }
+}
+
+/** Secondary, thumb-zone button — walks the ledger via [TransactionDetailUiState.nextTransactionId], so serial cleanup doesn't mean backing out to the list after every single transaction. */
+@Composable
+private fun NextTransactionButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .height(56.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("Volgende transactie", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
     }
 }
