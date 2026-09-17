@@ -67,6 +67,16 @@ interface CategoryRuleDao {
     @Insert
     suspend fun insertAll(rules: List<CategoryRuleEntity>)
 
+    /**
+     * Looked up by [com.financio.app.data.repository.RoomCategoryRepository.addRule] before every
+     * insert, case/whitespace-insensitively, so learning a rule from "Belastingdienst" and later
+     * from "BELASTINGDIENST" (same payee, different casing across bank exports) for the same
+     * category is a no-op the second time instead of a second near-identical row - see
+     * [deleteDuplicates] for rows that already piled up before this check existed.
+     */
+    @Query("SELECT * FROM category_rules WHERE LOWER(TRIM(pattern)) = :normalizedPattern AND matchType = :matchType AND categoryId = :categoryId LIMIT 1")
+    suspend fun findEquivalent(normalizedPattern: String, matchType: String, categoryId: Long): CategoryRuleEntity?
+
     @Query("DELETE FROM category_rules WHERE id = :ruleId")
     suspend fun delete(ruleId: Long)
 
@@ -77,6 +87,23 @@ interface CategoryRuleDao {
     /** The "regel bewerken" dialog's save action - priority is untouched, use [setPriority] to reorder. */
     @Query("UPDATE category_rules SET categoryId = :categoryId, matchType = :matchType, pattern = :pattern WHERE id = :ruleId")
     suspend fun update(ruleId: Long, categoryId: Long, matchType: String, pattern: String)
+
+    /**
+     * One-time repair for rows already duplicated before [findEquivalent] existed to stop new
+     * ones: keeps only the most recently written (highest id) row per case/whitespace-normalized
+     * pattern+matchType+categoryId. Deliberately keyed the same as [findEquivalent] so this cleans
+     * up exactly the rows that check would now refuse to (re-)create. Safe to run on every
+     * startup - a no-op once no duplicates remain. Run from [DatabaseSeeder], same shape as
+     * [BudgetDao.deleteDuplicates].
+     */
+    @Query(
+        """
+        DELETE FROM category_rules WHERE id NOT IN (
+            SELECT MAX(id) FROM category_rules GROUP BY LOWER(TRIM(pattern)), matchType, categoryId
+        )
+        """
+    )
+    suspend fun deleteDuplicates()
 }
 
 @Dao

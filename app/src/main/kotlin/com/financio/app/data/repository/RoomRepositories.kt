@@ -105,7 +105,17 @@ class RoomCategoryRepository @Inject constructor(
     override fun observeRules(): Flow<List<CategoryRule>> =
         ruleDao.observeAll().map { entities -> entities.map { it.toDomain() } }
 
+    /**
+     * A no-op when an equivalent rule already exists (same pattern case/whitespace-insensitively,
+     * same matchType, same categoryId) - every "learn a rule from this categorization" call site
+     * (Transacties, transactiedetail, import) hits this on every manual categorize, so without the
+     * check the same real payee accumulates a near-duplicate row per casing variant a bank export
+     * happens to use. Keyed on categoryId too since the *same* pattern legitimately routing to
+     * *different* categories is not a duplicate - see [com.financio.core.categorize.CounterpartyConflict].
+     */
     override suspend fun addRule(rule: CategoryRule) {
+        val normalizedPattern = rule.pattern.trim().lowercase()
+        if (ruleDao.findEquivalent(normalizedPattern, rule.matchType.name, rule.categoryId) != null) return
         ruleDao.insert(rule.toRuleEntity())
     }
 

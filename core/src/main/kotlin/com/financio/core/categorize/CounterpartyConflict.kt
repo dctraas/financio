@@ -10,10 +10,10 @@ import com.financio.core.model.Transaction
  * wrongly capture both instead of just the one the user actually meant.
  */
 object CounterpartyConflict {
-    /** The counterparty's own already-categorized category, if any of its transactions already use a *different* one than [proposedCategoryId]. Null when this would be the counterparty's first category, or every existing one already agrees. */
+    /** The counterparty's own already-categorized category, if any of its transactions already use a *different* one than [proposedCategoryId]. Null when this would be the counterparty's first category, or every existing one already agrees. Compares case-insensitively - a bank export can render the same payee as "Belastingdienst" in one statement and "BELASTINGDIENST" in another, and this guard exists precisely for a counterparty like that. */
     fun existingDifferentCategory(transactions: List<Transaction>, counterpartyName: String, proposedCategoryId: Long): Long? =
         transactions.firstOrNull {
-            it.counterpartyName == counterpartyName && it.categoryId != null && it.categoryId != proposedCategoryId
+            it.counterpartyName.equals(counterpartyName, ignoreCase = true) && it.categoryId != null && it.categoryId != proposedCategoryId
         }?.categoryId
 
     /**
@@ -28,7 +28,7 @@ object CounterpartyConflict {
             0
         } else {
             transactions.count {
-                it.counterpartyName == counterpartyName && "${it.counterpartyName} ${it.description}".contains(keyword, ignoreCase = true)
+                it.counterpartyName.equals(counterpartyName, ignoreCase = true) && "${it.counterpartyName} ${it.description}".contains(keyword, ignoreCase = true)
             }
         }
 }
