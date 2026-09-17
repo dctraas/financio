@@ -4,30 +4,46 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.toShortDisplayString
+import com.financio.app.ui.theme.CategoryColors
+import com.financio.app.ui.theme.LocalFinancioColors
+import com.financio.core.model.Money
 import java.time.LocalDate
 
 /**
  * The "uit de kelder" hub — everything that used to be four taps deep in Instellingen, now one
- * screen away with its own live summary per tile so most of the time a tap isn't even needed.
+ * screen away with its own live summary per row so most of the time a tap isn't even needed.
  */
 @Composable
 fun MeerScreen(
@@ -47,102 +63,80 @@ fun MeerScreen(
     viewModel: MeerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
+    var settingsSheetOpen by remember { mutableStateOf(false) }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         item {
             Text(
                 "Beheer",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(top = 20.dp, bottom = 16.dp),
             )
         }
+        item { ImportCard(state.mostRecentTransactionDate, onImportClick) }
 
-        // Just four tiles, always - a plain 2x2 grid of Rows, not LazyVerticalGrid: nesting a
-        // second lazy/scrollable container as an item{} inside this LazyColumn measures it with
-        // an infinite height constraint and crashes ("Vertically scrollable component was
-        // measured with an infinity maximum height constraints").
+        item { SectionLabel("JOUW INRICHTING") }
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                MeerTile(
-                    title = "Vaste lasten",
-                    summary = if (state.subscriptionCount > 0) {
-                        "${state.subscriptionCount} · ${state.subscriptionMonthlyTotal.toDisplayString()}/mnd"
-                    } else {
-                        "Nog niets herkend"
+            ListGroup(
+                rows = listOf(
+                    {
+                        InrichtingRow(
+                            dotColor = CategoryColors.groceries,
+                            title = "Categorieën & regels",
+                            summary = "${state.categoryCount} categorieën · ${state.ruleCount} regels",
+                            onClick = onManageCategoriesClick,
+                        )
                     },
-                    onClick = onSubscriptionsClick,
-                    modifier = Modifier.weight(1f),
-                )
-                MeerTile(
-                    title = "Budget",
-                    summary = if (state.budgetCount > 0) {
-                        "${state.budgetCount} ${if (state.budgetCount == 1) "limiet ingesteld" else "limieten ingesteld"}"
-                    } else {
-                        "Nog geen limieten"
+                    {
+                        InrichtingRow(
+                            dotColor = CategoryColors.transport,
+                            title = "Winkels & tegenpartijen",
+                            summary = "${state.merchantNameCount} namen · ${state.mergedMerchantCount} samengevoegd",
+                            onClick = onMerchantManagementClick,
+                        )
                     },
-                    onClick = onBudgetsClick,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+                    {
+                        InrichtingRow(
+                            dotColor = CategoryColors.subscriptions,
+                            title = "Vaste lasten",
+                            summary = subscriptionsSummary(state),
+                            onClick = onSubscriptionsClick,
+                        )
+                    },
+                    {
+                        InrichtingRow(
+                            dotColor = CategoryColors.housing,
+                            title = "Rekeningen",
+                            summary = accountsSummary(state),
+                            onClick = onAccountsClick,
+                        )
+                    },
+                ),
+            )
         }
+        // Not one of the four schermontwerp rows above (the spec explicitly drops the old
+        // "Budgetlimieten" row - limits are set on the Budget screen itself), but Budget is a
+        // real, already-redesigned screen (#54) that would otherwise have no way in at all once
+        // that row is gone - a small link, not a full list row, keeps it reachable.
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                MeerTile(
-                    title = "Rekeningen",
-                    summary = if (state.accountCount > 0) {
-                        "${state.accountCount} · ${state.accountsTotalBalance.toDisplayString()}"
-                    } else {
-                        "Nog geen rekeningen"
-                    },
-                    onClick = onAccountsClick,
-                    modifier = Modifier.weight(1f),
-                )
-                MeerTile(
-                    title = "Categorieën",
-                    summary = "${state.categoryCount} categorieën · ${state.ruleCount} regels",
-                    onClick = onManageCategoriesClick,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            Text(
+                "Budget bekijken →",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 20.dp).clickable(onClick = onBudgetsClick),
+            )
         }
 
+        item { SectionLabel("TERUGBLIK & APP", topPadding = 0.dp) }
         item {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 20.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
-                    .clickable(onClick = onImportClick)
-                    .padding(16.dp),
-            ) {
-                Text("Bestand importeren", fontWeight = FontWeight.SemiBold)
-                Text(
-                    freshnessCaption(state.mostRecentTransactionDate),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
+            ListGroup(
+                rows = listOf(
+                    { TerugblikRow("Vermogen", state.accountsTotalBalance.roundedEuroString(), onNetWorthClick) },
+                    { TerugblikRow("Jaaroverzicht ${LocalDate.now().year}", null, onYearReviewClick) },
+                    { TerugblikRow("Instellingen", null, { settingsSheetOpen = true }) },
+                ),
+            )
         }
-
-        item { SectionHeader("Instellingen") }
-        item { MeerRow("Vermogen", onNetWorthClick) }
-        item { MeerRow("Jaaroverzicht", onYearReviewClick) }
-        item { MeerRow("Tegenpartijen", onMerchantManagementClick) }
-        item { MeerRow("Weergave", onAppearanceClick) }
-        item { MeerRow("Vergrendeling & privacy", onLockPrivacyClick) }
-        item { MeerRow("Meldingen", onNotificationsClick) }
-        item { MeerRow("Maand begint op", onMonthStartClick) }
-        item { MeerRow("Back-up & export", onBackupExportClick, isLast = true) }
 
         item {
             Text(
@@ -150,50 +144,171 @@ fun MeerScreen(
                     "account en geen internettoegang.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 24.dp, bottom = 32.dp),
+                modifier = Modifier.padding(top = 20.dp, bottom = 32.dp),
+            )
+        }
+    }
+
+    // Not yet the schermontwerp's own grouped "WEERGAVE/PRIVACY/MELDINGEN" Instellingen screen
+    // (that's a separate redesign pass) - a plain sheet over the five existing settings
+    // destinations, so nothing already built becomes unreachable in the meantime.
+    if (settingsSheetOpen) {
+        val sheetState = rememberModalBottomSheetState()
+        ModalBottomSheet(onDismissRequest = { settingsSheetOpen = false }, sheetState = sheetState) {
+            SettingsSheetContent(
+                onAppearanceClick = { settingsSheetOpen = false; onAppearanceClick() },
+                onLockPrivacyClick = { settingsSheetOpen = false; onLockPrivacyClick() },
+                onNotificationsClick = { settingsSheetOpen = false; onNotificationsClick() },
+                onMonthStartClick = { settingsSheetOpen = false; onMonthStartClick() },
+                onBackupExportClick = { settingsSheetOpen = false; onBackupExportClick() },
             )
         }
     }
 }
 
 private fun freshnessCaption(mostRecentDate: LocalDate?): String =
-    if (mostRecentDate == null) "Nog geen bestand geïmporteerd" else "laatst bijgewerkt t/m ${mostRecentDate.toShortDisplayString()}"
+    if (mostRecentDate == null) "Nog geen bestand geïmporteerd" else "bijgewerkt t/m ${mostRecentDate.toShortDisplayString()}"
 
-@Composable
-private fun MeerTile(title: String, summary: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-    ) {
-        Text(title, fontWeight = FontWeight.SemiBold)
-        Text(
-            summary,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+private fun subscriptionsSummary(state: MeerUiState): String =
+    if (state.subscriptionCount > 0) {
+        "${state.subscriptionCount} · ${state.subscriptionMonthlyTotal.toDisplayString()} per maand"
+    } else {
+        "Nog niets herkend"
     }
+
+private fun accountsSummary(state: MeerUiState): String =
+    if (state.accountCount > 0) "${state.accountCount} · ${state.accountsTotalBalance.toDisplayString()}" else "Nog geen rekeningen"
+
+/** "€8.412" - truncated to whole euros, deliberately distinct from Rekeningen's own exact-to-the-cent total right above it on the same screen. */
+private fun Money.roundedEuroString(): String {
+    val whole = cents / 100
+    val formatted = kotlin.math.abs(whole).toString().reversed().chunked(3).joinToString(".").reversed()
+    return if (whole < 0) "-€$formatted" else "€$formatted"
 }
 
 @Composable
-private fun SectionHeader(title: String) {
+private fun SectionLabel(text: String, topPadding: Dp = 8.dp) {
     Text(
-        title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.sp,
+        color = LocalFinancioColors.current.inkFaint,
+        modifier = Modifier.padding(top = topPadding, bottom = 10.dp),
     )
 }
 
 @Composable
-private fun MeerRow(label: String, onClick: () -> Unit, isLast: Boolean = false) {
+private fun Chevron() {
+    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun ImportCard(mostRecentDate: LocalDate?, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 20.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(18.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text("Bestand importeren", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                freshnessCaption(mostRecentDate),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Text("→", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+    }
+}
+
+@Composable
+private fun ListGroup(rows: List<@Composable () -> Unit>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 20.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp)),
+    ) {
+        rows.forEachIndexed { index, row ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 18.dp))
+            row()
+        }
+    }
+}
+
+@Composable
+private fun InrichtingRow(dotColor: Color, title: String, summary: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(dotColor))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                summary,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Chevron()
+    }
+}
+
+@Composable
+private fun TerugblikRow(title: String, trailing: String?, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            trailing?.let {
+                Text(it, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Chevron()
+        }
+    }
+}
+
+@Composable
+private fun SettingsSheetContent(
+    onAppearanceClick: () -> Unit,
+    onLockPrivacyClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
+    onMonthStartClick: () -> Unit,
+    onBackupExportClick: () -> Unit,
+) {
+    Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+        Text("Instellingen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+        SettingsSheetRow("Weergave", onAppearanceClick)
+        SettingsSheetRow("Vergrendeling & privacy", onLockPrivacyClick)
+        SettingsSheetRow("Meldingen", onNotificationsClick)
+        SettingsSheetRow("Maand begint op", onMonthStartClick)
+        SettingsSheetRow("Back-up & export", onBackupExportClick, isLast = true)
+    }
+}
+
+@Composable
+private fun SettingsSheetRow(label: String, onClick: () -> Unit, isLast: Boolean = false) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Text(label, modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp))
         if (!isLast) HorizontalDivider()
     }
 }
