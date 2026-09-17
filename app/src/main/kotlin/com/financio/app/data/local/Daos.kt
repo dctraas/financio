@@ -209,6 +209,10 @@ interface TransactionDao {
     @Query("UPDATE transactions SET note = :note WHERE id = :transactionId")
     suspend fun setNote(transactionId: Long, note: String?)
 
+    /** The transaction detail screen's "Verwijderen" action - its transaction_splits, if any, cascade-delete via the FK on transactionId (see Entities.kt), so this never leaves orphaned split rows behind. */
+    @Query("DELETE FROM transactions WHERE id = :transactionId")
+    suspend fun delete(transactionId: Long)
+
     @Query("DELETE FROM transaction_splits WHERE transactionId = :transactionId")
     suspend fun clearSplits(transactionId: Long)
 

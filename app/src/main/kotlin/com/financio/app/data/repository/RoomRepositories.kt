@@ -88,6 +88,10 @@ class RoomTransactionRepository @Inject constructor(
     override suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long?) {
         dao.reassignCategory(oldCategoryId, newCategoryId)
     }
+
+    override suspend fun deleteTransaction(transactionId: Long) {
+        dao.delete(transactionId)
+    }
 }
 
 class RoomCategoryRepository @Inject constructor(

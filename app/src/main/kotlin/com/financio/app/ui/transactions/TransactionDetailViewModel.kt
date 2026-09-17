@@ -11,6 +11,7 @@ import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
 import com.financio.core.model.Money
 import com.financio.core.model.Transaction
+import com.financio.core.model.TransactionSplit
 import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
 import com.financio.core.repository.TransactionRepository
@@ -24,9 +25,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** "Bij Albert Heijn: 84 transacties, gemiddeld €41,80" — same counterparty, same account. */
-data class CounterpartyStats(val count: Int, val average: Money)
-
 data class TransactionDetailUiState(
     val loaded: Boolean = false,
     /** Null only while [loaded] is still false, or if the transaction was deleted from under this screen. */
@@ -35,10 +33,15 @@ data class TransactionDetailUiState(
     val categoryName: String? = null,
     val categories: List<Category> = emptyList(),
     val splits: List<Pair<Category?, Money>> = emptyList(),
-    val counterpartyStats: CounterpartyStats? = null,
+    /** Same splits as [splits], unresolved - what [SplitDialog] needs to seed its editable rows. */
+    val rawSplits: List<TransactionSplit> = emptyList(),
     val matchingRule: CategoryRule? = null,
+    /** How many transactions [matchingRule] actually wins for (the first rule, by priority, that matches each one) - "Geldt voor 47 transacties" on the detail screen's rule card. */
+    val matchingRuleTransactionCount: Int = 0,
     /** Other transactions sharing this one's account + counterparty — same "ook toepassen op de rest?" trigger count Transacties uses, so the follow-up prompt fires here too, not just from a long-press in the list. */
     val otherTransactionsWithSameCounterparty: Int = 0,
+    /** The transaction right after this one in Transacties' own default order (date desc, id desc) - "Volgende transactie" walks the ledger the same way the list does, so it's predictable. Null once this is the last one. */
+    val nextTransactionId: Long? = null,
     /** Non-null while the "meerdere soorten transacties bij deze rekeninghouder?" dialog is open — see [CategorizationConflict]. */
     val categorizationConflict: CategorizationConflict? = null,
     /** Non-null right after setCategory() actually persists - the screen turns this into its "ook toepassen op de rest?" follow-up, then clears it via [TransactionDetailViewModel.consumeAppliedCategorization]. */
@@ -78,6 +81,17 @@ class TransactionDetailViewModel @Inject constructor(
         val otherWithSameCounterparty = transaction?.let { t ->
             transactions.count { it.accountId == t.accountId && it.counterpartyName == t.counterpartyName && it.id != t.id }
         } ?: 0
+        // observeAllTransactions() is already ordered date DESC, id DESC (see TransactionDao) -
+        // the same order Transacties' own default sort shows, so "Volgende transactie" walks the
+        // ledger exactly the way the list the user came from does.
+        val nextTransactionId = transactions.indexOfFirst { it.id == transactionId }
+            .takeIf { it in 0 until transactions.lastIndex }
+            ?.let { index -> transactions[index + 1].id }
+        val matchingRule = transaction?.let { RuleMatcher(rules).matchingRule(it) }
+        val matchingRuleTransactionCount = matchingRule?.let { rule ->
+            val matcher = RuleMatcher(rules)
+            transactions.count { matcher.matchingRule(it)?.id == rule.id }
+        } ?: 0
         TransactionDetailUiState(
             loaded = true,
             transaction = transaction,
@@ -85,22 +99,15 @@ class TransactionDetailViewModel @Inject constructor(
             categoryName = transaction?.categoryId?.let { categoriesById[it]?.name },
             categories = categories,
             splits = splits.map { split -> categoriesById[split.categoryId] to split.amount },
-            counterpartyStats = transaction?.let { counterpartyStatsFor(it, transactions) },
+            rawSplits = splits,
             categorizationConflict = conflict,
             appliedCategorization = applied,
-            matchingRule = transaction?.let { RuleMatcher(rules).matchingRule(it) },
+            matchingRule = matchingRule,
+            matchingRuleTransactionCount = matchingRuleTransactionCount,
             otherTransactionsWithSameCounterparty = otherWithSameCounterparty,
+            nextTransactionId = nextTransactionId,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionDetailUiState())
-
-    private fun counterpartyStatsFor(transaction: Transaction, allTransactions: List<Transaction>): CounterpartyStats? {
-        val sameCounterparty = allTransactions.filter {
-            it.accountId == transaction.accountId && it.counterpartyName == transaction.counterpartyName
-        }
-        if (sameCounterparty.size <= 1) return null
-        val averageCents = sameCounterparty.sumOf { kotlin.math.abs(it.amount.cents) } / sameCounterparty.size
-        return CounterpartyStats(count = sameCounterparty.size, average = Money(averageCents))
-    }
 
     /**
      * Same "remember the choice as a rule" behavior as Transacties' own categorize() - this
@@ -178,5 +185,15 @@ class TransactionDetailViewModel @Inject constructor(
 
     fun setNote(note: String?) {
         viewModelScope.launch { transactionRepository.setNote(transactionId, note?.ifBlank { null }) }
+    }
+
+    /** Fire-and-forget, same as every other mutation here — the screen navigates back immediately rather than awaiting completion. */
+    fun deleteTransaction() {
+        viewModelScope.launch { transactionRepository.deleteTransaction(transactionId) }
+    }
+
+    /** Replaces this transaction's splits entirely; an empty [splits] un-splits it back to [fallbackCategoryId]. */
+    fun saveSplits(splits: List<TransactionSplit>, fallbackCategoryId: Long?) {
+        viewModelScope.launch { transactionRepository.setSplits(transactionId, splits, fallbackCategoryId) }
     }
 }

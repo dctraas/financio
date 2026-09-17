@@ -67,6 +67,9 @@ interface TransactionRepository {
 
     /** Every whole transaction currently in [oldCategoryId] moves to [newCategoryId] (or null) - the "kies waar deze transacties naartoe gaan" step before deleting a category. */
     suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long?)
+
+    /** The transaction detail screen's "Verwijderen" action. Any splits it had are removed along with it. */
+    suspend fun deleteTransaction(transactionId: Long)
 }
 
 interface CategoryRepository {
