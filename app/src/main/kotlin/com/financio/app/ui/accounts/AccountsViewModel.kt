@@ -30,8 +30,8 @@ data class AccountRow(
     val coverageEnd: LocalDate?,
     /** Whole months between this account's most recent transaction and today - 0 while it's current. */
     val monthsBehind: Int,
-    /** True if any goal follows this account, purely to word the "gevolgd door een doel" hint - see SavingsGoalsScreen for the actual link. */
-    val followedByGoal: Boolean,
+    /** Name of the (first) goal following this account, if any - "gevolgd door Buffer". Purely informational; see SavingsGoalsScreen for the actual link. */
+    val followedByGoalName: String?,
 )
 
 data class AccountsUiState(
@@ -67,7 +67,7 @@ class AccountsViewModel @Inject constructor(
 
     private fun buildState(accounts: List<Account>, transactions: List<Transaction>, goals: List<SavingsGoal>): AccountsUiState {
         val transactionsByAccount = transactions.groupBy { it.accountId }
-        val linkedAccountIds = goals.mapNotNull { it.linkedAccountId }.toSet()
+        val followingGoalNameByAccountId = goals.mapNotNull { goal -> goal.linkedAccountId?.let { it to goal.name } }.toMap()
         val today = LocalDate.now()
 
         fun rowFor(account: Account): AccountRow {
@@ -81,7 +81,7 @@ class AccountsViewModel @Inject constructor(
                 coverageStart = coverageStart,
                 coverageEnd = coverageEnd,
                 monthsBehind = coverageEnd?.let { Period.between(it.withDayOfMonth(1), today.withDayOfMonth(1)).let { p -> p.years * 12 + p.months } } ?: 0,
-                followedByGoal = account.id in linkedAccountIds,
+                followedByGoalName = followingGoalNameByAccountId[account.id],
             )
         }
 

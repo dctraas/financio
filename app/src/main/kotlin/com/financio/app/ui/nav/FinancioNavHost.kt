@@ -227,7 +227,12 @@ fun FinancioNavHost() {
                     onCategoryClick = { categoryId -> navController.navigate("charts?categoryId=$categoryId") { launchSingleTop = true } },
                 )
             }
-            composable(Destination.Accounts.route) { AccountsScreen(onBackClick = { navController.popBackStack() }) }
+            composable(Destination.Accounts.route) {
+                AccountsScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onImportClick = { navController.navigate(Destination.Import.route) },
+                )
+            }
             composable(Destination.Appearance.route) { AppearanceScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.LockPrivacy.route) { LockPrivacyScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.Notifications.route) { NotificationsScreen(onBackClick = { navController.popBackStack() }) }
