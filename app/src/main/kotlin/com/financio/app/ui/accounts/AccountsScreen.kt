@@ -319,12 +319,13 @@ private fun ExcludedAccountRow(row: AccountRow, onClick: () -> Unit) {
 
 @Composable
 private fun AddAccountButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val dashColor = MaterialTheme.colorScheme.outline
     Box(
         modifier = modifier
             .fillMaxWidth()
             .drawBehind {
                 drawRoundRect(
-                    color = MaterialTheme.colorScheme.outline,
+                    color = dashColor,
                     style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))),
                     cornerRadius = CornerRadius(16.dp.toPx()),
                 )
