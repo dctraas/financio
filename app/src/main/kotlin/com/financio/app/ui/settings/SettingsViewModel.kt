@@ -22,7 +22,10 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val biometricLockEnabled: Boolean = true,
-    val notificationsEnabled: Boolean = false,
+    val budgetThresholdNotificationsEnabled: Boolean = true,
+    val weeklyDigestEnabled: Boolean = false,
+    /** "Bedragen verbergen" — see [AppPreferences.hideAmountsEnabled] for why nothing downstream reads this yet. */
+    val hideAmountsEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val textSize: TextSize = TextSize.STANDARD,
     val categories: List<Category> = emptyList(),
@@ -42,33 +45,55 @@ class SettingsViewModel @Inject constructor(
 
     private val currentMonth = YearMonth.now()
 
-    // A 5th (let alone 6th, 7th) input flow would need the vararg combine() overload's less
-    // readable Array<T> callback, so instead the usual 4-arg combine() is chained with two more
-    // via the 3-arg one, then a final 2-arg one layers monthStartDay on top of that.
     private val coreState: Flow<SettingsUiState> = combine(
-        combine(
-            appPreferences.biometricLockEnabled,
-            categoryRepository.observeCategories(),
-            categoryRepository.observeRules(),
-            budgetRepository.observeBudgets(currentMonth),
-        ) { lockEnabled, categories, rules, budgets ->
-            SettingsUiState(
-                biometricLockEnabled = lockEnabled,
-                categories = categories,
-                rules = rules,
-                limitsByCategory = budgets.associate { it.categoryId to it.limit },
-                rolloverByCategory = budgets.associate { it.categoryId to it.rollover },
-            )
-        },
-        appPreferences.notificationsEnabled,
-        appPreferences.themeMode,
-        appPreferences.textSize,
-    ) { snapshot, notificationsEnabled, themeMode, textSize ->
-        snapshot.copy(notificationsEnabled = notificationsEnabled, themeMode = themeMode, textSize = textSize)
+        appPreferences.biometricLockEnabled,
+        categoryRepository.observeCategories(),
+        categoryRepository.observeRules(),
+        budgetRepository.observeBudgets(currentMonth),
+    ) { lockEnabled, categories, rules, budgets ->
+        SettingsUiState(
+            biometricLockEnabled = lockEnabled,
+            categories = categories,
+            rules = rules,
+            limitsByCategory = budgets.associate { it.categoryId to it.limit },
+            rolloverByCategory = budgets.associate { it.categoryId to it.rollover },
+        )
     }
 
-    val uiState: StateFlow<SettingsUiState> = combine(coreState, appPreferences.monthStartDay) { snapshot, monthStartDay ->
-        snapshot.copy(monthStartDay = monthStartDay)
+    // Grouped into its own 5-tuple rather than crammed into one giant combine() with coreState -
+    // the vararg overload past 5 inputs takes a much less readable Array<T> callback, so instead
+    // this feeds into the final 3-arg combine() below as a single flow.
+    private val displayAndNotificationState: Flow<SettingsExtras> = combine(
+        appPreferences.budgetThresholdNotificationsEnabled,
+        appPreferences.weeklyDigestEnabled,
+        appPreferences.hideAmountsEnabled,
+        appPreferences.themeMode,
+        appPreferences.textSize,
+    ) { budgetThresholdEnabled, weeklyDigestEnabled, hideAmountsEnabled, themeMode, textSize ->
+        SettingsExtras(budgetThresholdEnabled, weeklyDigestEnabled, hideAmountsEnabled, themeMode, textSize)
+    }
+
+    private data class SettingsExtras(
+        val budgetThresholdNotificationsEnabled: Boolean,
+        val weeklyDigestEnabled: Boolean,
+        val hideAmountsEnabled: Boolean,
+        val themeMode: ThemeMode,
+        val textSize: TextSize,
+    )
+
+    val uiState: StateFlow<SettingsUiState> = combine(
+        coreState,
+        displayAndNotificationState,
+        appPreferences.monthStartDay,
+    ) { snapshot, extras, monthStartDay ->
+        snapshot.copy(
+            budgetThresholdNotificationsEnabled = extras.budgetThresholdNotificationsEnabled,
+            weeklyDigestEnabled = extras.weeklyDigestEnabled,
+            hideAmountsEnabled = extras.hideAmountsEnabled,
+            themeMode = extras.themeMode,
+            textSize = extras.textSize,
+            monthStartDay = monthStartDay,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     fun setBiometricLockEnabled(enabled: Boolean) {
@@ -77,14 +102,23 @@ class SettingsViewModel @Inject constructor(
 
     /**
      * Only the local preference — the OS permission prompt itself (needed on Android 13+ before
-     * a notification can actually show) is a `NotificationsScreen`-level concern, since it needs an
+     * a notification can actually show) is a `SettingsScreen`-level concern, since it needs an
      * Activity to launch from. This flag can end up `true` with the permission still denied (the
      * user said no, or hasn't been asked yet); [com.financio.app.notifications.NotificationHelper]
      * checks the real permission itself before ever posting, so that combination just stays silent
      * rather than crashing.
      */
-    fun setNotificationsEnabled(enabled: Boolean) {
-        appPreferences.setNotificationsEnabled(enabled)
+    fun setBudgetThresholdNotificationsEnabled(enabled: Boolean) {
+        appPreferences.setBudgetThresholdNotificationsEnabled(enabled)
+    }
+
+    /** Same permission caveat as [setBudgetThresholdNotificationsEnabled]. */
+    fun setWeeklyDigestEnabled(enabled: Boolean) {
+        appPreferences.setWeeklyDigestEnabled(enabled)
+    }
+
+    fun setHideAmountsEnabled(enabled: Boolean) {
+        appPreferences.setHideAmountsEnabled(enabled)
     }
 
     fun setThemeMode(mode: ThemeMode) {

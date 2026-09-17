@@ -32,19 +32,46 @@ class AppPreferences(context: Context) {
     }
 
     /**
-     * Off by default, unlike the biometric lock: showing a notification needs the POST_NOTIFICATIONS
-     * runtime permission from Android 13 onward, so the Meer > Meldingen toggle drives both this
-     * flag and that permission request together (see `NotificationsScreen`) — turning this on without ever
-     * asking the user would either crash (pre-13's `NotificationManagerCompat.notify` is fine, but
-     * the permission check in `NotificationHelper` would just silently no-op) or, done wrong, skip
-     * the OS prompt entirely.
+     * Split from one combined "Meldingen" flag into its own "Budget bijna op" toggle (Instellingen,
+     * schermontwerp #17) - each still needs the POST_NOTIFICATIONS runtime permission from Android
+     * 13 onward, so `SettingsScreen` drives this flag and that permission request together, the
+     * same way the old combined toggle did. Falls back to the legacy combined key the first time
+     * it's read, so upgrading doesn't silently turn this off for someone who'd already opted in.
      */
-    private val _notificationsEnabled = MutableStateFlow(prefs.getBoolean(KEY_NOTIFICATIONS, DEFAULT_NOTIFICATIONS))
-    val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
+    private val _budgetThresholdNotificationsEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_BUDGET_THRESHOLD_NOTIFICATIONS, prefs.getBoolean(KEY_NOTIFICATIONS, DEFAULT_BUDGET_THRESHOLD_NOTIFICATIONS)),
+    )
+    val budgetThresholdNotificationsEnabled: StateFlow<Boolean> = _budgetThresholdNotificationsEnabled.asStateFlow()
 
-    fun setNotificationsEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_NOTIFICATIONS, enabled).apply()
-        _notificationsEnabled.value = enabled
+    fun setBudgetThresholdNotificationsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_BUDGET_THRESHOLD_NOTIFICATIONS, enabled).apply()
+        _budgetThresholdNotificationsEnabled.value = enabled
+    }
+
+    /** The other half of the old combined "Meldingen" flag - see [budgetThresholdNotificationsEnabled]. */
+    private val _weeklyDigestEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_WEEKLY_DIGEST, prefs.getBoolean(KEY_NOTIFICATIONS, DEFAULT_WEEKLY_DIGEST)),
+    )
+    val weeklyDigestEnabled: StateFlow<Boolean> = _weeklyDigestEnabled.asStateFlow()
+
+    fun setWeeklyDigestEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_WEEKLY_DIGEST, enabled).apply()
+        _weeklyDigestEnabled.value = enabled
+    }
+
+    /**
+     * "Bedragen verbergen tot je de app ontgrendelt" (Instellingen, schermontwerp #17) - stored and
+     * toggleable now, like [monthStartDay] before the screens that actually compute month
+     * boundaries were updated to use it. Actually masking every amount across Vandaag, Transacties,
+     * Budget etc. is a real cross-cutting change of its own, worth its own pass rather than folded
+     * blind into this one.
+     */
+    private val _hideAmountsEnabled = MutableStateFlow(prefs.getBoolean(KEY_HIDE_AMOUNTS, DEFAULT_HIDE_AMOUNTS))
+    val hideAmountsEnabled: StateFlow<Boolean> = _hideAmountsEnabled.asStateFlow()
+
+    fun setHideAmountsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_HIDE_AMOUNTS, enabled).apply()
+        _hideAmountsEnabled.value = enabled
     }
 
     private val _themeMode = MutableStateFlow(
@@ -176,7 +203,11 @@ class AppPreferences(context: Context) {
     companion object {
         private const val PREFS_NAME = "financio_settings"
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
+        /** Legacy combined flag, kept only as a one-time upgrade fallback - see [budgetThresholdNotificationsEnabled]/[weeklyDigestEnabled]. */
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
+        private const val KEY_BUDGET_THRESHOLD_NOTIFICATIONS = "budget_threshold_notifications_enabled"
+        private const val KEY_WEEKLY_DIGEST = "weekly_digest_enabled"
+        private const val KEY_HIDE_AMOUNTS = "hide_amounts_enabled"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_TEXT_SIZE = "text_size"
         private const val KEY_MONTH_START_DAY = "month_start_day"
@@ -187,7 +218,10 @@ class AppPreferences(context: Context) {
         private const val MERCHANT_ALIAS_SEPARATOR = "\u0001"
         // On by default for a finance app — matches the architecture doc's security section.
         private const val DEFAULT_BIOMETRIC_LOCK = true
-        private const val DEFAULT_NOTIFICATIONS = false
+        // Matches the schermontwerp: "Budget bijna op" on, "Weekoverzicht" off by default.
+        private const val DEFAULT_BUDGET_THRESHOLD_NOTIFICATIONS = true
+        private const val DEFAULT_WEEKLY_DIGEST = false
+        private const val DEFAULT_HIDE_AMOUNTS = false
         private val DEFAULT_THEME_MODE = ThemeMode.SYSTEM
         private val DEFAULT_TEXT_SIZE = TextSize.STANDARD
         private const val DEFAULT_MONTH_START_DAY = 1

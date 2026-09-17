@@ -28,7 +28,7 @@ class BudgetThresholdNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     suspend fun checkAndNotify(categoryId: Long, previousSpent: Money) {
-        if (!appPreferences.notificationsEnabled.first()) return
+        if (!appPreferences.budgetThresholdNotificationsEnabled.first()) return
 
         val currentMonth = YearMonth.now()
         val budget = budgetRepository.observeBudgets(currentMonth).first().firstOrNull { it.categoryId == categoryId } ?: return
