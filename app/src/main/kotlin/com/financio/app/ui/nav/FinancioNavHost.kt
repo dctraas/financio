@@ -150,7 +150,6 @@ fun FinancioNavHost() {
                             restoreState = true
                         }
                     },
-                    onSubscriptionsClick = { navController.navigate(Destination.Subscriptions.route) },
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
                 )
