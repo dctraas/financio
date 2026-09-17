@@ -100,6 +100,8 @@ data class ChartsUiState(
     val deltaLabel: String? = null,
     /** Whether [deltaLabel]'s direction is good news - green for a spending category going down, but also green for Inkomsten/Sparen going *up*. Replaces a plain "is this bigger than before" check, which colored every increase red regardless of what the category even was. */
     val deltaIsGood: Boolean = false,
+    /** Whether the value actually went up (independent of [deltaIsGood] - Inkomsten going up is good news but still an increase) - the redesign's hero shows a ▲/▼ triangle for this, separate from the text's own color. */
+    val deltaIsIncrease: Boolean = false,
     val limit: Money? = null,
     /** The flat average across every bar currently shown - drawn as its own reference line alongside the limit line. */
     val average: Money? = null,
@@ -216,11 +218,26 @@ class ChartsViewModel @Inject constructor(
      */
     private fun overviewFor(cats: List<Category>, anchor: YearMonth): Flow<ChartsUiState> =
         if (cats.isEmpty()) {
-            flowOf(overviewState(cats, anchor, emptyList(), emptyList()))
+            flowOf(overviewState(cats, anchor, emptyList(), emptyList(), Money.ZERO))
         } else {
-            combine(cats.map { cat -> categorySpendFlow(cat, anchor) }) { it.toList() }
-                .flatMapLatest { spends -> savingsTipsFor(anchor, spends).map { tips -> overviewState(cats, anchor, spends, tips) } }
+            combine(
+                combine(cats.map { cat -> categorySpendFlow(cat, anchor) }) { it.toList() },
+                previousMonthExpenseTotalFlow(cats, anchor),
+            ) { spends, previousExpenseTotal -> spends to previousExpenseTotal }
+                .flatMapLatest { (spends, previousExpenseTotal) ->
+                    savingsTipsFor(anchor, spends).map { tips -> overviewState(cats, anchor, spends, tips, previousExpenseTotal) }
+                }
         }
+
+    /** Same "every category except Inkomsten" sum [overviewState] computes for the current month, one month earlier - the hero's "t.o.v. augustus" comparison. */
+    private fun previousMonthExpenseTotalFlow(cats: List<Category>, anchor: YearMonth): Flow<Money> {
+        val previousMonth = anchor.minusMonths(1)
+        val expenseCategories = cats.filterNot { it.name.equals("Inkomsten", ignoreCase = true) }
+        if (expenseCategories.isEmpty()) return flowOf(Money.ZERO)
+        return combine(expenseCategories.map { cat -> transactionRepository.observeCategorySpent(cat.id, previousMonth) }) { amounts ->
+            Money(amounts.sumOf { it.cents })
+        }
+    }
 
     /** One category's spend this month plus its own trailing 3-month average, which is all [CategorySpend.isAnomaly] needs. */
     private fun categorySpendFlow(cat: Category, anchor: YearMonth): Flow<CategorySpend> {
@@ -319,7 +336,13 @@ class ChartsViewModel @Inject constructor(
             }
     }
 
-    private fun overviewState(cats: List<Category>, anchor: YearMonth, spends: List<CategorySpend>, tips: List<SavingsTip>): ChartsUiState {
+    private fun overviewState(
+        cats: List<Category>,
+        anchor: YearMonth,
+        spends: List<CategorySpend>,
+        tips: List<SavingsTip>,
+        previousExpenseTotal: Money,
+    ): ChartsUiState {
         val nonZero = spends.filter { it.spent.cents > 0 }.sortedByDescending { it.spent.cents }
         val income = spends.firstOrNull { it.category.name.equals("Inkomsten", ignoreCase = true) }?.spent
         val expenseTotal = nonZero
@@ -328,9 +351,20 @@ class ChartsViewModel @Inject constructor(
         val incomeRatioLabel = income?.cents?.takeIf { it > 0 }?.let { incomeCents ->
             "${expenseTotal * 100 / incomeCents}% van je inkomen"
         }
+        val isIncrease = previousExpenseTotal.cents > 0 && expenseTotal > previousExpenseTotal.cents
+        val deltaLabel = previousExpenseTotal.cents.takeIf { it > 0 }?.let { previousCents ->
+            val diff = Money(kotlin.math.abs(expenseTotal - previousCents))
+            "${diff.toDisplayString()} t.o.v. ${previousPeriodLabel(anchor.minusMonths(1), ChartMode.MONTH_OVER_MONTH)}"
+        }
         return ChartsUiState(
             categories = cats,
             overviewSpends = nonZero,
+            currentTotal = Money(expenseTotal),
+            deltaLabel = deltaLabel,
+            // A rising total is never good news for an overall spend figure - unlike a single
+            // category, there's no "Inkomsten/Sparen going up is good" exception to make here.
+            deltaIsGood = previousExpenseTotal.cents > 0 && !isIncrease,
+            deltaIsIncrease = isIncrease,
             incomeRatioLabel = incomeRatioLabel,
             savingsTips = tips,
             referenceLabel = referenceLabelFor(anchor, ChartMode.MONTH_OVER_MONTH),
@@ -551,8 +585,7 @@ class ChartsViewModel @Inject constructor(
         val isPositiveDirection = categoryName != null && categoryName.lowercase() in positiveDirectionCategories
         val deltaLabel = previous?.let { prev ->
             val diff = Money(current.cents - prev.cents)
-            val referencePoint = if (m == ChartMode.MONTH_OVER_MONTH) "vorige maand" else "vorig jaar"
-            "${diff.absoluteDisplayString()} t.o.v. $referencePoint"
+            "${diff.absoluteDisplayString()} t.o.v. ${previousPeriodLabel(periods[selectedIndex - 1], m)}"
         }
         val isIncrease = previous != null && current.cents > previous.cents
         return ChartsUiState(
@@ -563,6 +596,7 @@ class ChartsViewModel @Inject constructor(
             currentTotal = current,
             deltaLabel = deltaLabel,
             deltaIsGood = previous != null && (isIncrease == isPositiveDirection),
+            deltaIsIncrease = isIncrease,
             average = if (amounts.isNotEmpty()) Money(amounts.sumOf { it.cents } / amounts.size) else null,
             referenceLabel = referenceLabelFor(anchor, m),
             canGoToNextPeriod = anchor.isBefore(YearMonth.now()),
@@ -573,6 +607,12 @@ class ChartsViewModel @Inject constructor(
         ChartMode.MONTH_OVER_MONTH ->
             "${anchor.month.getDisplayName(TextStyle.FULL, Locale("nl")).replaceFirstChar { it.uppercase() }} ${anchor.year}"
         ChartMode.YEAR_OVER_YEAR -> anchor.year.toString()
+    }
+
+    /** "augustus" / "2025" — the delta line names the specific previous period, not a generic "vorige maand", matching the redesign's hero text. */
+    private fun previousPeriodLabel(period: YearMonth, m: ChartMode): String = when (m) {
+        ChartMode.MONTH_OVER_MONTH -> period.month.getDisplayName(TextStyle.FULL, Locale("nl"))
+        ChartMode.YEAR_OVER_YEAR -> period.year.toString()
     }
 
     private fun labelFor(period: YearMonth, m: ChartMode): String = when (m) {
