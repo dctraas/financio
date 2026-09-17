@@ -5,30 +5,28 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,43 +36,40 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
+import com.financio.app.ui.theme.LocalFinancioColors
 import com.financio.core.model.Account
 import com.financio.core.model.Money
 import com.financio.core.usecase.AccountBalance
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
-fun AccountsScreen(onBackClick: () -> Unit, viewModel: AccountsViewModel = hiltViewModel()) {
+fun AccountsScreen(onBackClick: () -> Unit, onImportClick: () -> Unit, viewModel: AccountsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     var adding by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Account?>(null) }
     var settingBalance by remember { mutableStateOf<Account?>(null) }
+    var managingAccount by remember { mutableStateOf<AccountRow?>(null) }
     var showHidden by remember { mutableStateOf(false) }
-    var dismissedUnknownWarnings by remember { mutableStateOf(setOf<Long>()) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Rekeningen") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { adding = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Rekening toevoegen")
-            }
-        },
-    ) { padding ->
-        if (!state.loaded) return@Scaffold
+    if (!state.loaded) return
 
-        LazyColumn(contentPadding = padding, modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        AccountsHeader(onBackClick)
+
+        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp)) {
             if (state.visibleAccounts.isEmpty()) {
                 item {
                     Text(
@@ -88,56 +83,72 @@ fun AccountsScreen(onBackClick: () -> Unit, viewModel: AccountsViewModel = hiltV
                 }
             } else {
                 item {
-                    Column(Modifier.padding(top = 12.dp, bottom = 8.dp)) {
-                        Text(state.total.toDisplayString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Column(Modifier.padding(top = 8.dp, bottom = 20.dp)) {
+                        Text("Samen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
-                            buildString {
-                                append("${state.includedCount} ${if (state.includedCount == 1) "rekening" else "rekeningen"} meegerekend")
-                                if (state.excludedCount > 0) append(" · ${state.excludedCount} buiten het totaal")
-                            },
+                            state.total.toDisplayString(),
+                            fontSize = 40.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        Text(
+                            "${state.includedCount} ${if (state.includedCount == 1) "rekening" else "rekeningen"} meegerekend",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
                         )
+                    }
+                }
+
+                val includedRows = state.visibleAccounts.filter { !it.account.excludedFromTotal }
+                val excludedRows = state.visibleAccounts.filter { it.account.excludedFromTotal }
+
+                items(includedRows, key = { it.account.id }) { row ->
+                    AccountCard(row = row, onManageClick = { managingAccount = row }, onImportClick = onImportClick)
+                }
+
+                if (excludedRows.isNotEmpty()) {
+                    item { SectionLabel("NIET MEEGEREKEND") }
+                    itemsIndexed(excludedRows, key = { _, row -> "excluded-${row.account.id}" }) { index, row ->
+                        ExcludedAccountRow(row = row, onClick = { managingAccount = row })
+                        if (index < excludedRows.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
             }
 
-            items(state.visibleAccounts, key = { it.account.id }) { row ->
-                AccountCard(
-                    row = row,
-                    unknownWarningDismissed = row.account.id in dismissedUnknownWarnings,
-                    onDismissUnknownWarning = { dismissedUnknownWarnings = dismissedUnknownWarnings + row.account.id },
-                    onFillBalance = { settingBalance = row.account },
-                    onRename = { renaming = row.account },
-                    onToggleHidden = { viewModel.setHidden(row.account.id, true) },
-                    onToggleExcluded = { viewModel.setExcludedFromTotal(row.account.id, !row.account.excludedFromTotal) },
-                )
-            }
-
+            // Outside the empty/non-empty branch above: even with every visible account hidden
+            // (visibleAccounts empty), "tonen" and "toevoegen" must stay reachable - a hidden
+            // account or a stalled setup is never a one-way trap.
             if (state.hiddenAccounts.isNotEmpty()) {
                 item {
                     Text(
                         if (showHidden) "Verborgen rekeningen verbergen ▴" else "${state.hiddenAccounts.size} verborgen rekening(en) tonen ▾",
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 16.dp).clickable { showHidden = !showHidden },
+                        modifier = Modifier.padding(top = 20.dp).clickable { showHidden = !showHidden },
                     )
                 }
                 if (showHidden) {
                     items(state.hiddenAccounts, key = { "hidden-${it.account.id}" }) { row ->
-                        AccountCard(
-                            row = row,
-                            unknownWarningDismissed = true,
-                            onDismissUnknownWarning = {},
-                            onFillBalance = { settingBalance = row.account },
-                            onRename = { renaming = row.account },
-                            onToggleHidden = { viewModel.setHidden(row.account.id, false) },
-                            onToggleExcluded = { viewModel.setExcludedFromTotal(row.account.id, !row.account.excludedFromTotal) },
-                        )
+                        AccountCard(row = row, onManageClick = { managingAccount = row }, onImportClick = onImportClick)
                     }
                 }
             }
+
+            item { AddAccountButton(onClick = { adding = true }, modifier = Modifier.padding(top = 20.dp, bottom = 24.dp)) }
         }
+    }
+
+    managingAccount?.let { row ->
+        AccountActionsSheet(
+            row = row,
+            onDismiss = { managingAccount = null },
+            onRename = { managingAccount = null; renaming = row.account },
+            onToggleHidden = { managingAccount = null; viewModel.setHidden(row.account.id, !row.account.hidden) },
+            onToggleExcluded = { managingAccount = null; viewModel.setExcludedFromTotal(row.account.id, !row.account.excludedFromTotal) },
+            onFillBalance = { managingAccount = null; settingBalance = row.account },
+        )
     }
 
     if (adding) {
@@ -175,119 +186,184 @@ fun AccountsScreen(onBackClick: () -> Unit, viewModel: AccountsViewModel = hiltV
 }
 
 @Composable
-private fun AccountCard(
-    row: AccountRow,
-    unknownWarningDismissed: Boolean,
-    onDismissUnknownWarning: () -> Unit,
-    onFillBalance: () -> Unit,
-    onRename: () -> Unit,
-    onToggleHidden: () -> Unit,
-    onToggleExcluded: () -> Unit,
-) {
-    val account = row.account
-    val isUnknown = row.balance is AccountBalance.Unknown
+private fun AccountsHeader(onBackClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 12.dp),
+    ) {
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+        ) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+        Text("Rekeningen", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 16.dp))
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.sp,
+        color = LocalFinancioColors.current.inkFaint,
+        modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
+    )
+}
+
+private val monthOnlyFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM", Locale.forLanguageTag("nl"))
+
+/** "jan – 14 sep 2026" - a coarse start (just the month the import history begins in) against a precise end. */
+private fun coverageLabel(start: LocalDate, end: LocalDate): String =
+    "${start.format(monthOnlyFormatter).lowercase()} – ${end.toShortDisplayString()} ${end.year}"
+
+@Composable
+private fun AccountCard(row: AccountRow, onManageClick: () -> Unit, onImportClick: () -> Unit) {
     val warningColor = LocalBudgetStatusColors.current.warning
+    val account = row.account
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (isUnknown && !unknownWarningDismissed) warningColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface)
-            .border(1.dp, if (isUnknown && !unknownWarningDismissed) warningColor else MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
             .padding(16.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(account.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
+            Text(
+                account.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f, fill = false).padding(end = 12.dp),
+            )
             when (val balance = row.balance) {
-                is AccountBalance.Known -> Text(balance.amount.toDisplayString(), fontWeight = FontWeight.SemiBold)
-                AccountBalance.Unknown -> Text("onbekend", fontWeight = FontWeight.SemiBold, color = warningColor)
+                is AccountBalance.Known -> Text(balance.amount.toDisplayString(), fontSize = 20.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                AccountBalance.Unknown -> Text("saldo onbekend", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = warningColor)
             }
         }
         Text(
             buildString {
                 append(account.ibanMasked)
-                append(" · ${row.transactionCount} transacties")
-                if (row.followedByGoal) append(" · volgt doel")
+                row.followedByGoalName?.let { append(" · gevolgd door $it") }
             },
-            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp),
         )
 
-        if (row.coverageStart != null && row.coverageEnd != null) {
-            CoverageBar(monthsBehind = row.monthsBehind, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-            Text(
-                buildString {
-                    append("gegevens ${row.coverageStart.toShortDisplayString()} – ${row.coverageEnd.toShortDisplayString()}")
-                    if (row.monthsBehind > 0) append(" · ${row.monthsBehind} ${if (row.monthsBehind == 1) "maand" else "maanden"} achter")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 12.dp))
 
-        if (isUnknown && !unknownWarningDismissed) {
-            Text(
-                "Deze rekening heeft geen eindsaldo in de import, dus telt niet mee in je totaal.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(top = 8.dp)) {
-                Text("Saldo invullen", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onFillBalance))
-                Text("Negeren", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onDismissUnknownWarning))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            if (row.monthsBehind > 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f).padding(end = 12.dp),
+                ) {
+                    Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.secondary))
+                    Text(
+                        "${row.monthsBehind} ${if (row.monthsBehind == 1) "maand" else "maanden"} achter — importeer een nieuw bestand",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                Text("Nu doen", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onImportClick))
+            } else if (row.coverageStart != null && row.coverageEnd != null) {
+                Text(
+                    "${coverageLabel(row.coverageStart, row.coverageEnd)} · ${row.transactionCount} transacties",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text("Beheren", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onManageClick))
+            } else {
+                Text("nog geen import", fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Beheren", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onManageClick))
             }
         }
+    }
+}
 
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(top = 12.dp)) {
-            ActionLink("Naam wijzigen", onRename)
-            ActionLink(if (account.hidden) "Tonen" else "Verbergen", onToggleHidden)
-            ActionLink(if (account.excludedFromTotal) "Meetellen" else "Niet meetellen", onToggleExcluded)
-            // Only here (not duplicated) once the warning block above is dismissed or hidden -
-            // otherwise this stays reachable from the warning itself.
-            if (isUnknown && unknownWarningDismissed) ActionLink("Saldo invullen", onFillBalance)
+/** "als compacte regels" - no card, no dekking, just naam/kenmerk + saldo + how it got excluded, since these deliberately don't count toward "Samen". */
+@Composable
+private fun ExcludedAccountRow(row: AccountRow, onClick: () -> Unit) {
+    val account = row.account
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text(account.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (account.manualBalance != null) "handmatig saldo" else account.ibanMasked,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        when (val balance = row.balance) {
+            is AccountBalance.Known -> Text(balance.amount.toDisplayString(), fontSize = 16.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            AccountBalance.Unknown -> Text("saldo onbekend", fontSize = 14.sp, color = LocalBudgetStatusColors.current.warning)
         }
     }
 }
 
 @Composable
-private fun ActionLink(label: String, onClick: () -> Unit) {
-    Text(
-        label,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clickable(onClick = onClick),
-    )
+private fun AddAccountButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .drawBehind {
+                drawRoundRect(
+                    color = MaterialTheme.colorScheme.outline,
+                    style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))),
+                    cornerRadius = CornerRadius(16.dp.toPx()),
+                )
+            }
+            .clickable(onClick = onClick)
+            .padding(vertical = 18.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("Rekening toevoegen", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+    }
 }
 
-/** Fully green when this account's data reaches today; increasingly grey the further "achter" it is - capped at 6 months so a very stale account still reads as "mostly empty" rather than negative. */
 @Composable
-private fun CoverageBar(monthsBehind: Int, modifier: Modifier = Modifier) {
-    val fraction = (1f - monthsBehind / 6f).coerceIn(0f, 1f)
-    val statusColors = LocalBudgetStatusColors.current
-    val color = if (monthsBehind == 0) statusColors.ok else statusColors.warning
-    BoxWithConstraints(modifier.height(6.dp)) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(99.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        )
-        if (fraction > 0f) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxWidth(fraction)
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(color),
-            )
+private fun AccountActionsSheet(
+    row: AccountRow,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    onToggleHidden: () -> Unit,
+    onToggleExcluded: () -> Unit,
+    onFillBalance: () -> Unit,
+) {
+    val account = row.account
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text(account.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+            AccountActionRow("Naam wijzigen", onRename)
+            if (row.balance is AccountBalance.Unknown) AccountActionRow("Saldo invullen", onFillBalance)
+            AccountActionRow(if (account.hidden) "Tonen" else "Verbergen", onToggleHidden)
+            AccountActionRow(if (account.excludedFromTotal) "Meetellen in Samen" else "Niet meetellen in Samen", onToggleExcluded, isLast = true)
         }
+    }
+}
+
+@Composable
+private fun AccountActionRow(label: String, onClick: () -> Unit, isLast: Boolean = false) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp))
+        if (!isLast) HorizontalDivider()
     }
 }
 
