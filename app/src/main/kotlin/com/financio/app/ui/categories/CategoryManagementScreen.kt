@@ -1,6 +1,7 @@
 package com.financio.app.ui.categories
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,35 +9,40 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,8 +54,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.core.model.Category
@@ -68,14 +76,15 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
     val snackbarHostState = remember { SnackbarHostState() }
 
     var newCategoryName by remember { mutableStateOf("") }
+    var showAddCategoryDialog by remember { mutableStateOf(false) }
     var showAddRuleDialog by remember { mutableStateOf(false) }
-    var rulePendingDelete by remember { mutableStateOf<CategoryRule?>(null) }
     // An id rather than a snapshot of the CategoryRule, so the edit dialog's up/down move
     // buttons re-derive their row (and its now-current priority) from live state on every
     // moveRule() call instead of acting on a stale copy taken when the dialog opened.
     var editingRuleId by remember { mutableStateOf<Long?>(null) }
     var renamingCategory by remember { mutableStateOf<Category?>(null) }
     var pickingColorFor by remember { mutableStateOf<Category?>(null) }
+    var categoryActionsFor by remember { mutableStateOf<Category?>(null) }
 
     LaunchedEffect(state.undoableAction) {
         val action = state.undoableAction ?: return@LaunchedEffect
@@ -83,59 +92,68 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
             is UndoableAction.RulesApplied ->
                 if (action.changes.size == 1) "1 transactie bijgewerkt." else "${action.changes.size} transacties bijgewerkt."
             is UndoableAction.CategoryDeleted -> "'${action.name}' verwijderd."
+            is UndoableAction.RuleDeleted -> "'${action.rule.pattern}' verwijderd."
         }
         val result = snackbarHostState.showSnackbar(message = message, actionLabel = "Ongedaan maken", duration = SnackbarDuration.Long)
         if (result == SnackbarResult.ActionPerformed) viewModel.undo(action) else viewModel.dismissUndoBanner()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Categorieën & regels") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            CategoryManagementHeader(onBackClick)
+
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(horizontal = 20.dp).padding(top = 4.dp, bottom = 16.dp),
             ) {
-                FilterChip(
-                    selected = state.tab == CategoryManagementTab.RULES,
-                    onClick = { viewModel.selectTab(CategoryManagementTab.RULES) },
-                    label = { Text("Regels") },
-                )
-                FilterChip(
+                TabPill(
+                    label = "Categorieën",
                     selected = state.tab == CategoryManagementTab.CATEGORIES,
                     onClick = { viewModel.selectTab(CategoryManagementTab.CATEGORIES) },
-                    label = { Text("Categorieën") },
+                )
+                TabPill(
+                    label = "Regels · ${state.rules.size}",
+                    selected = state.tab == CategoryManagementTab.RULES,
+                    onClick = { viewModel.selectTab(CategoryManagementTab.RULES) },
                 )
             }
 
-            when (state.tab) {
-                CategoryManagementTab.RULES -> RulesTab(
-                    state = state,
-                    onAddRuleClick = { showAddRuleDialog = true },
-                    onRuleClick = { editingRuleId = it.id },
-                    onDeleteRuleClick = { rulePendingDelete = it },
-                    onApplyRetroactivelyClick = viewModel::requestRuleApplicationPreview,
-                )
-                CategoryManagementTab.CATEGORIES -> CategoriesTab(
-                    state = state,
-                    newCategoryName = newCategoryName,
-                    onNewCategoryNameChange = { newCategoryName = it },
-                    onAddCategory = { viewModel.addCategory(newCategoryName); newCategoryName = "" },
-                    onColorClick = { pickingColorFor = it },
-                    onRenameClick = { renamingCategory = it },
-                    onDeleteClick = viewModel::requestCategoryDelete,
-                )
+            Box(modifier = Modifier.weight(1f)) {
+                when (state.tab) {
+                    CategoryManagementTab.RULES -> RulesTab(
+                        state = state,
+                        onAddRuleClick = { showAddRuleDialog = true },
+                        onRuleClick = { editingRuleId = it.id },
+                        onDeleteRule = { viewModel.deleteRule(it.id) },
+                        onApplyRetroactivelyClick = viewModel::requestRuleApplicationPreview,
+                    )
+                    CategoryManagementTab.CATEGORIES -> CategoriesTab(
+                        state = state,
+                        onRowClick = { categoryActionsFor = it },
+                    )
+                }
+            }
+
+            if (state.tab == CategoryManagementTab.CATEGORIES) {
+                Button(
+                    onClick = { showAddCategoryDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 8.dp, bottom = 20.dp)
+                        .height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                ) { Text("Categorie toevoegen", fontWeight = FontWeight.SemiBold) }
             }
         }
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp))
+    }
+
+    if (showAddCategoryDialog) {
+        AddCategoryDialog(
+            onDismiss = { showAddCategoryDialog = false },
+            onSave = { name -> viewModel.addCategory(name); newCategoryName = ""; showAddCategoryDialog = false },
+        )
     }
 
     if (showAddRuleDialog) {
@@ -169,18 +187,6 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
         }
     }
 
-    rulePendingDelete?.let { rule ->
-        AlertDialog(
-            onDismissRequest = { rulePendingDelete = null },
-            title = { Text("Regel verwijderen?") },
-            text = { Text("'${rule.pattern}' wordt niet meer automatisch gecategoriseerd op basis van deze regel.") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.deleteRule(rule.id); rulePendingDelete = null }) { Text("Verwijderen") }
-            },
-            dismissButton = { TextButton(onClick = { rulePendingDelete = null }) { Text("Annuleren") } },
-        )
-    }
-
     renamingCategory?.let { category ->
         RenameCategoryDialog(
             currentName = category.name,
@@ -193,6 +199,16 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
         ColorPickerDialog(
             onDismiss = { pickingColorFor = null },
             onPick = { hex -> viewModel.setCategoryColor(category.id, hex); pickingColorFor = null },
+        )
+    }
+
+    categoryActionsFor?.let { category ->
+        CategoryActionsSheet(
+            category = category,
+            onDismiss = { categoryActionsFor = null },
+            onChangeColor = { categoryActionsFor = null; pickingColorFor = category },
+            onRename = { categoryActionsFor = null; renamingCategory = category },
+            onDelete = { categoryActionsFor = null; viewModel.requestCategoryDelete(category) },
         )
     }
 
@@ -228,11 +244,49 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
 }
 
 @Composable
+private fun CategoryManagementHeader(onBackClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 12.dp),
+    ) {
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp)),
+        ) { Icon(Icons.Filled.ArrowBack, contentDescription = "Terug") }
+        Text("Categorieën", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 16.dp))
+    }
+}
+
+@Composable
+private fun TabPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+            .then(if (selected) Modifier else Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
 private fun RulesTab(
     state: CategoryManagementUiState,
     onAddRuleClick: () -> Unit,
     onRuleClick: (CategoryRule) -> Unit,
-    onDeleteRuleClick: (CategoryRule) -> Unit,
+    onDeleteRule: (CategoryRule) -> Unit,
     onApplyRetroactivelyClick: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -279,10 +333,10 @@ private fun RulesTab(
             }
         } else {
             items(visibleRows, key = { it.rule.id }) { row ->
-                RuleCard(
+                SwipeToDeleteRuleCard(
                     row = row,
                     onClick = { onRuleClick(row.rule) },
-                    onDelete = { onDeleteRuleClick(row.rule) },
+                    onDelete = { onDeleteRule(row.rule) },
                 )
             }
         }
@@ -304,8 +358,46 @@ private fun RulesTab(
     }
 }
 
+/** "met swipe-to-delete" - swiping right-to-left past the threshold deletes immediately; [CategoryManagementViewModel.deleteRule] keeps the rule around for the undo snackbar. */
 @Composable
-private fun RuleCard(row: RuleRow, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun SwipeToDeleteRuleCard(row: RuleRow, onClick: () -> Unit, onDelete: () -> Unit) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onDelete()
+                true
+            } else {
+                false
+            }
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 6.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = "Verwijder regel voor ${row.rule.pattern}",
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        },
+    ) {
+        RuleCard(row = row, onClick = onClick)
+    }
+}
+
+@Composable
+private fun RuleCard(row: RuleRow, onClick: () -> Unit) {
     val warningColor = LocalBudgetStatusColors.current.warning
     Column(
         modifier = Modifier
@@ -316,23 +408,20 @@ private fun RuleCard(row: RuleRow, onClick: () -> Unit, onDelete: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(16.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(row.rule.pattern, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "${matchTypeLabel(row.rule.matchType)} → ${row.categoryName ?: "onbekende categorie"}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    "raakt ${row.actualMatchCount} ${if (row.actualMatchCount == 1) "transactie" else "transacties"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Verwijder regel voor ${row.rule.pattern}") }
-        }
+        Text(row.rule.pattern, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Text(
+            "${matchTypeLabel(row.rule.matchType)} → ${row.categoryName ?: "onbekende categorie"}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Text(
+            "${row.actualMatchCount} ${if (row.actualMatchCount == 1) "transactie" else "transacties"}",
+            fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
         row.conflict?.let { conflict ->
             Text(
                 "botst met regel '${conflict.otherRulePattern}' — ${conflict.overlapCount} " +
@@ -432,81 +521,106 @@ private fun EditRuleDialog(
 }
 
 @Composable
-private fun CategoriesTab(
-    state: CategoryManagementUiState,
-    newCategoryName: String,
-    onNewCategoryNameChange: (String) -> Unit,
-    onAddCategory: () -> Unit,
-    onColorClick: (Category) -> Unit,
-    onRenameClick: (Category) -> Unit,
-    onDeleteClick: (Category) -> Unit,
-) {
+private fun CategoriesTab(state: CategoryManagementUiState, onRowClick: (Category) -> Unit) {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        items(state.categoryRows, key = { it.category.id }) { row ->
-            CategoryCard(row = row, onColorClick = { onColorClick(row.category) }, onRenameClick = { onRenameClick(row.category) }, onDeleteClick = { onDeleteClick(row.category) })
-        }
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            ) {
-                OutlinedTextField(
-                    value = newCategoryName,
-                    onValueChange = onNewCategoryNameChange,
-                    placeholder = { Text("Nieuwe categorie") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
+        if (state.categoryRows.isEmpty()) {
+            item {
+                Text(
+                    "Nog geen categorieën — voeg er één toe met de knop hieronder.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 12.dp),
                 )
-                IconButton(onClick = onAddCategory, enabled = newCategoryName.isNotBlank()) {
-                    Icon(Icons.Filled.Add, contentDescription = "Categorie toevoegen")
-                }
+            }
+        } else {
+            itemsIndexed(state.categoryRows, key = { _, row -> row.category.id }) { index, row ->
+                CategoryCard(row = row, onClick = { onRowClick(row.category) })
+                if (index < state.categoryRows.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
     }
 }
 
 @Composable
-private fun CategoryCard(row: CategoryRow, onColorClick: () -> Unit, onRenameClick: () -> Unit, onDeleteClick: () -> Unit) {
+private fun CategoryCard(row: CategoryRow, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(parseCategoryColor(row.category.colorHex))
-                .clickable(onClick = onColorClick),
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(parseCategoryColor(row.category.colorHex)),
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(row.category.name, fontWeight = FontWeight.SemiBold)
+            Text(row.category.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Text(
-                "${row.spentThisMonth.toDisplayString()} deze maand",
-                style = MaterialTheme.typography.bodySmall,
+                "${row.ruleCount} ${if (row.ruleCount == 1) "regel" else "regels"} · ${row.transactionCount} transacties",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ActionLink("Hernoemen", onRenameClick)
-            ActionLink("Verwijderen", onDeleteClick)
+        Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun CategoryActionsSheet(
+    category: Category,
+    onDismiss: () -> Unit,
+    onChangeColor: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text(category.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+            CategoryActionRow("Kleur wijzigen", onChangeColor)
+            CategoryActionRow("Naam wijzigen", onRename)
+            CategoryActionRow("Verwijderen", onDelete, isLast = true, destructive = true)
         }
     }
 }
 
 @Composable
-private fun ActionLink(label: String, onClick: () -> Unit) {
-    Text(
-        label,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clickable(onClick = onClick),
-    )
+private fun CategoryActionRow(label: String, onClick: () -> Unit, isLast: Boolean = false, destructive: Boolean = false) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+        )
+        if (!isLast) HorizontalDivider()
+    }
 }
 
 private fun parseCategoryColor(colorHex: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(colorHex)) }.getOrDefault(Color.Gray)
+
+@Composable
+private fun AddCategoryDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nieuwe categorie") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                placeholder = { Text("Naam") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { onSave(name) }) { Text("Toevoegen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },
+    )
+}
 
 @Composable
 private fun RenameCategoryDialog(currentName: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
