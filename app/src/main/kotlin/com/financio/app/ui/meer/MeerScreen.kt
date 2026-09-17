@@ -16,15 +16,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,15 +50,10 @@ fun MeerScreen(
     onNetWorthClick: () -> Unit,
     onYearReviewClick: () -> Unit,
     onImportClick: () -> Unit,
-    onAppearanceClick: () -> Unit,
-    onLockPrivacyClick: () -> Unit,
-    onNotificationsClick: () -> Unit,
-    onMonthStartClick: () -> Unit,
-    onBackupExportClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     viewModel: MeerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
-    var settingsSheetOpen by remember { mutableStateOf(false) }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         item {
@@ -133,34 +123,8 @@ fun MeerScreen(
                 rows = listOf(
                     { TerugblikRow("Vermogen", state.accountsTotalBalance.roundedEuroString(), onNetWorthClick) },
                     { TerugblikRow("Jaaroverzicht ${LocalDate.now().year}", null, onYearReviewClick) },
-                    { TerugblikRow("Instellingen", null, { settingsSheetOpen = true }) },
+                    { TerugblikRow("Instellingen", null, onSettingsClick) },
                 ),
-            )
-        }
-
-        item {
-            Text(
-                "Al je gegevens staan versleuteld op dit toestel. Financio heeft geen server, geen " +
-                    "account en geen internettoegang.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 20.dp, bottom = 32.dp),
-            )
-        }
-    }
-
-    // Not yet the schermontwerp's own grouped "WEERGAVE/PRIVACY/MELDINGEN" Instellingen screen
-    // (that's a separate redesign pass) - a plain sheet over the five existing settings
-    // destinations, so nothing already built becomes unreachable in the meantime.
-    if (settingsSheetOpen) {
-        val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(onDismissRequest = { settingsSheetOpen = false }, sheetState = sheetState) {
-            SettingsSheetContent(
-                onAppearanceClick = { settingsSheetOpen = false; onAppearanceClick() },
-                onLockPrivacyClick = { settingsSheetOpen = false; onLockPrivacyClick() },
-                onNotificationsClick = { settingsSheetOpen = false; onNotificationsClick() },
-                onMonthStartClick = { settingsSheetOpen = false; onMonthStartClick() },
-                onBackupExportClick = { settingsSheetOpen = false; onBackupExportClick() },
             )
         }
     }
@@ -284,31 +248,5 @@ private fun TerugblikRow(title: String, trailing: String?, onClick: () -> Unit) 
             }
             Chevron()
         }
-    }
-}
-
-@Composable
-private fun SettingsSheetContent(
-    onAppearanceClick: () -> Unit,
-    onLockPrivacyClick: () -> Unit,
-    onNotificationsClick: () -> Unit,
-    onMonthStartClick: () -> Unit,
-    onBackupExportClick: () -> Unit,
-) {
-    Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-        Text("Instellingen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-        SettingsSheetRow("Weergave", onAppearanceClick)
-        SettingsSheetRow("Vergrendeling & privacy", onLockPrivacyClick)
-        SettingsSheetRow("Meldingen", onNotificationsClick)
-        SettingsSheetRow("Maand begint op", onMonthStartClick)
-        SettingsSheetRow("Back-up & export", onBackupExportClick, isLast = true)
-    }
-}
-
-@Composable
-private fun SettingsSheetRow(label: String, onClick: () -> Unit, isLast: Boolean = false) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp))
-        if (!isLast) HorizontalDivider()
     }
 }

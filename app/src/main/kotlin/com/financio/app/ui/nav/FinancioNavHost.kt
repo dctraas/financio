@@ -30,11 +30,9 @@ import com.financio.app.ui.meer.MeerScreen
 import com.financio.app.ui.merchants.MerchantManagementScreen
 import com.financio.app.ui.networth.NetWorthScreen
 import com.financio.app.ui.savings.SavingsGoalsScreen
-import com.financio.app.ui.settings.AppearanceScreen
 import com.financio.app.ui.settings.BackupExportScreen
-import com.financio.app.ui.settings.LockPrivacyScreen
 import com.financio.app.ui.settings.MonthStartScreen
-import com.financio.app.ui.settings.NotificationsScreen
+import com.financio.app.ui.settings.SettingsScreen
 import com.financio.app.ui.subscriptions.SubscriptionsScreen
 import com.financio.app.ui.transactions.TransactionDetailScreen
 import com.financio.app.ui.transactions.TransactionsScreen
@@ -69,9 +67,8 @@ private sealed class Destination(val route: String, val label: String) {
     data object Subscriptions : Destination("subscriptions", "Abonnementen")
     data object SavingsGoals : Destination("savings-goals", "Spaardoelen")
     data object Accounts : Destination("accounts", "Rekeningen")
-    data object Appearance : Destination("settings/appearance", "Weergave")
-    data object LockPrivacy : Destination("settings/lock-privacy", "Vergrendeling & privacy")
-    data object Notifications : Destination("settings/notifications", "Meldingen")
+    /** Screen 17 "Instellingen" - folds what used to be Weergave/Vergrendeling & privacy/Meldingen into one screen; see SettingsScreen's own doc comment. */
+    data object Settings : Destination("settings", "Instellingen")
     data object MonthStart : Destination("settings/month-start", "Maand begint op")
     data object BackupExport : Destination("settings/backup-export", "Back-up & export")
 }
@@ -187,11 +184,7 @@ fun FinancioNavHost() {
                     onNetWorthClick = { navController.navigate(Destination.NetWorth.route) },
                     onYearReviewClick = { navController.navigate(Destination.YearReview.route) },
                     onImportClick = { navController.navigate(Destination.Import.route) },
-                    onAppearanceClick = { navController.navigate(Destination.Appearance.route) },
-                    onLockPrivacyClick = { navController.navigate(Destination.LockPrivacy.route) },
-                    onNotificationsClick = { navController.navigate(Destination.Notifications.route) },
-                    onMonthStartClick = { navController.navigate(Destination.MonthStart.route) },
-                    onBackupExportClick = { navController.navigate(Destination.BackupExport.route) },
+                    onSettingsClick = { navController.navigate(Destination.Settings.route) },
                 )
             }
             composable(Destination.Import.route) {
@@ -233,9 +226,13 @@ fun FinancioNavHost() {
                     onImportClick = { navController.navigate(Destination.Import.route) },
                 )
             }
-            composable(Destination.Appearance.route) { AppearanceScreen(onBackClick = { navController.popBackStack() }) }
-            composable(Destination.LockPrivacy.route) { LockPrivacyScreen(onBackClick = { navController.popBackStack() }) }
-            composable(Destination.Notifications.route) { NotificationsScreen(onBackClick = { navController.popBackStack() }) }
+            composable(Destination.Settings.route) {
+                SettingsScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onMonthStartClick = { navController.navigate(Destination.MonthStart.route) },
+                    onBackupExportClick = { navController.navigate(Destination.BackupExport.route) },
+                )
+            }
             composable(Destination.MonthStart.route) { MonthStartScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.BackupExport.route) { BackupExportScreen(onBackClick = { navController.popBackStack() }) }
         }
@@ -259,9 +256,7 @@ private fun NavIcon(destination: Destination) {
         Destination.Subscriptions -> Unit
         Destination.Budgets -> Unit
         Destination.Accounts -> Unit
-        Destination.Appearance -> Unit
-        Destination.LockPrivacy -> Unit
-        Destination.Notifications -> Unit
+        Destination.Settings -> Unit
         Destination.MonthStart -> Unit
         Destination.BackupExport -> Unit
     }

@@ -30,7 +30,7 @@ class FinancioApplication : Application() {
 
         // Both no-ops with no visible effect until the user turns notifications on in
         // Instellingen: the channel is silent/inert until something is actually posted to it, and
-        // the worker checks AppPreferences.notificationsEnabled itself on every run (see
+        // the worker checks AppPreferences.weeklyDigestEnabled itself on every run (see
         // WeeklyDigestWorker.doWork) rather than being scheduled/cancelled from the toggle.
         NotificationHelper.ensureChannel(this)
         WeeklyDigestWorker.schedule(this)

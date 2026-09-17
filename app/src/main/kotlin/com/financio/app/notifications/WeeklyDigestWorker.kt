@@ -44,7 +44,7 @@ class WeeklyDigestWorker(context: Context, params: WorkerParameters) : Coroutine
         // Scheduled unconditionally at startup (see schedule()) rather than only when enabled -
         // simpler than cancelling/rescheduling every time the Instellingen toggle flips, and this
         // check makes a disabled run a harmless no-op instead.
-        if (!entry.appPreferences().notificationsEnabled.value) return Result.success()
+        if (!entry.appPreferences().weeklyDigestEnabled.value) return Result.success()
 
         val spentThisWeek = spentThisWeek(entry.transactionRepository())
         val overBudgetCount = overBudgetCategoryCount(entry.transactionRepository(), entry.budgetRepository())
