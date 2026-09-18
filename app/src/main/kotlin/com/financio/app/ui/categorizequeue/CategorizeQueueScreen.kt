@@ -108,6 +108,12 @@ private fun CategorizeQueueBody(
                         streak = if (categoryId == suggestions.firstOrNull()?.categoryId) streak + 1 else 0
                         viewModel.assign(group, categoryId, learnRule)
                         scope.launch {
+                            // Dismiss whatever's still showing first - showSnackbar() queues
+                            // behind it otherwise, and playing through several groups quickly
+                            // (the whole point of this screen) would pile up a backlog of stale
+                            // toasts that then plays out for several more seconds after the
+                            // player's already moved on, reading as "the popup never goes away".
+                            snackbarHostState.currentSnackbarData?.dismiss()
                             val result = snackbarHostState.showSnackbar(
                                 message = "Categorie gekozen voor ${group.counterpartyName}",
                                 actionLabel = "Ongedaan maken",

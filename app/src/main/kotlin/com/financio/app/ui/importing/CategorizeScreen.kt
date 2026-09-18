@@ -105,6 +105,11 @@ fun CategorizeContent(
     fun assignAndNotify(categoryId: Long, learnRule: Boolean) {
         viewModel.assignCategory(current.counterpartyName, categoryId, learnRule)
         scope.launch {
+            // Dismiss whatever's still showing first - showSnackbar() queues behind it otherwise,
+            // and a quick run through several groups (the whole point of this "spelletje") would
+            // pile up a backlog of stale toasts that then plays out one by one for several more
+            // seconds after the player's already moved on, reading as "the popup never goes away".
+            snackbarHostState.currentSnackbarData?.dismiss()
             val result = snackbarHostState.showSnackbar(
                 message = "Categorie gekozen voor ${current.counterpartyName}",
                 actionLabel = "Ongedaan maken",
@@ -117,6 +122,7 @@ fun CategorizeContent(
         streak = 0
         viewModel.skip(current.counterpartyName)
         scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
             val result = snackbarHostState.showSnackbar(
                 message = "${current.counterpartyName} overgeslagen",
                 actionLabel = "Ongedaan maken",
