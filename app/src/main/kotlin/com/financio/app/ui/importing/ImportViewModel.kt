@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.DefaultAccount
 import com.financio.app.notifications.BudgetThresholdNotifier
+import com.financio.core.categorize.CategorySuggester
+import com.financio.core.categorize.CategorySuggestion
 import com.financio.core.categorize.LearnedRule
 import com.financio.core.importer.DetectedAccount
 import com.financio.core.importer.UnrecognizedFormatException
@@ -73,8 +75,8 @@ sealed interface ImportUiState {
         val accountIban: String = "",
         val manualCategoryChoices: List<ManualCategoryChoice> = emptyList(),
         val skippedGroups: Set<String> = emptySet(),
-        /** How many already-imported transactions use each category — ranks the top-4 chips by the user's own habits instead of category-creation order. */
-        val categoryUsageFrequency: Map<Long, Int> = emptyMap(),
+        /** Every already-categorized transaction, kept in state so [ImportViewModel.suggestCategories] can rank each new group's suggestion without a ViewModel round-trip per card - see [CategorySuggester]. */
+        val categorizedTransactionsSnapshot: List<Transaction> = emptyList(),
         /** In lockstep with [manualCategoryChoices]/[skippedGroups] - the categorize flow's one-step undo reads the last entry here to know exactly what to reverse. */
         val actionHistory: List<CategorizeAction> = emptyList(),
     ) : ImportUiState
@@ -247,7 +249,7 @@ class ImportViewModel @Inject constructor(
                     preview = preview,
                     accountName = account?.name ?: "Rekening",
                     accountIban = account?.ibanMasked ?: "",
-                    categoryUsageFrequency = categoryUsageFrequency(),
+                    categorizedTransactionsSnapshot = categorizedTransactionsSnapshot(),
                 )
             } catch (e: UnrecognizedFormatException) {
                 ImportUiState.Failed(e.message ?: "Kon het bestand niet lezen.", e.rawLines, e.detectedColumns)
@@ -257,12 +259,14 @@ class ImportViewModel @Inject constructor(
         }
     }
 
-    /** One tally across every already-imported transaction — a stand-in for "how often you've actually picked this category", since there's no separate usage-count column to read. */
-    private suspend fun categoryUsageFrequency(): Map<Long, Int> =
-        transactionRepository.observeAllTransactions().first()
-            .mapNotNull { it.categoryId }
-            .groupingBy { it }
-            .eachCount()
+    private suspend fun categorizedTransactionsSnapshot(): List<Transaction> =
+        transactionRepository.observeAllTransactions().first().filter { it.categoryId != null }
+
+    /** Live "waar hoort dit bij" ranking for [counterpartyName] - a pure computation over already-loaded state, called straight from Compose per card rather than round-tripping through a suspend function. */
+    fun suggestCategories(counterpartyName: String): List<CategorySuggestion> {
+        val current = _uiState.value as? ImportUiState.Ready ?: return emptyList()
+        return CategorySuggester.rank(current.categorizedTransactionsSnapshot, counterpartyName)
+    }
 
     /** [counterpartyName] is a group key from `preview.needsCategoryGrouped`, applying to every transaction that shares it. [learnRule] is the categorize flow's "Onthoud X → Y" switch. */
     fun assignCategory(counterpartyName: String, categoryId: Long, learnRule: Boolean = true) {

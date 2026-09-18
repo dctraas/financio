@@ -207,7 +207,7 @@ private fun DetailBulkApplyDialog(prompt: DetailBulkApplyPrompt, onConfirm: () -
     )
 }
 
-/** "← / Verwijderen" — the redesign's plain header convention (see ImportTopBar/CategorizeHeader), with the destructive action taking the header's other slot instead of a menu. */
+/** "← / Verwijderen" — the redesign's plain header convention (see ImportTopBar/CategorizeGameHeader), with the destructive action taking the header's other slot instead of a menu. */
 @Composable
 private fun DetailHeader(onBackClick: () -> Unit, onDeleteClick: () -> Unit) {
     Row(

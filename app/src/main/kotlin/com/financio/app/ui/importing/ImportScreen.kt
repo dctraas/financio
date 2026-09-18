@@ -105,7 +105,7 @@ fun ImportScreen(
 
     // Screen 01's onboarding is deliberately chrome-free (see FirstLaunchContent) - every other
     // state gets the schermontwerp redesign's ← + "Importeren" header, except while screen 03
-    // "Categoriseren" is showing, which has its own (see CategorizeHeader).
+    // "Categoriseren" is showing, which has its own (see CategorizeGameHeader).
     val isFirstLaunchOnboarding = state is ImportUiState.PickFile && !hasAnyTransactions
     val isCategorizing = state is ImportUiState.Ready && categorizing
 
