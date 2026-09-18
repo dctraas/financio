@@ -161,7 +161,7 @@ private fun EmptyCharts(padding: PaddingValues) {
     }
 }
 
-/** "← + stip + categorienaam" — the redesign's plain sub-header convention (see CategorizeHeader/ImportTopBar), replacing the old "Overzicht" filter chip as the way back. */
+/** "← + stip + categorienaam" — the redesign's plain sub-header convention (see CategorizeGameHeader/ImportTopBar), replacing the old "Overzicht" filter chip as the way back. */
 @Composable
 private fun CategoryHeader(categoryName: String, onBackClick: () -> Unit) {
     Row(

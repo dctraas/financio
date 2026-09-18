@@ -155,7 +155,7 @@ fun BudgetsScreen(onBackClick: () -> Unit, onCategoryClick: (Long) -> Unit = {},
 
 private data class CategoryLimitEdit(val category: Category, val currentLimit: Money?, val currentRollover: Boolean)
 
-/** "← + Budget · september" — the redesign's plain sub-header convention (see CategorizeHeader/ImportTopBar). */
+/** "← + Budget · september" — the redesign's plain sub-header convention (see CategorizeGameHeader/ImportTopBar). */
 @Composable
 private fun BudgetHeader(monthLabel: String, onBackClick: () -> Unit) {
     Row(

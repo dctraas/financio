@@ -155,7 +155,7 @@ fun SubscriptionsScreen(onBackClick: () -> Unit, viewModel: SubscriptionsViewMod
     }
 }
 
-/** "← Vaste lasten" — the redesign's plain header convention (see ImportTopBar/CategorizeHeader). */
+/** "← Vaste lasten" — the redesign's plain header convention (see ImportTopBar/CategorizeGameHeader). */
 @Composable
 private fun VasteLastenHeader(onBackClick: () -> Unit) {
     Row(

@@ -74,6 +74,7 @@ private sealed interface TransactionListItem {
 fun TransactionsScreen(
     onImportClick: () -> Unit,
     onOpenDetail: (Long) -> Unit,
+    onPlayCategorize: () -> Unit,
     startWithUncategorizedFilter: Boolean = false,
     viewModel: TransactionsViewModel = hiltViewModel(),
 ) {
@@ -101,6 +102,17 @@ fun TransactionsScreen(
                     onSelectUncategorized = { viewModel.setCategoryFilter(CategoryFilter.Uncategorized) },
                     onOpenCategorySheet = { categorySheetOpen = true },
                 )
+                // Only worth the extra row while actually looking at "Zonder categorie" - the
+                // swipe/suggest/confirm game (see CategorizeQueueScreen) is exactly this filter's
+                // own backlog, one counterparty-groep at a time instead of one row at a time.
+                if (state.categoryFilter == CategoryFilter.Uncategorized && state.uncategorizedCount > 0) {
+                    Text(
+                        "Speel categoriseren →",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = onPlayCategorize).padding(horizontal = 20.dp).padding(bottom = 12.dp),
+                    )
+                }
             }
         },
     ) { padding ->

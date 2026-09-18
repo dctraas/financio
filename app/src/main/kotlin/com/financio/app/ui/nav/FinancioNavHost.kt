@@ -24,6 +24,7 @@ import androidx.navigation.navArgument
 import com.financio.app.ui.accounts.AccountsScreen
 import com.financio.app.ui.budgets.BudgetsScreen
 import com.financio.app.ui.categories.CategoryManagementScreen
+import com.financio.app.ui.categorizequeue.CategorizeQueueScreen
 import com.financio.app.ui.charts.ChartsScreen
 import com.financio.app.ui.importing.ImportScreen
 import com.financio.app.ui.meer.MeerScreen
@@ -61,6 +62,8 @@ private sealed class Destination(val route: String, val label: String) {
     /** Registered with a required `transactionId` — what a tap on a transaction row now opens (R3). */
     data object TransactionDetail : Destination(TRANSACTION_DETAIL_ROUTE, "Transactie")
     data object CategoryManagement : Destination("categories", "Categorieën & regels")
+    /** The "spelletje" categorize screen over the already-imported backlog - reached from Vandaag's "Nu doen" tile or Transacties' "Zonder categorie" filter. */
+    data object CategorizeQueue : Destination("categorize-queue", "Categoriseren")
     data object MerchantManagement : Destination("merchants", "Tegenpartijen")
     data object NetWorth : Destination("net-worth", "Vermogen")
     data object YearReview : Destination("year-review", "Jaaroverzicht")
@@ -140,13 +143,7 @@ fun FinancioNavHost() {
                             restoreState = true
                         }
                     },
-                    onCategorizeClick = {
-                        navController.navigate("transactions?uncategorized=true") {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onCategorizeClick = { navController.navigate(Destination.CategorizeQueue.route) },
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
                 )
@@ -158,6 +155,7 @@ fun FinancioNavHost() {
                 TransactionsScreen(
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
+                    onPlayCategorize = { navController.navigate(Destination.CategorizeQueue.route) },
                     startWithUncategorizedFilter = backStackEntry.arguments?.getBoolean(ARG_UNCATEGORIZED) ?: false,
                 )
             }
@@ -210,6 +208,7 @@ fun FinancioNavHost() {
                 )
             }
             composable(Destination.CategoryManagement.route) { CategoryManagementScreen(onBackClick = { navController.popBackStack() }) }
+            composable(Destination.CategorizeQueue.route) { CategorizeQueueScreen(onDone = { navController.popBackStack() }) }
             composable(Destination.MerchantManagement.route) { MerchantManagementScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.NetWorth.route) { NetWorthScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.YearReview.route) { YearReviewScreen(onBackClick = { navController.popBackStack() }) }
@@ -250,6 +249,7 @@ private fun NavIcon(destination: Destination) {
         Destination.Import -> Unit
         Destination.TransactionDetail -> Unit
         Destination.CategoryManagement -> Unit
+        Destination.CategorizeQueue -> Unit
         Destination.MerchantManagement -> Unit
         Destination.NetWorth -> Unit
         Destination.YearReview -> Unit
