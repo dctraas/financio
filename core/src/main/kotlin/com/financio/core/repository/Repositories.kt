@@ -97,6 +97,9 @@ interface CategoryRepository {
 
 interface BudgetRepository {
     fun observeBudgets(yearMonth: YearMonth): Flow<List<Budget>>
+
+    /** Every budget row ever set, any month - the full-backup export needs the whole history, not just one month at a time like [observeBudgets]. */
+    fun observeAllBudgets(): Flow<List<Budget>>
     suspend fun setLimit(categoryId: Long, yearMonth: YearMonth, limit: Money)
     suspend fun setRollover(categoryId: Long, yearMonth: YearMonth, rollover: Boolean)
 

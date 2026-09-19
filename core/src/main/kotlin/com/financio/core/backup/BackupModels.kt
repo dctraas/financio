@@ -21,12 +21,84 @@ data class RuleExport(
 )
 
 /**
- * The on-disk shape for "alles" or "losse onderdelen": either list may be empty (or absent in
- * the JSON, via [BackupSerializer]'s default values) so the same format covers a categories-only
- * export, a rules-only export, and a combined one without three different file shapes.
+ * Exported by [ibanMasked], same reasoning as categories being exported by name: it's the one
+ * account field that's both stable across a reinstall and actually shown to the user, unlike the
+ * local row id. [importIdentifier] travels along so a restored account still auto-matches its
+ * next bank-file import instead of asking "is this a new account?" again.
+ */
+@Serializable
+data class AccountExport(
+    val name: String,
+    val ibanMasked: String,
+    val importIdentifier: String? = null,
+    val hidden: Boolean = false,
+    val excludedFromTotal: Boolean = false,
+    val manualBalanceCents: Long? = null,
+)
+
+/** One category's share of a split transaction - see [com.financio.core.model.TransactionSplit]. */
+@Serializable
+data class TransactionSplitExport(val categoryName: String, val amountCents: Long)
+
+/**
+ * A transaction, exported with the categorization/notes/tag on top of the raw bank-export fields
+ * - this is what makes a "volledige back-up" actually worth restoring instead of just re-running
+ * every old CSV/MT940 import (which most people no longer have lying around, and which wouldn't
+ * bring back categorization anyway). [accountIban] resolves against [AccountExport.ibanMasked],
+ * [categoryName]/[TransactionSplitExport.categoryName] against [CategoryExport.name], same
+ * name-not-id approach as the rest of this format.
+ */
+@Serializable
+data class TransactionExport(
+    val accountIban: String,
+    /** ISO "yyyy-MM-dd". */
+    val date: String,
+    val amountCents: Long,
+    val counterpartyIban: String? = null,
+    val counterpartyName: String,
+    val description: String,
+    /** Null for an uncategorized transaction, or one whose [splits] carry the categorization instead. */
+    val categoryName: String? = null,
+    /** [com.financio.core.model.SourceFormat] name. */
+    val sourceFormat: String,
+    val balanceAfterCents: Long? = null,
+    val tag: String? = null,
+    val note: String? = null,
+    val splits: List<TransactionSplitExport> = emptyList(),
+)
+
+@Serializable
+data class BudgetExport(
+    val categoryName: String,
+    /** ISO "yyyy-MM". */
+    val yearMonth: String,
+    val limitCents: Long,
+    val rollover: Boolean = false,
+)
+
+@Serializable
+data class SavingsGoalExport(
+    val name: String,
+    val targetAmountCents: Long,
+    val categoryName: String,
+    val linkedAccountIban: String? = null,
+    /** ISO "yyyy-MM-dd", or null for no streefdatum. */
+    val targetDate: String? = null,
+    val archived: Boolean = false,
+    val manualAdjustmentCents: Long = 0,
+)
+
+/**
+ * The on-disk shape for "alles" or "losse onderdelen": every list may be empty (or absent in the
+ * JSON, via its default value) so the same format covers a categories-only export, a full
+ * back-up, and everything in between without a different file shape per combination.
  */
 @Serializable
 data class BackupBundle(
     val categories: List<CategoryExport> = emptyList(),
     val rules: List<RuleExport> = emptyList(),
+    val accounts: List<AccountExport> = emptyList(),
+    val transactions: List<TransactionExport> = emptyList(),
+    val budgets: List<BudgetExport> = emptyList(),
+    val savingsGoals: List<SavingsGoalExport> = emptyList(),
 )

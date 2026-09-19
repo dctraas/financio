@@ -166,6 +166,9 @@ class RoomBudgetRepository @Inject constructor(
     override fun observeBudgets(yearMonth: YearMonth): Flow<List<Budget>> =
         dao.observeForMonth(yearMonth.toString()).map { entities -> entities.map { it.toDomain() } }
 
+    override fun observeAllBudgets(): Flow<List<Budget>> =
+        dao.observeAll().map { entities -> entities.map { it.toDomain() } }
+
     override suspend fun setLimit(categoryId: Long, yearMonth: YearMonth, limit: Money) {
         // Reuse the existing row's id (if any) so REPLACE actually replaces it in place, instead
         // of always inserting id=0 - which, with no unique constraint on categoryId+yearMonth,

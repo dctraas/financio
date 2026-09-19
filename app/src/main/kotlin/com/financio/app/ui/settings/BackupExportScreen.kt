@@ -87,15 +87,27 @@ fun BackupExportScreen(onBackClick: () -> Unit, viewModel: BackupExportViewModel
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp, vertical = 16.dp)) {
             Text(
-                "Categorieën en regels als bestand bewaren of overzetten. Categorieën worden op " +
-                    "naam gematcht, regels op categorienaam + patroon — bestaat iets al lokaal, " +
-                    "dan blijft dat ongewijzigd staan; er wordt alleen toegevoegd.",
+                "Alles wordt op een stabiel kenmerk gematcht in plaats van een intern id — " +
+                    "rekeningen op IBAN, categorieën op naam, transacties op datum + bedrag + " +
+                    "tegenpartij. Bestaat iets al lokaal, dan blijft dat ongewijzigd staan; er " +
+                    "wordt alleen toegevoegd, dus een bestand nog eens importeren is veilig.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 16.dp),
             )
-            ExportLink("Alles exporteren") {
-                exportJson(BackupSerializer.exportAll(state.categories, state.rules), "financio-alles.json")
+            ExportLink("Volledige back-up exporteren") {
+                exportJson(
+                    BackupSerializer.exportAll(
+                        accounts = state.accounts,
+                        categories = state.categories,
+                        rules = state.rules,
+                        transactions = state.transactions,
+                        splitsByTransactionId = state.splitsByTransactionId,
+                        budgets = state.budgets,
+                        savingsGoals = state.savingsGoals,
+                    ),
+                    "financio-backup.json",
+                )
             }
             ExportLink("Alleen categorieën exporteren") {
                 exportJson(BackupSerializer.exportCategories(state.categories), "financio-categorieen.json")
@@ -136,9 +148,14 @@ private fun ImportResultDialog(result: ImportResult, onDismiss: () -> Unit) {
             Text(
                 when (result) {
                     is ImportResult.Failed -> result.message
-                    is ImportResult.Success -> "${result.categoriesAdded} categorieën toegevoegd " +
-                        "(${result.categoriesSkipped} bestonden al), ${result.rulesAdded} regels " +
-                        "toegevoegd (${result.rulesSkipped} overgeslagen — bestonden al of onbekende categorie)."
+                    is ImportResult.Success -> buildString {
+                        append("${result.accountsAdded} rekeningen, ${result.categoriesAdded} categorieën, ")
+                        append("${result.rulesAdded} regels, ${result.budgetsAdded} budgetten, ")
+                        append("${result.goalsAdded} spaardoelen en ${result.transactionsAdded} transacties toegevoegd.")
+                        val skipped = result.accountsSkipped + result.categoriesSkipped + result.rulesSkipped +
+                            result.budgetsSkipped + result.goalsSkipped + result.transactionsSkipped
+                        if (skipped > 0) append(" $skipped overgeslagen — bestonden al, of verwezen naar iets onbekends.")
+                    }
                 },
             )
         },
