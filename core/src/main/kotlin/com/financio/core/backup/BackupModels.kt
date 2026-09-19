@@ -89,6 +89,27 @@ data class SavingsGoalExport(
 )
 
 /**
+ * Self-contained, unlike every other export above - a [com.financio.core.model.Debt] has no
+ * foreign key to resolve against categories or accounts, so there's nothing to match by name
+ * except the debt itself (see [com.financio.core.backup.DebtImport]).
+ */
+@Serializable
+data class DebtExport(
+    val name: String,
+    /** [com.financio.core.model.DebtDirection] name. */
+    val direction: String,
+    val counterpartyName: String,
+    val principalCents: Long,
+    val currentBalanceCents: Long,
+    val interestRateBasisPoints: Int? = null,
+    /** ISO "yyyy-MM-dd". */
+    val startDate: String,
+    val targetPayoffDate: String? = null,
+    val notes: String? = null,
+    val archived: Boolean = false,
+)
+
+/**
  * The on-disk shape for "alles" or "losse onderdelen": every list may be empty (or absent in the
  * JSON, via its default value) so the same format covers a categories-only export, a full
  * back-up, and everything in between without a different file shape per combination.
@@ -101,4 +122,5 @@ data class BackupBundle(
     val transactions: List<TransactionExport> = emptyList(),
     val budgets: List<BudgetExport> = emptyList(),
     val savingsGoals: List<SavingsGoalExport> = emptyList(),
+    val debts: List<DebtExport> = emptyList(),
 )

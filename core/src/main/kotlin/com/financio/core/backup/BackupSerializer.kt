@@ -4,6 +4,7 @@ import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
+import com.financio.core.model.Debt
 import com.financio.core.model.SavingsGoal
 import com.financio.core.model.Transaction
 import com.financio.core.model.TransactionSplit
@@ -31,7 +32,7 @@ object BackupSerializer {
     /**
      * The "volledige back-up" - everything a fresh install needs to look the same again:
      * accounts, categories, rules, every transaction (with its categorization, splits, tag and
-     * note), budgets and spaardoelen. [splitsByTransactionId] mirrors
+     * note), budgets, spaardoelen and schulden/leningen. [splitsByTransactionId] mirrors
      * [com.financio.core.repository.TransactionRepository.observeAllSplits]'s shape.
      */
     fun exportAll(
@@ -42,6 +43,7 @@ object BackupSerializer {
         splitsByTransactionId: Map<Long, List<TransactionSplit>>,
         budgets: List<Budget>,
         savingsGoals: List<SavingsGoal>,
+        debts: List<Debt>,
     ): String {
         val categoriesById = categories.associateBy { it.id }
         val ibanByAccountId = accounts.associate { it.id to it.ibanMasked }
@@ -53,6 +55,7 @@ object BackupSerializer {
                 transactions = transactions.toTransactionExports(ibanByAccountId, categoriesById, splitsByTransactionId),
                 budgets = budgets.toBudgetExports(categoriesById),
                 savingsGoals = savingsGoals.toSavingsGoalExports(categoriesById, ibanByAccountId),
+                debts = debts.map { it.toExport() },
             ),
         )
     }
@@ -63,6 +66,19 @@ object BackupSerializer {
     private fun encode(bundle: BackupBundle): String = json.encodeToString(BackupBundle.serializer(), bundle)
 
     private fun Category.toExport() = CategoryExport(name = name, colorHex = colorHex)
+
+    private fun Debt.toExport() = DebtExport(
+        name = name,
+        direction = direction.name,
+        counterpartyName = counterpartyName,
+        principalCents = principal.cents,
+        currentBalanceCents = currentBalance.cents,
+        interestRateBasisPoints = interestRateBasisPoints,
+        startDate = startDate.toString(),
+        targetPayoffDate = targetPayoffDate?.toString(),
+        notes = notes,
+        archived = archived,
+    )
 
     private fun Account.toExport() = AccountExport(
         name = name,

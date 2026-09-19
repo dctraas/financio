@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 11 (API 30) and below: the pre-dataExtractionRules backup format. A whitelist (only
+    <include>, no <exclude>) - everything not explicitly listed here is left out, which is exactly
+    the point: the SQLCipher database and the AndroidKeystore-wrapped passphrase in SharedPreferences
+    (see DatabasePassphraseProvider) must never be part of this. That Keystore key is hardware-backed
+    and never leaves this device, so restoring the raw encrypted database file onto a different
+    device (a factory reset counts as "different" too) would leave a database nothing can decrypt.
+    AutoBackupManager writes a plain, portable JSON snapshot to auto_backup/ instead - the same
+    format Back-up & export's own manual "Volledige back-up exporteren" produces - and that's the
+    only thing this mirrors into Android's own backup.
+-->
+<full-backup-content>
+    <include domain="file" path="auto_backup/" />
+</full-backup-content>

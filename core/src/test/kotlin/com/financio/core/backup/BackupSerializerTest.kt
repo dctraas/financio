@@ -4,6 +4,8 @@ import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
+import com.financio.core.model.Debt
+import com.financio.core.model.DebtDirection
 import com.financio.core.model.MatchType
 import com.financio.core.model.Money
 import com.financio.core.model.SavingsGoal
@@ -61,6 +63,14 @@ class BackupSerializerTest {
         )
         val budget = Budget(categoryId = 1, yearMonth = YearMonth.of(2026, 9), limit = Money(30000), rollover = true)
         val goal = SavingsGoal(name = "Vakantie", targetAmount = Money(100_000), categoryId = 2, linkedAccountId = 1, targetDate = LocalDate.of(2027, 6, 1))
+        val debt = Debt(
+            name = "Lening verbouwing",
+            direction = DebtDirection.I_OWE,
+            counterpartyName = "Jan",
+            principal = Money(500_000),
+            currentBalance = Money(300_000),
+            startDate = LocalDate.of(2025, 1, 1),
+        )
 
         val json = BackupSerializer.exportAll(
             accounts = listOf(account),
@@ -70,6 +80,7 @@ class BackupSerializerTest {
             splitsByTransactionId = emptyMap(),
             budgets = listOf(budget),
             savingsGoals = listOf(goal),
+            debts = listOf(debt),
         )
         val bundle = BackupSerializer.parse(json)
 
@@ -93,6 +104,12 @@ class BackupSerializerTest {
         assertEquals("Vakantie", exportedGoal.name)
         assertEquals("Vervoer", exportedGoal.categoryName)
         assertEquals("NL••INGB••••••1234", exportedGoal.linkedAccountIban)
+
+        val exportedDebt = bundle.debts.single()
+        assertEquals("Lening verbouwing", exportedDebt.name)
+        assertEquals("I_OWE", exportedDebt.direction)
+        assertEquals(500_000, exportedDebt.principalCents)
+        assertEquals(300_000, exportedDebt.currentBalanceCents)
     }
 
     @Test
@@ -122,6 +139,7 @@ class BackupSerializerTest {
             splitsByTransactionId = mapOf(5L to splits),
             budgets = emptyList(),
             savingsGoals = emptyList(),
+            debts = emptyList(),
         )
         val bundle = BackupSerializer.parse(json)
 

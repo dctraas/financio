@@ -2,6 +2,8 @@ package com.financio.app
 
 import android.app.Application
 import android.util.Log
+import com.financio.app.backup.AutoBackupManager
+import com.financio.app.backup.AutoBackupWorker
 import com.financio.app.data.local.DatabaseSeeder
 import com.financio.app.notifications.NotificationHelper
 import com.financio.app.notifications.WeeklyDigestWorker
@@ -15,6 +17,7 @@ import javax.inject.Inject
 class FinancioApplication : Application() {
 
     @Inject lateinit var databaseSeeder: DatabaseSeeder
+    @Inject lateinit var autoBackupManager: AutoBackupManager
 
     override fun onCreate() {
         super.onCreate()
@@ -23,9 +26,13 @@ class FinancioApplication : Application() {
         // first frame, only before the first import — which needs at least a file pick first.
         // Caught rather than left to crash the process: worst case of a failed seed is an empty
         // category list (today's behavior), which is recoverable, not a reason to crash on launch.
+        // The auto-backup restore runs right after, same reasoning, and deliberately after the
+        // seeder - see AutoBackupManager.restoreIfEmpty for why running it twice is still safe.
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { databaseSeeder.seedIfEmpty() }
                 .onFailure { Log.e("FinancioApplication", "Kon standaardcategorieën niet aanmaken", it) }
+            runCatching { autoBackupManager.restoreIfEmpty() }
+                .onFailure { Log.e("FinancioApplication", "Kon automatische back-up niet terugzetten", it) }
         }
 
         // Both no-ops with no visible effect until the user turns notifications on in
@@ -34,5 +41,6 @@ class FinancioApplication : Application() {
         // WeeklyDigestWorker.doWork) rather than being scheduled/cancelled from the toggle.
         NotificationHelper.ensureChannel(this)
         WeeklyDigestWorker.schedule(this)
+        AutoBackupWorker.schedule(this)
     }
 }
