@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import javax.inject.Inject
 
 data class BackupExportUiState(
@@ -82,19 +81,6 @@ class BackupExportViewModel @Inject constructor(
 
     fun importBackup(content: String) {
         viewModelScope.launch { _importResult.value = backupRestoreUseCase.restore(content) }
-    }
-
-    /** Newly inserted rows only got their id from Room just now - re-fetch and match back up by dedup hash to apply the (few) splits a back-up transaction might carry. */
-    private suspend fun applySplits(inserted: List<TransactionImport.PlannedTransaction>) {
-        val withSplits = inserted.filter { it.splits.isNotEmpty() }
-        if (withSplits.isEmpty()) return
-
-        val idsByHash = transactionRepository.observeAllTransactions().first().associate { it.dedupHash to it.id }
-        withSplits.forEach { planned ->
-            val transactionId = idsByHash[planned.transaction.dedupHash] ?: return@forEach
-            val splits = planned.splits.map { TransactionSplit(transactionId = transactionId, categoryId = it.categoryId, amount = Money(it.amountCents)) }
-            transactionRepository.setSplits(transactionId, splits, fallbackCategoryId = null)
-        }
     }
 
     fun clearImportResult() {
