@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.backup.ImportResult
 import com.financio.core.backup.BackupSerializer
 import com.financio.core.backup.TransactionCsvExporter
 import java.io.BufferedReader
@@ -87,6 +88,15 @@ fun BackupExportScreen(onBackClick: () -> Unit, viewModel: BackupExportViewModel
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp, vertical = 16.dp)) {
             Text(
+                "Financio maakt hiernaast ook zelf periodiek een back-up die automatisch meegaat " +
+                    "in Android's eigen back-up naar jouw Google-account, en bij een herinstallatie " +
+                    "vanzelf wordt teruggezet — de onderstaande knoppen zijn er voor een handmatige " +
+                    "kopie, bijvoorbeeld om zelf te bewaren of over te zetten.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            Text(
                 "Alles wordt op een stabiel kenmerk gematcht in plaats van een intern id — " +
                     "rekeningen op IBAN, categorieën op naam, transacties op datum + bedrag + " +
                     "tegenpartij. Bestaat iets al lokaal, dan blijft dat ongewijzigd staan; er " +
@@ -105,6 +115,7 @@ fun BackupExportScreen(onBackClick: () -> Unit, viewModel: BackupExportViewModel
                         splitsByTransactionId = state.splitsByTransactionId,
                         budgets = state.budgets,
                         savingsGoals = state.savingsGoals,
+                        debts = state.debts,
                     ),
                     "financio-backup.json",
                 )
@@ -151,9 +162,10 @@ private fun ImportResultDialog(result: ImportResult, onDismiss: () -> Unit) {
                     is ImportResult.Success -> buildString {
                         append("${result.accountsAdded} rekeningen, ${result.categoriesAdded} categorieën, ")
                         append("${result.rulesAdded} regels, ${result.budgetsAdded} budgetten, ")
-                        append("${result.goalsAdded} spaardoelen en ${result.transactionsAdded} transacties toegevoegd.")
+                        append("${result.goalsAdded} spaardoelen, ${result.debtsAdded} schulden en ")
+                        append("${result.transactionsAdded} transacties toegevoegd.")
                         val skipped = result.accountsSkipped + result.categoriesSkipped + result.rulesSkipped +
-                            result.budgetsSkipped + result.goalsSkipped + result.transactionsSkipped
+                            result.budgetsSkipped + result.goalsSkipped + result.debtsSkipped + result.transactionsSkipped
                         if (skipped > 0) append(" $skipped overgeslagen — bestonden al, of verwezen naar iets onbekends.")
                     }
                 },

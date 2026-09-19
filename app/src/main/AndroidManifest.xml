@@ -1,13 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Deliberately no android.permission.INTERNET, and no other network permission: fase 1 has no
-    backend and no network path for data to leave the device (see the architecture doc's security
-    section). Do not add one without first revisiting that decision.
+    Still deliberately no android.permission.INTERNET, and no other network permission: this app
+    itself never opens a socket, never talks to a backend, and fase 1 still has no server of its
+    own (see the architecture doc's security section). Do not add either without first revisiting
+    that decision.
 
-    POST_NOTIFICATIONS below is the one exception, and doesn't touch that boundary: it only lets
-    the app show notifications it generates itself, entirely on-device (weekly digest, budget
-    threshold), the same way the app already reads its own local database. Required at runtime
-    from Android 13 (API 33) onward; a no-op permission before that.
+    android:allowBackup below IS that decision, revisited on purpose (see AutoBackupManager's own
+    doc comment): Android's own Auto Backup/device-transfer services - a different, system-
+    privileged process, not this app - can copy exactly one whitelisted file (backup_rules.xml /
+    data_extraction_rules.xml) to the user's own Google account. Never the SQLCipher database
+    itself or its AndroidKeystore-wrapped passphrase (DatabasePassphraseProvider): that key is
+    hardware-backed and device-bound, so restoring the raw encrypted database file onto a
+    different device would leave a database nothing can decrypt. Only a plain, portable JSON
+    snapshot - the same format the manual "Volledige back-up exporteren" produces - ever leaves.
+
+    POST_NOTIFICATIONS below is the other exception, and doesn't touch the "no backend" boundary
+    at all: it only lets the app show notifications it generates itself, entirely on-device
+    (weekly digest, budget threshold), the same way the app already reads its own local database.
+    Required at runtime from Android 13 (API 33) onward; a no-op permission before that.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -15,7 +25,9 @@
 
     <application
         android:name=".FinancioApplication"
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.Financio"

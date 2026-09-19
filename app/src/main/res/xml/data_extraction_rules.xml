@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12 (API 31) and up's replacement for backup_rules.xml, covering both Auto Backup to
+    the user's own Google account (cloud-backup) and the "copy your data" cable/Wi-Fi transfer to
+    a new phone (device-transfer). Same whitelist-only reasoning as backup_rules.xml: the
+    SQLCipher database and its AndroidKeystore-wrapped passphrase (DatabasePassphraseProvider)
+    must never travel this way, since that key can't follow it to a different device. Only
+    AutoBackupManager's own portable JSON snapshot does.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="auto_backup/" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="auto_backup/" />
+    </device-transfer>
+</data-extraction-rules>
