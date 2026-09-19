@@ -111,6 +111,10 @@ interface BudgetDao {
     @Query("SELECT * FROM budgets WHERE yearMonth = :yearMonth")
     fun observeForMonth(yearMonth: String): Flow<List<BudgetEntity>>
 
+    /** Every budget row ever set, any month - the full-backup export needs the whole history. */
+    @Query("SELECT * FROM budgets")
+    fun observeAll(): Flow<List<BudgetEntity>>
+
     /**
      * Looked up by [com.financio.app.data.repository.RoomBudgetRepository.setLimit] so it can
      * pass the existing row's id along to [upsert] instead of always passing id=0. Without this,
