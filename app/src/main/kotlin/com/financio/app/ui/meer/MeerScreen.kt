@@ -49,6 +49,7 @@ fun MeerScreen(
     onMerchantManagementClick: () -> Unit,
     onNetWorthClick: () -> Unit,
     onYearReviewClick: () -> Unit,
+    onDebtsClick: () -> Unit,
     onImportClick: () -> Unit,
     onSettingsClick: () -> Unit,
     viewModel: MeerViewModel = hiltViewModel(),
@@ -122,6 +123,7 @@ fun MeerScreen(
             ListGroup(
                 rows = listOf(
                     { TerugblikRow("Vermogen", state.accountsTotalBalance.roundedEuroString(), onNetWorthClick) },
+                    { TerugblikRow("Schulden & leningen", debtsSummary(state), onDebtsClick) },
                     { TerugblikRow("Jaaroverzicht ${LocalDate.now().year}", null, onYearReviewClick) },
                     { TerugblikRow("Instellingen", null, onSettingsClick) },
                 ),
@@ -142,6 +144,9 @@ private fun subscriptionsSummary(state: MeerUiState): String =
 
 private fun accountsSummary(state: MeerUiState): String =
     if (state.accountCount > 0) "${state.accountCount} · ${state.accountsTotalBalance.toDisplayString()}" else "Nog geen rekeningen"
+
+private fun debtsSummary(state: MeerUiState): String? =
+    if (state.openDebtCount > 0) "${state.openDebtCount} openstaand" else null
 
 /** "€8.412" - truncated to whole euros, deliberately distinct from Rekeningen's own exact-to-the-cent total right above it on the same screen. */
 private fun Money.roundedEuroString(): String {

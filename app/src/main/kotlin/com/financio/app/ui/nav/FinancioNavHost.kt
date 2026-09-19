@@ -26,6 +26,7 @@ import com.financio.app.ui.budgets.BudgetsScreen
 import com.financio.app.ui.categories.CategoryManagementScreen
 import com.financio.app.ui.categorizequeue.CategorizeQueueScreen
 import com.financio.app.ui.charts.ChartsScreen
+import com.financio.app.ui.debts.DebtsScreen
 import com.financio.app.ui.importing.ImportScreen
 import com.financio.app.ui.meer.MeerScreen
 import com.financio.app.ui.merchants.MerchantManagementScreen
@@ -69,6 +70,7 @@ private sealed class Destination(val route: String, val label: String) {
     data object YearReview : Destination("year-review", "Jaaroverzicht")
     data object Subscriptions : Destination("subscriptions", "Abonnementen")
     data object SavingsGoals : Destination("savings-goals", "Spaardoelen")
+    data object Debts : Destination("debts", "Schulden & leningen")
     data object Accounts : Destination("accounts", "Rekeningen")
     /** Screen 17 "Instellingen" - folds what used to be Weergave/Vergrendeling & privacy/Meldingen into one screen; see SettingsScreen's own doc comment. */
     data object Settings : Destination("settings", "Instellingen")
@@ -181,6 +183,7 @@ fun FinancioNavHost() {
                     onMerchantManagementClick = { navController.navigate(Destination.MerchantManagement.route) },
                     onNetWorthClick = { navController.navigate(Destination.NetWorth.route) },
                     onYearReviewClick = { navController.navigate(Destination.YearReview.route) },
+                    onDebtsClick = { navController.navigate(Destination.Debts.route) },
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onSettingsClick = { navController.navigate(Destination.Settings.route) },
                 )
@@ -219,6 +222,7 @@ fun FinancioNavHost() {
                     onCategoryClick = { categoryId -> navController.navigate("charts?categoryId=$categoryId") { launchSingleTop = true } },
                 )
             }
+            composable(Destination.Debts.route) { DebtsScreen(onBackClick = { navController.popBackStack() }) }
             composable(Destination.Accounts.route) {
                 AccountsScreen(
                     onBackClick = { navController.popBackStack() },
@@ -255,6 +259,7 @@ private fun NavIcon(destination: Destination) {
         Destination.YearReview -> Unit
         Destination.Subscriptions -> Unit
         Destination.Budgets -> Unit
+        Destination.Debts -> Unit
         Destination.Accounts -> Unit
         Destination.Settings -> Unit
         Destination.MonthStart -> Unit

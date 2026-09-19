@@ -6,6 +6,7 @@ import com.financio.app.data.local.AppPreferences
 import com.financio.core.model.Money
 import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
+import com.financio.core.repository.DebtRepository
 import com.financio.core.repository.TransactionRepository
 import com.financio.core.usecase.AccountBalance
 import com.financio.core.usecase.AccountBalanceResolver
@@ -31,6 +32,8 @@ data class MeerUiState(
     /** Raw names already folded into a confirmed tegenpartij group (see AppPreferences.confirmedMerchantAliases) - "9 samengevoegd". */
     val mergedMerchantCount: Int = 0,
     val mostRecentTransactionDate: LocalDate? = null,
+    /** Not archived and not yet settled - "Schulden & leningen"'s own summary. */
+    val openDebtCount: Int = 0,
 )
 
 /**
@@ -44,6 +47,7 @@ class MeerViewModel @Inject constructor(
     transactionRepository: TransactionRepository,
     accountRepository: AccountRepository,
     categoryRepository: CategoryRepository,
+    debtRepository: DebtRepository,
     appPreferences: AppPreferences,
 ) : ViewModel() {
 
@@ -52,7 +56,8 @@ class MeerViewModel @Inject constructor(
         accountRepository.observeAccounts(),
         combine(categoryRepository.observeCategories(), categoryRepository.observeRules()) { cats, rules -> cats.size to rules.size },
         appPreferences.confirmedMerchantAliases,
-    ) { transactions, accounts, categoryCounts, merchantAliases ->
+        debtRepository.observeDebts(),
+    ) { transactions, accounts, categoryCounts, merchantAliases, debts ->
         val subscriptions = SubscriptionDetector.detect(transactions)
         // Amortized to a monthly-equivalent figure per subscription (÷12 for a yearly one) - since
         // SubscriptionDetector now also confirms yearly subscriptions, summing their full
@@ -78,6 +83,7 @@ class MeerViewModel @Inject constructor(
             merchantNameCount = transactions.map { it.counterpartyName }.distinct().size,
             mergedMerchantCount = merchantAliases.size,
             mostRecentTransactionDate = transactions.maxOfOrNull { it.date },
+            openDebtCount = debts.count { !it.archived && !it.settled },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MeerUiState())
 }

@@ -7,12 +7,14 @@ import com.financio.app.data.local.BudgetDao
 import com.financio.app.data.local.CategoryDao
 import com.financio.app.data.local.CategoryRuleDao
 import com.financio.app.data.local.DatabasePassphraseProvider
+import com.financio.app.data.local.DebtDao
 import com.financio.app.data.local.FinancioDatabase
 import com.financio.app.data.local.MIGRATION_1_2
 import com.financio.app.data.local.MIGRATION_2_3
 import com.financio.app.data.local.MIGRATION_3_4
 import com.financio.app.data.local.MIGRATION_4_5
 import com.financio.app.data.local.MIGRATION_5_6
+import com.financio.app.data.local.MIGRATION_6_7
 import com.financio.app.data.local.SavingsGoalDao
 import com.financio.app.data.local.TransactionDao
 import dagger.Module
@@ -42,7 +44,7 @@ object DatabaseModule {
         // page size fix in the version bump that pinned this version.
         return Room.databaseBuilder(context, FinancioDatabase::class.java, "financio.db")
             .openHelperFactory(SupportOpenHelperFactory(passphrase))
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .build()
     }
 
@@ -52,4 +54,5 @@ object DatabaseModule {
     @Provides fun provideBudgetDao(db: FinancioDatabase): BudgetDao = db.budgetDao()
     @Provides fun provideTransactionDao(db: FinancioDatabase): TransactionDao = db.transactionDao()
     @Provides fun provideSavingsGoalDao(db: FinancioDatabase): SavingsGoalDao = db.savingsGoalDao()
+    @Provides fun provideDebtDao(db: FinancioDatabase): DebtDao = db.debtDao()
 }

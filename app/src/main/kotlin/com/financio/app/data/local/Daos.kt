@@ -175,6 +175,41 @@ interface SavingsGoalDao {
 }
 
 @Dao
+interface DebtDao {
+    @Query("SELECT * FROM debts ORDER BY name")
+    fun observeAll(): Flow<List<DebtEntity>>
+
+    @Insert
+    suspend fun insert(debt: DebtEntity): Long
+
+    /** Full edit ("bewerken") of an existing debt's own fields - never touches [DebtEntity.currentBalanceCents] or [DebtEntity.archived], which have their own dedicated actions ([recordPayment], [setArchived]). */
+    @Query(
+        "UPDATE debts SET name = :name, counterpartyName = :counterpartyName, principalCents = :principalCents, " +
+            "interestRateBasisPoints = :interestRateBasisPoints, targetPayoffDate = :targetPayoffDate, notes = :notes " +
+            "WHERE id = :debtId",
+    )
+    suspend fun update(
+        debtId: Long,
+        name: String,
+        counterpartyName: String,
+        principalCents: Long,
+        interestRateBasisPoints: Int?,
+        targetPayoffDate: String?,
+        notes: String?,
+    )
+
+    /** SQLite's multi-argument max() is a plain scalar function here (not the aggregate), so this clamps at zero in one statement - an overpayment never flips a debt negative. */
+    @Query("UPDATE debts SET currentBalanceCents = MAX(currentBalanceCents - :amountCents, 0) WHERE id = :debtId")
+    suspend fun recordPayment(debtId: Long, amountCents: Long)
+
+    @Query("UPDATE debts SET archived = :archived WHERE id = :debtId")
+    suspend fun setArchived(debtId: Long, archived: Boolean)
+
+    @Query("DELETE FROM debts WHERE id = :debtId")
+    suspend fun delete(debtId: Long)
+}
+
+@Dao
 interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE accountId = :accountId ORDER BY date DESC, id DESC")
     fun observeByAccount(accountId: Long): Flow<List<TransactionEntity>>
