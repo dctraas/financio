@@ -4,6 +4,8 @@ import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
+import com.financio.core.model.Debt
+import com.financio.core.model.DebtDirection
 import com.financio.core.model.MatchType
 import com.financio.core.model.Money
 import com.financio.core.model.SavingsGoal
@@ -145,4 +147,39 @@ interface SavingsGoalRepository {
 
     /** Adds [delta] (positive or negative) to the goal's manual top-up total - see [SavingsGoal.manualAdjustment]. */
     suspend fun addManualAdjustment(goalId: Long, delta: Money)
+}
+
+interface DebtRepository {
+    fun observeDebts(): Flow<List<Debt>>
+
+    /** Returns the new debt's id. [currentBalance] starts equal to [principal] - there's no such thing as a debt you've already started paying off before it exists in the app. */
+    suspend fun addDebt(
+        name: String,
+        direction: DebtDirection,
+        counterpartyName: String,
+        principal: Money,
+        interestRateBasisPoints: Int?,
+        startDate: LocalDate,
+        targetPayoffDate: LocalDate?,
+        notes: String?,
+    ): Long
+
+    /** Full edit of a debt's own fields - name, tegenpartij, oorspronkelijk bedrag, rente, streefdatum, notities. Leaves [Debt.currentBalance] and [Debt.archived] untouched; those have their own dedicated actions, same split as [SavingsGoalRepository.updateGoal]. */
+    suspend fun updateDebt(
+        debtId: Long,
+        name: String,
+        counterpartyName: String,
+        principal: Money,
+        interestRateBasisPoints: Int?,
+        targetPayoffDate: LocalDate?,
+        notes: String?,
+    )
+
+    /** Moves [Debt.currentBalance] toward zero by [amount] (always a positive amount, regardless of [DebtDirection]) - clamped at zero, an overpayment never flips a debt negative. */
+    suspend fun recordPayment(debtId: Long, amount: Money)
+
+    /** "Archiveren" on an afbetaalde schuld - moves it out of the open-debts total without deleting its history, same convention as [SavingsGoalRepository.setArchived]. */
+    suspend fun setArchived(debtId: Long, archived: Boolean)
+
+    suspend fun deleteDebt(debtId: Long)
 }

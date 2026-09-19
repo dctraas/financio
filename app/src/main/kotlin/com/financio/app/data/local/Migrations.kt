@@ -108,3 +108,30 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         db.execSQL("ALTER TABLE accounts ADD COLUMN importIdentifier TEXT DEFAULT NULL")
     }
 }
+
+/**
+ * v6 -> v7: one new, self-contained table - schulden & leningen. No FOREIGN KEY to accounts or
+ * categories, unlike [MIGRATION_1_2]'s savings_goals table: a debt's counterparty is usually not
+ * one the app already knows as an account or category (a family loan, an informal IOU).
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS debts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                name TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                counterpartyName TEXT NOT NULL,
+                principalCents INTEGER NOT NULL,
+                currentBalanceCents INTEGER NOT NULL,
+                interestRateBasisPoints INTEGER DEFAULT NULL,
+                startDate TEXT NOT NULL,
+                targetPayoffDate TEXT DEFAULT NULL,
+                notes TEXT DEFAULT NULL,
+                archived INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
+    }
+}

@@ -12,8 +12,9 @@ import androidx.room.RoomDatabase
         TransactionEntity::class,
         TransactionSplitEntity::class,
         SavingsGoalEntity::class,
+        DebtEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class FinancioDatabase : RoomDatabase() {
@@ -23,4 +24,5 @@ abstract class FinancioDatabase : RoomDatabase() {
     abstract fun budgetDao(): BudgetDao
     abstract fun transactionDao(): TransactionDao
     abstract fun savingsGoalDao(): SavingsGoalDao
+    abstract fun debtDao(): DebtDao
 }

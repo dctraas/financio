@@ -4,6 +4,8 @@ import com.financio.app.data.local.AccountDao
 import com.financio.app.data.local.BudgetDao
 import com.financio.app.data.local.CategoryDao
 import com.financio.app.data.local.CategoryRuleDao
+import com.financio.app.data.local.DebtDao
+import com.financio.app.data.local.DebtEntity
 import com.financio.app.data.local.SavingsGoalDao
 import com.financio.app.data.local.SavingsGoalEntity
 import com.financio.app.data.local.TransactionDao
@@ -13,6 +15,8 @@ import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
+import com.financio.core.model.Debt
+import com.financio.core.model.DebtDirection
 import com.financio.core.model.MatchType
 import com.financio.core.model.Money
 import com.financio.core.model.SavingsGoal
@@ -21,6 +25,7 @@ import com.financio.core.model.TransactionSplit
 import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.BudgetRepository
 import com.financio.core.repository.CategoryRepository
+import com.financio.core.repository.DebtRepository
 import com.financio.core.repository.SavingsGoalRepository
 import com.financio.core.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
@@ -262,5 +267,60 @@ class RoomSavingsGoalRepository @Inject constructor(
 
     override suspend fun addManualAdjustment(goalId: Long, delta: Money) {
         dao.addManualAdjustment(goalId, delta.cents)
+    }
+}
+
+class RoomDebtRepository @Inject constructor(
+    private val dao: DebtDao,
+) : DebtRepository {
+
+    override fun observeDebts(): Flow<List<Debt>> =
+        dao.observeAll().map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun addDebt(
+        name: String,
+        direction: DebtDirection,
+        counterpartyName: String,
+        principal: Money,
+        interestRateBasisPoints: Int?,
+        startDate: LocalDate,
+        targetPayoffDate: LocalDate?,
+        notes: String?,
+    ): Long = dao.insert(
+        DebtEntity(
+            name = name,
+            direction = direction.name,
+            counterpartyName = counterpartyName,
+            principalCents = principal.cents,
+            currentBalanceCents = principal.cents,
+            interestRateBasisPoints = interestRateBasisPoints,
+            startDate = startDate.toString(),
+            targetPayoffDate = targetPayoffDate?.toString(),
+            notes = notes,
+        ),
+    )
+
+    override suspend fun updateDebt(
+        debtId: Long,
+        name: String,
+        counterpartyName: String,
+        principal: Money,
+        interestRateBasisPoints: Int?,
+        targetPayoffDate: LocalDate?,
+        notes: String?,
+    ) {
+        dao.update(debtId, name, counterpartyName, principal.cents, interestRateBasisPoints, targetPayoffDate?.toString(), notes)
+    }
+
+    override suspend fun recordPayment(debtId: Long, amount: Money) {
+        dao.recordPayment(debtId, amount.cents)
+    }
+
+    override suspend fun setArchived(debtId: Long, archived: Boolean) {
+        dao.setArchived(debtId, archived)
+    }
+
+    override suspend fun deleteDebt(debtId: Long) {
+        dao.delete(debtId)
     }
 }

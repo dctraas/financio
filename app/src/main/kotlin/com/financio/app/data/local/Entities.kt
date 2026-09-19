@@ -130,3 +130,26 @@ data class SavingsGoalEntity(
     /** See [com.financio.core.model.SavingsGoal.manualAdjustment]. Added in schema v5. */
     @ColumnInfo(defaultValue = "0") val manualAdjustmentCents: Long = 0,
 )
+
+/**
+ * See [com.financio.core.model.Debt]. Added in schema v7. Deliberately no foreign keys - a debt's
+ * counterparty is usually not one of this app's own accounts or categories (a family loan, an
+ * informal IOU), so it's a self-contained table, unlike [SavingsGoalEntity]'s link to a category.
+ */
+@Entity(tableName = "debts")
+data class DebtEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    /** [com.financio.core.model.DebtDirection] name. */
+    val direction: String,
+    val counterpartyName: String,
+    val principalCents: Long,
+    val currentBalanceCents: Long,
+    val interestRateBasisPoints: Int? = null,
+    /** ISO "yyyy-MM-dd". */
+    val startDate: String,
+    /** ISO "yyyy-MM-dd", or null for no streefdatum. */
+    val targetPayoffDate: String? = null,
+    val notes: String? = null,
+    val archived: Boolean = false,
+)

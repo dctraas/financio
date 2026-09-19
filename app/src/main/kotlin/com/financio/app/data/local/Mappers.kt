@@ -4,6 +4,8 @@ import com.financio.core.model.Account
 import com.financio.core.model.Budget
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
+import com.financio.core.model.Debt
+import com.financio.core.model.DebtDirection
 import com.financio.core.model.MatchType
 import com.financio.core.model.Money
 import com.financio.core.model.SavingsGoal
@@ -104,4 +106,18 @@ fun Budget.toEntity() = BudgetEntity(
     yearMonth = yearMonth.toString(),
     limitCents = limit.cents,
     rollover = rollover,
+)
+
+fun DebtEntity.toDomain() = Debt(
+    id = id,
+    name = name,
+    direction = DebtDirection.valueOf(direction),
+    counterpartyName = counterpartyName,
+    principal = Money(principalCents),
+    currentBalance = Money(currentBalanceCents),
+    interestRateBasisPoints = interestRateBasisPoints,
+    startDate = LocalDate.parse(startDate),
+    targetPayoffDate = targetPayoffDate?.let { LocalDate.parse(it) },
+    notes = notes,
+    archived = archived,
 )
