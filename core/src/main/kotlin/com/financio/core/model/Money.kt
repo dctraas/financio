@@ -16,11 +16,12 @@ value class Money(val cents: Long) : Comparable<Money> {
 
     override fun compareTo(other: Money): Int = cents.compareTo(other.cents)
 
-    /** Renders as "€23,45" / "-€23,45", the Dutch decimal-comma convention. */
-    fun toDisplayString(): String {
+    /** Renders as "€23,45" / "-€23,45", the Dutch decimal-comma convention. [showCents] = false rounds down to whole euros ("€23") for a "Toon centen" preference that wants a terser number. */
+    fun toDisplayString(showCents: Boolean = true): String {
         val sign = if (cents < 0) "-" else ""
         val absCents = kotlin.math.abs(cents)
         val euros = absCents / 100
+        if (!showCents) return "$sign€${formatThousands(euros)}"
         val remainder = (absCents % 100).toString().padStart(2, '0')
         return "$sign€${formatThousands(euros)},$remainder"
     }

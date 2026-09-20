@@ -21,6 +21,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.financio.app.data.local.StartTab
 import com.financio.app.ui.accounts.AccountsScreen
 import com.financio.app.ui.budgets.BudgetsScreen
 import com.financio.app.ui.categories.CategoryManagementScreen
@@ -81,8 +82,17 @@ private sealed class Destination(val route: String, val label: String) {
 // Order per the schermontwerp redesign: Inzicht now comes before Doelen (was the reverse).
 private val bottomTabs = listOf(Destination.Vandaag, Destination.Transactions, Destination.Charts, Destination.SavingsGoals, Destination.Meer)
 
+/** See [com.financio.app.data.local.AppPreferences.startTab]'s own doc comment - only picks which bottom tab opens first; the arg-optional Transacties/Inzicht routes still resolve to their bare, un-filtered path here, same as a plain bottom-tab tap does. */
+private fun startRouteFor(startTab: StartTab): String = when (startTab) {
+    StartTab.VANDAAG -> Destination.Vandaag.route
+    StartTab.TRANSACTIES -> "transactions"
+    StartTab.INZICHT -> "charts"
+    StartTab.DOELEN -> Destination.SavingsGoals.route
+    StartTab.MEER -> Destination.Meer.route
+}
+
 @Composable
-fun FinancioNavHost() {
+fun FinancioNavHost(startTab: StartTab = StartTab.VANDAAG) {
     val navController = rememberNavController()
 
     Scaffold(
@@ -133,7 +143,7 @@ fun FinancioNavHost() {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Destination.Vandaag.route,
+            startDestination = startRouteFor(startTab),
             modifier = Modifier.padding(padding),
         ) {
             composable(Destination.Vandaag.route) {

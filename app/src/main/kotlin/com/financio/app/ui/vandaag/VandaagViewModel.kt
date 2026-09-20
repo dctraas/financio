@@ -2,6 +2,8 @@ package com.financio.app.ui.vandaag
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financio.app.data.local.AppPreferences
+import com.financio.app.data.local.WeekStartDay
 import com.financio.app.usecase.safeToSpendFor
 import com.financio.core.model.Category
 import com.financio.core.model.Money
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
 
 data class VandaagUiState(
@@ -38,6 +41,8 @@ data class VandaagUiState(
     val mostRecentTransactionDate: LocalDate? = null,
     /** True once the most recent transaction is over a week old — Vandaag turns the freshness caption into a tappable import reminder then. */
     val dataIsStale: Boolean = false,
+    /** "Centen tonen" - see [AppPreferences.showCentsEnabled]. */
+    val showCentsEnabled: Boolean = true,
 )
 
 /**
@@ -50,6 +55,7 @@ class VandaagViewModel @Inject constructor(
     transactionRepository: TransactionRepository,
     accountRepository: AccountRepository,
     categoryRepository: CategoryRepository,
+    appPreferences: AppPreferences,
 ) : ViewModel() {
 
     val uiState: StateFlow<VandaagUiState> = combine(
@@ -57,11 +63,19 @@ class VandaagViewModel @Inject constructor(
         accountRepository.observeAccounts(),
         transactionRepository.observeSplitTransactionIds(),
         categoryRepository.observeCategories(),
-    ) { transactions, accounts, splitIds, categories ->
-        buildState(transactions, accounts.size, splitIds, categories)
+        combine(appPreferences.weekStartDay, appPreferences.showCentsEnabled) { weekStartDay, showCents -> weekStartDay to showCents },
+    ) { transactions, accounts, splitIds, categories, (weekStartDay, showCentsEnabled) ->
+        buildState(transactions, accounts.size, splitIds, categories, weekStartDay, showCentsEnabled)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VandaagUiState())
 
-    private fun buildState(transactions: List<Transaction>, accountCount: Int, splitIds: Set<Long>, categories: List<Category>): VandaagUiState {
+    private fun buildState(
+        transactions: List<Transaction>,
+        accountCount: Int,
+        splitIds: Set<Long>,
+        categories: List<Category>,
+        weekStartDay: WeekStartDay,
+        showCentsEnabled: Boolean,
+    ): VandaagUiState {
         val today = LocalDate.now()
         val subscriptions = SubscriptionDetector.detect(transactions)
 
@@ -72,9 +86,11 @@ class VandaagViewModel @Inject constructor(
         val uncategorizedCount = uncategorizedTransactions.size
         val uncategorizedGroupCount = uncategorizedTransactions.map { it.counterpartyName }.distinct().size
 
-        val weekAgo = today.minusDays(6)
+        // A real calendar week (Maandag/Zondag per Instellingen), not a rolling 7 days - so "deze
+        // week" resets at the same boundary the user picked, instead of always meaning "the last 6 days".
+        val weekStart = today.with(TemporalAdjusters.previousOrSame(weekStartDay.isoDayOfWeek))
         val thisWeek = transactions
-            .filter { it.date in weekAgo..today }
+            .filter { it.date in weekStart..today }
             .sortedWith(compareByDescending<Transaction> { it.date }.thenByDescending { it.id })
             .take(5)
 
@@ -99,6 +115,7 @@ class VandaagViewModel @Inject constructor(
             categoriesById = categories.associateBy { it.id },
             mostRecentTransactionDate = mostRecentDate,
             dataIsStale = mostRecentDate != null && mostRecentDate.isBefore(today.minusDays(7)),
+            showCentsEnabled = showCentsEnabled,
         )
     }
 

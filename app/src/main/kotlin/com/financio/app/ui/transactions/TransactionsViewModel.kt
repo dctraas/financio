@@ -2,6 +2,8 @@ package com.financio.app.ui.transactions
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financio.app.data.local.AppPreferences
+import com.financio.app.data.local.TransactionDensity
 import com.financio.app.notifications.BudgetThresholdNotifier
 import com.financio.app.usecase.safeToSpendFor
 import com.financio.core.categorize.CounterpartyConflict
@@ -77,6 +79,8 @@ data class TransactionsUiState(
     val categorizationConflict: CategorizationConflict? = null,
     /** Non-null right after a categorize() actually persists - the screen turns this into its "ook toepassen op de rest?" follow-up, then clears it via [TransactionsViewModel.consumeAppliedCategorization]. */
     val appliedCategorization: AppliedCategorization? = null,
+    val transactionDensity: TransactionDensity = TransactionDensity.COMFORTABLE,
+    val showCentsEnabled: Boolean = true,
 )
 
 @HiltViewModel
@@ -85,6 +89,7 @@ class TransactionsViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val budgetThresholdNotifier: BudgetThresholdNotifier,
     accountRepository: AccountRepository,
+    private val appPreferences: AppPreferences,
 ) : ViewModel() {
 
     private val searchQuery = MutableStateFlow("")
@@ -161,7 +166,9 @@ class TransactionsViewModel @Inject constructor(
             categorizationConflict = conflict,
             appliedCategorization = applied,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionsUiState())
+    }.combine(appPreferences.transactionDensity) { state, density -> state.copy(transactionDensity = density) }
+        .combine(appPreferences.showCentsEnabled) { state, showCents -> state.copy(showCentsEnabled = showCents) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionsUiState())
 
     fun selectAccount(accountId: Long?) {
         selectedAccountId.value = accountId

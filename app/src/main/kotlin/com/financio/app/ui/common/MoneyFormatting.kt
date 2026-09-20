@@ -8,8 +8,8 @@ import com.financio.core.model.Money
  * [Money.toDisplayString] would be too busy: Vandaag's week list, Transacties' rows and day/group
  * totals. Zero shows no sign at all, matching [Money.toDisplayString]'s own zero handling.
  */
-fun Money.toSignedMagnitudeString(): String {
-    val magnitude = toDisplayString().removePrefix("-").removePrefix("€")
+fun Money.toSignedMagnitudeString(showCents: Boolean = true): String {
+    val magnitude = toDisplayString(showCents).removePrefix("-").removePrefix("€")
     return when {
         cents > 0 -> "+ $magnitude"
         cents < 0 -> "− $magnitude"

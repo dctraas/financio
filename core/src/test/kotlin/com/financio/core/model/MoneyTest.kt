@@ -28,6 +28,13 @@ class MoneyTest {
     }
 
     @Test
+    fun `renders without cents when asked, still with thousands separator`() {
+        assertEquals("€23", Money(2345).toDisplayString(showCents = false))
+        assertEquals("-€23", Money(-2345).toDisplayString(showCents = false))
+        assertEquals("€1.284", Money(128456).toDisplayString(showCents = false))
+    }
+
+    @Test
     fun `adding cents never drifts the way floating point would`() {
         var total = Money.ZERO
         repeat(1000) { total += Money.parseCommaDecimal("0,10") }
