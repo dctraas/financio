@@ -12,6 +12,8 @@ class CategorySuggesterTest {
 
     private val groceries = 1L
     private val transport = 2L
+    private val entertainment = 3L
+    private val travel = 4L
 
     private fun transaction(name: String, categoryId: Long?) = Transaction(
         accountId = 1,
@@ -60,6 +62,22 @@ class CategorySuggesterTest {
         )
         val ranked = CategorySuggester.rank(history, "Bakker Pietersen")
         assertEquals(listOf(groceries, transport), ranked.map { it.categoryId })
+    }
+
+    @Test
+    fun `weighs a rare, distinctive shared word more heavily than a generic one many merchants share`() {
+        val history = listOf(
+            transaction("Makro Rotterdam", groceries),
+            transaction("Bioscoop Amsterdam", entertainment),
+            transaction("Amsterdam Parkeren", transport),
+            transaction("Hotel Amsterdam", travel),
+        )
+        val ranked = CategorySuggester.rank(history, "Makro Amsterdam Noord")
+        // Every category here has exactly one supporting transaction, so a naive "count of
+        // matching transactions" ranking ties all four - "Makro" (unique to one merchant) should
+        // still win over "Amsterdam" (shared by three unrelated ones) because it's the far more
+        // informative shared word.
+        assertEquals(groceries, ranked.first().categoryId)
     }
 
     @Test
