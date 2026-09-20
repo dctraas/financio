@@ -1,5 +1,9 @@
 package com.financio.app.ui.savings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,12 +19,14 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -29,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,6 +69,22 @@ private sealed interface GoalDialogMode {
     data class RollForward(val previous: SavingsGoal) : GoalDialogMode
     data class Edit(val goal: SavingsGoal) : GoalDialogMode
 }
+
+/**
+ * "Nieuw spaardoel"'s quick-start chips - a name plus, where there's an obvious default, a
+ * [suggestedTarget] derived from the household's own data rather than a guessed euro figure.
+ * Only offered in [GoalDialogMode.Add]: rolling forward or editing an existing goal already has
+ * a name of its own.
+ */
+private data class GoalTemplate(val label: String, val goalName: String, val suggestedTarget: ((monthlyFixedCosts: Money) -> Money?)? = null)
+
+private val GOAL_TEMPLATES = listOf(
+    GoalTemplate("Noodfonds", "Noodfonds") { monthlyFixedCosts -> if (monthlyFixedCosts.cents > 0) Money(monthlyFixedCosts.cents * 3) else null },
+    GoalTemplate("Vakantie", "Vakantie"),
+    GoalTemplate("Nieuwe auto", "Nieuwe auto"),
+    GoalTemplate("Cadeaus", "Cadeaus"),
+    GoalTemplate("Verbouwing", "Verbouwing"),
+)
 
 @Composable
 fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
@@ -148,6 +171,7 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
             categories = state.categories,
             accounts = state.accounts,
             mode = mode,
+            monthlyFixedCosts = state.monthlyFixedCosts,
             onDismiss = { dialogMode = null },
             onAddCategory = viewModel::addCategory,
             onSave = { name, target, categoryId, linkedAccountId, targetDate ->
@@ -180,6 +204,28 @@ fun SavingsGoalsScreen(viewModel: SavingsGoalsViewModel = hiltViewModel()) {
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Annuleren") } },
         )
+    }
+
+    // Proactief, niet pas als de gebruiker zelf "Nieuw doel hiermee" opzoekt op de gehaald-kaart -
+    // vuurt hooguit één keer per gehaald doel (zie AppPreferences.goalFollowupHandledIds), en nooit
+    // boven op een dialoog die al open staat.
+    if (dialogMode == null && toppingUp == null && deleting == null) {
+        state.followupSuggestion?.let { row ->
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissFollowupSuggestion(row.goal.id) },
+                title = { Text("Doel gehaald! 🎉") },
+                text = { Text("Je hebt '${row.goal.name}' gehaald. Wil je meteen een vervolgdoel instellen?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.dismissFollowupSuggestion(row.goal.id)
+                        dialogMode = GoalDialogMode.RollForward(row.goal)
+                    }) { Text("Nieuw doel") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissFollowupSuggestion(row.goal.id) }) { Text("Niet nu") }
+                },
+            )
+        }
     }
 }
 
@@ -344,49 +390,59 @@ private fun GoalProgressBar(percentage: Int, color: Color, pace: Float?, height:
     }
 }
 
-/** A full accentSoft card with a ✓ - the redesign's "this is the one moment the app celebrates" treatment, same spirit as the categorize-done screen. */
+/**
+ * A full accentSoft card with a ✓ - the redesign's "this is the one moment the app celebrates"
+ * treatment, same spirit as the categorize-done screen. Pops in with a short scale+fade the first
+ * time it enters composition (e.g. right after a goal crosses into this section, or when scrolled
+ * into view) - a small bit of motion to match that "celebrate" intent, not just a static card.
+ */
 @Composable
 private fun AchievedGoalCard(row: SavingsGoalRow, onClick: () -> Unit, onArchiveClick: () -> Unit, onRollForwardClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .clickable(onClick = onClick)
-            .padding(20.dp),
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-            Text(row.goal.name, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Icon(Icons.Filled.Check, contentDescription = "Gehaald", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-        }
-        Text(
-            "${row.goal.targetAmount.toDisplayString()} gehaald" + (row.earlyByDays?.let { " · ${earlyLateLabel(it)}" } ?: ""),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(top = 10.dp),
-        )
-        Row(modifier = Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+    var visible by remember(row.goal.id) { mutableStateOf(false) }
+    LaunchedEffect(row.goal.id) { visible = true }
+
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(400)) + scaleIn(initialScale = 0.85f, animationSpec = tween(400))) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable(onClick = onClick)
+                .padding(20.dp),
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                Text(row.goal.name, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Icon(Icons.Filled.Check, contentDescription = "Gehaald", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
             Text(
-                "Archiveren",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                textDecoration = TextDecoration.Underline,
+                "${row.goal.targetAmount.toDisplayString()} gehaald" + (row.earlyByDays?.let { " · ${earlyLateLabel(it)}" } ?: ""),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.clickable(onClick = onArchiveClick),
+                modifier = Modifier.padding(top = 10.dp),
             )
-            // Not in the schermontwerp mockup's own screenshot (only "Archiveren" is shown there),
-            // but a real, already-built capability - keeping it as a second, equally quiet link
-            // rather than dropping the only way to start a fresh goal from an achieved one's category/rekening.
-            Text(
-                "Nieuw doel hiermee",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                textDecoration = TextDecoration.Underline,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.clickable(onClick = onRollForwardClick),
-            )
+            Row(modifier = Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text(
+                    "Archiveren",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textDecoration = TextDecoration.Underline,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.clickable(onClick = onArchiveClick),
+                )
+                // Not in the schermontwerp mockup's own screenshot (only "Archiveren" is shown there),
+                // but a real, already-built capability - keeping it as a second, equally quiet link
+                // rather than dropping the only way to start a fresh goal from an achieved one's category/rekening.
+                Text(
+                    "Nieuw doel hiermee",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textDecoration = TextDecoration.Underline,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.clickable(onClick = onRollForwardClick),
+                )
+            }
         }
     }
 }
@@ -446,6 +502,7 @@ private fun GoalDialog(
     categories: List<Category>,
     accounts: List<Account>,
     mode: GoalDialogMode,
+    monthlyFixedCosts: Money = Money.ZERO,
     onDismiss: () -> Unit,
     onAddCategory: (name: String, onCreated: (Long) -> Unit) -> Unit,
     onSave: (name: String, target: Money, categoryId: Long, linkedAccountId: Long?, targetDate: LocalDate?) -> Unit,
@@ -506,6 +563,21 @@ private fun GoalDialog(
         },
         text = {
             Column {
+                // Alleen bij "Nieuw spaardoel" - een vervolgdoel of een bewerking heeft al een
+                // eigen naam, dus een sjabloon zou daar alleen maar een ongewenste overschrijving zijn.
+                if (mode == GoalDialogMode.Add) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                        items(GOAL_TEMPLATES) { template ->
+                            AssistChip(
+                                onClick = {
+                                    name = template.goalName
+                                    template.suggestedTarget?.invoke(monthlyFixedCosts)?.let { suggested -> targetText = formatEuroInput(suggested) }
+                                },
+                                label = { Text(template.label) },
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },

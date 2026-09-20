@@ -2,6 +2,7 @@ package com.financio.app.ui.savings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financio.app.data.local.AppPreferences
 import com.financio.app.notifications.SavingsGoalAchievedNotifier
 import com.financio.core.model.Account
 import com.financio.core.model.Category
@@ -71,6 +72,10 @@ data class SavingsGoalsUiState(
     val accounts: List<Account> = emptyList(),
     /** Shown next to a goal's "€X/maand nodig" - see [SavingsGoalRow.fitsWithinLeftover]. */
     val averageMonthlyLeftover: Money? = null,
+    /** The "Noodfonds" template's suggested target (3x this) - see [GOAL_TEMPLATES] in SavingsGoalsScreen. */
+    val monthlyFixedCosts: Money = Money.ZERO,
+    /** The one achieved goal, if any, still awaiting its one-time "vervolgdoel instellen?" prompt - see [dismissFollowupSuggestion]. */
+    val followupSuggestion: SavingsGoalRow? = null,
 )
 
 /**
@@ -91,6 +96,7 @@ class SavingsGoalsViewModel @Inject constructor(
     private val accountRepository: AccountRepository,
     private val transactionRepository: TransactionRepository,
     private val savingsGoalAchievedNotifier: SavingsGoalAchievedNotifier,
+    private val appPreferences: AppPreferences,
 ) : ViewModel() {
 
     val uiState: StateFlow<SavingsGoalsUiState> = combine(
@@ -98,8 +104,9 @@ class SavingsGoalsViewModel @Inject constructor(
         categoryRepository.observeCategories(),
         accountRepository.observeAccounts(),
         transactionRepository.observeAllTransactions(),
-    ) { goals, categories, accounts, transactions ->
-        buildState(goals, categories, accounts, transactions)
+        appPreferences.goalFollowupHandledIds,
+    ) { goals, categories, accounts, transactions, followupHandledIds ->
+        buildState(goals, categories, accounts, transactions, followupHandledIds)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SavingsGoalsUiState())
 
     private fun buildState(
@@ -107,6 +114,7 @@ class SavingsGoalsViewModel @Inject constructor(
         categories: List<Category>,
         accounts: List<Account>,
         transactions: List<Transaction>,
+        followupHandledIds: Set<Long>,
     ): SavingsGoalsUiState {
         val categoriesById = categories.associateBy { it.id }
         val accountsById = accounts.associateBy { it.id }
@@ -120,13 +128,17 @@ class SavingsGoalsViewModel @Inject constructor(
             buildRow(goal, categoriesById[goal.categoryId], linkedAccount, transactions, today, averageMonthlyLeftover, monthlyFixedCosts)
         }
 
+        val achievedRows = rows.filter { !it.goal.archived && it.achieved }
+
         return SavingsGoalsUiState(
             activeRows = rows.filter { !it.goal.archived && !it.achieved },
-            achievedRows = rows.filter { !it.goal.archived && it.achieved },
+            achievedRows = achievedRows,
             archivedRows = rows.filter { it.goal.archived },
             categories = categories,
             accounts = accounts,
             averageMonthlyLeftover = averageMonthlyLeftover,
+            monthlyFixedCosts = monthlyFixedCosts,
+            followupSuggestion = achievedRows.firstOrNull { it.goal.id !in followupHandledIds },
         )
     }
 
@@ -263,6 +275,11 @@ class SavingsGoalsViewModel @Inject constructor(
 
     fun archiveGoal(goalId: Long) {
         viewModelScope.launch { savingsGoalRepository.setArchived(goalId, true) }
+    }
+
+    /** Handles the proactive "vervolgdoel instellen?" prompt either way (yes → roll forward, or no) — either dismissal stops it from asking about this same achieved goal again. */
+    fun dismissFollowupSuggestion(goalId: Long) {
+        appPreferences.markGoalFollowupHandled(goalId)
     }
 
     fun addManualAdjustment(goalId: Long, delta: Money) {

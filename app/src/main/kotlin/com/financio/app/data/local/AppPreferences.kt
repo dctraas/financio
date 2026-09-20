@@ -298,6 +298,23 @@ class AppPreferences(context: Context) {
     }
 
     /**
+     * Spaardoelen' proactieve "vervolgdoel instellen?" prompt fires once per achieved goal - the
+     * id of every goal it has already been shown (and handled, either way) for, so revisiting
+     * Doelen doesn't re-ask about the same achieved goal on every screen open. Same string-encoded
+     * id-set approach as [mutedBudgetCategoryIds].
+     */
+    private val _goalFollowupHandledIds = MutableStateFlow(
+        prefs.getStringSet(KEY_GOAL_FOLLOWUP_HANDLED_IDS, emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet(),
+    )
+    val goalFollowupHandledIds: StateFlow<Set<Long>> = _goalFollowupHandledIds.asStateFlow()
+
+    fun markGoalFollowupHandled(goalId: Long) {
+        val updated = _goalFollowupHandledIds.value + goalId
+        prefs.edit().putStringSet(KEY_GOAL_FOLLOWUP_HANDLED_IDS, updated.map { it.toString() }.toSet()).apply()
+        _goalFollowupHandledIds.value = updated
+    }
+
+    /**
      * Transacties' "opgeslagen filters" — named snapshots of the search/category/amount/date
      * filter controls (see [SavedTransactionFilter]), stored as one JSON blob via
      * [SavedTransactionFilterSerializer] rather than a Room table: this is a device-local
@@ -346,6 +363,7 @@ class AppPreferences(context: Context) {
         private const val KEY_UNUSUAL_TRANSACTION_NOTIFICATIONS = "unusual_transaction_notifications_enabled"
         private const val KEY_SUNDAY_PLANNING_NOTIFICATIONS = "sunday_planning_notifications_enabled"
         private const val KEY_MUTED_BUDGET_CATEGORY_IDS = "muted_budget_category_ids"
+        private const val KEY_GOAL_FOLLOWUP_HANDLED_IDS = "goal_followup_handled_ids"
         private const val KEY_CONFIRMED_SUBSCRIPTIONS = "confirmed_subscription_names"
         private const val KEY_DISMISSED_SUBSCRIPTIONS = "dismissed_subscription_names"
         private const val KEY_CONFIRMED_MERCHANT_ALIASES = "confirmed_merchant_aliases"
