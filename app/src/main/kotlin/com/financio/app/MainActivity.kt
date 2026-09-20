@@ -42,7 +42,7 @@ class MainActivity : FragmentActivity() {
                         biometricLockEnabled = settingsState.biometricLockEnabled,
                         onRequestAuth = ::requestBiometricAuth,
                     ) {
-                        FinancioNavHost()
+                        FinancioNavHost(startTab = settingsState.startTab)
                     }
                 }
             }

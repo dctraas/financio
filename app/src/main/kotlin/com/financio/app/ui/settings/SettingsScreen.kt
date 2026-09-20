@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,8 +42,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.data.local.StartTab
 import com.financio.app.data.local.TextSize
 import com.financio.app.data.local.ThemeMode
+import com.financio.app.data.local.TransactionDensity
+import com.financio.app.data.local.WeekStartDay
 import com.financio.app.ui.theme.LocalFinancioColors
 
 /**
@@ -123,6 +132,64 @@ fun SettingsScreen(
                 SettingsGroup(
                     rows = listOf(
                         {
+                            Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+                                Text("Startpagina", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                                var menuOpen by remember { mutableStateOf(false) }
+                                Box(modifier = Modifier.padding(top = 10.dp)) {
+                                    Text(
+                                        startTabLabel(state.startTab),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.clickable { menuOpen = true },
+                                    )
+                                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                        StartTab.entries.forEach { tab ->
+                                            DropdownMenuItem(
+                                                text = { Text(startTabLabel(tab)) },
+                                                onClick = { viewModel.setStartTab(tab); menuOpen = false },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+                                Text("Week begint op", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                                SegmentedControl(
+                                    modifier = Modifier.padding(top = 10.dp),
+                                    options = listOf("Maandag" to WeekStartDay.MONDAY, "Zondag" to WeekStartDay.SUNDAY),
+                                    selected = state.weekStartDay,
+                                    onSelect = viewModel::setWeekStartDay,
+                                )
+                            }
+                        },
+                        {
+                            Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+                                Text("Transactielijst", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                                SegmentedControl(
+                                    modifier = Modifier.padding(top = 10.dp),
+                                    options = listOf("Comfortabel" to TransactionDensity.COMFORTABLE, "Compact" to TransactionDensity.COMPACT),
+                                    selected = state.transactionDensity,
+                                    onSelect = viewModel::setTransactionDensity,
+                                )
+                            }
+                        },
+                        {
+                            ToggleRow(
+                                title = "Centen tonen",
+                                subtitle = "anders afgerond op hele euro's",
+                                checked = state.showCentsEnabled,
+                                onCheckedChange = viewModel::setShowCentsEnabled,
+                            )
+                        },
+                    ),
+                )
+            }
+            item {
+                SettingsGroup(
+                    rows = listOf(
+                        {
                             ToggleRow(
                                 title = "Bedragen verbergen",
                                 subtitle = "tot je de app ontgrendelt",
@@ -193,6 +260,14 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+private fun startTabLabel(tab: StartTab): String = when (tab) {
+    StartTab.VANDAAG -> "Vandaag"
+    StartTab.TRANSACTIES -> "Transacties"
+    StartTab.INZICHT -> "Inzicht"
+    StartTab.DOELEN -> "Doelen"
+    StartTab.MEER -> "Beheer"
 }
 
 @Composable

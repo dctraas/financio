@@ -15,6 +15,18 @@ enum class TextSize(val fontScale: Float) {
     LARGE(1.15f),
 }
 
+/** Which bottom-nav tab [com.financio.app.ui.nav.FinancioNavHost] opens on - "Instellingen"'s startpagina picker. */
+enum class StartTab { VANDAAG, TRANSACTIES, INZICHT, DOELEN, MEER }
+
+/** Row height/padding for the Transacties list - COMPACT trades whitespace for more rows on screen at once. */
+enum class TransactionDensity { COMFORTABLE, COMPACT }
+
+/** Which weekday Vandaag's "deze week"-venster (and any other calendar-week window) starts counting from. */
+enum class WeekStartDay(val isoDayOfWeek: java.time.DayOfWeek) {
+    MONDAY(java.time.DayOfWeek.MONDAY),
+    SUNDAY(java.time.DayOfWeek.SUNDAY),
+}
+
 /**
  * Device-local app settings — not synced, not part of the encrypted transaction database.
  * SharedPreferences is fine here: there's a handful of booleans, all read once at startup.
@@ -115,6 +127,46 @@ class AppPreferences(context: Context) {
         _monthStartDay.value = clamped
     }
 
+    private val _startTab = MutableStateFlow(
+        prefs.getString(KEY_START_TAB, null)?.let { stored -> runCatching { StartTab.valueOf(stored) }.getOrNull() } ?: DEFAULT_START_TAB,
+    )
+    val startTab: StateFlow<StartTab> = _startTab.asStateFlow()
+
+    fun setStartTab(tab: StartTab) {
+        prefs.edit().putString(KEY_START_TAB, tab.name).apply()
+        _startTab.value = tab
+    }
+
+    private val _transactionDensity = MutableStateFlow(
+        prefs.getString(KEY_TRANSACTION_DENSITY, null)?.let { stored -> runCatching { TransactionDensity.valueOf(stored) }.getOrNull() }
+            ?: DEFAULT_TRANSACTION_DENSITY,
+    )
+    val transactionDensity: StateFlow<TransactionDensity> = _transactionDensity.asStateFlow()
+
+    fun setTransactionDensity(density: TransactionDensity) {
+        prefs.edit().putString(KEY_TRANSACTION_DENSITY, density.name).apply()
+        _transactionDensity.value = density
+    }
+
+    private val _weekStartDay = MutableStateFlow(
+        prefs.getString(KEY_WEEK_START_DAY, null)?.let { stored -> runCatching { WeekStartDay.valueOf(stored) }.getOrNull() } ?: DEFAULT_WEEK_START_DAY,
+    )
+    val weekStartDay: StateFlow<WeekStartDay> = _weekStartDay.asStateFlow()
+
+    fun setWeekStartDay(day: WeekStartDay) {
+        prefs.edit().putString(KEY_WEEK_START_DAY, day.name).apply()
+        _weekStartDay.value = day
+    }
+
+    /** "Toon centen" - off rounds every prominent amount down to whole euros via [com.financio.core.model.Money.toDisplayString]'s own showCents param. */
+    private val _showCentsEnabled = MutableStateFlow(prefs.getBoolean(KEY_SHOW_CENTS, DEFAULT_SHOW_CENTS))
+    val showCentsEnabled: StateFlow<Boolean> = _showCentsEnabled.asStateFlow()
+
+    fun setShowCentsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_CENTS, enabled).apply()
+        _showCentsEnabled.value = enabled
+    }
+
     /**
      * The Vaste lasten screen's "twijfelgeval" yes/no answers, keyed by counterparty name — kept
      * here as two plain string sets rather than a new Room table/migration, since this is a
@@ -211,6 +263,10 @@ class AppPreferences(context: Context) {
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_TEXT_SIZE = "text_size"
         private const val KEY_MONTH_START_DAY = "month_start_day"
+        private const val KEY_START_TAB = "start_tab"
+        private const val KEY_TRANSACTION_DENSITY = "transaction_density"
+        private const val KEY_WEEK_START_DAY = "week_start_day"
+        private const val KEY_SHOW_CENTS = "show_cents_enabled"
         private const val KEY_CONFIRMED_SUBSCRIPTIONS = "confirmed_subscription_names"
         private const val KEY_DISMISSED_SUBSCRIPTIONS = "dismissed_subscription_names"
         private const val KEY_CONFIRMED_MERCHANT_ALIASES = "confirmed_merchant_aliases"
@@ -225,5 +281,11 @@ class AppPreferences(context: Context) {
         private val DEFAULT_THEME_MODE = ThemeMode.SYSTEM
         private val DEFAULT_TEXT_SIZE = TextSize.STANDARD
         private const val DEFAULT_MONTH_START_DAY = 1
+        private val DEFAULT_START_TAB = StartTab.VANDAAG
+        private val DEFAULT_TRANSACTION_DENSITY = TransactionDensity.COMFORTABLE
+        private val DEFAULT_WEEK_START_DAY = WeekStartDay.MONDAY
+        // Matches every existing screen's own hardcoded behavior today - opting in to rounder
+        // numbers is something someone turns on, not a change sprung on existing installs.
+        private const val DEFAULT_SHOW_CENTS = true
     }
 }

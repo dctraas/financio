@@ -64,7 +64,7 @@ fun VandaagScreen(
         item { Header(state.mostRecentTransactionDate, state.dataIsStale, onImportClick) }
         item {
             if (state.safeToSpend != null) {
-                SafeToSpendHero(state.safeToSpend!!)
+                SafeToSpendHero(state.safeToSpend!!, showCentsEnabled = state.showCentsEnabled)
             } else {
                 MissingBalanceNotice(onImportClick)
             }
@@ -161,7 +161,7 @@ private fun ImportButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun SafeToSpendHero(result: com.financio.core.usecase.SafeToSpendCalculator.Result) {
+private fun SafeToSpendHero(result: com.financio.core.usecase.SafeToSpendCalculator.Result, showCentsEnabled: Boolean) {
     val nextMonthFirst = LocalDate.now().plusMonths(1).withDayOfMonth(1)
     Column(Modifier.padding(bottom = 20.dp)) {
         Text(
@@ -170,13 +170,13 @@ private fun SafeToSpendHero(result: com.financio.core.usecase.SafeToSpendCalcula
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            result.safeToSpendTotal.toDisplayString(),
+            result.safeToSpendTotal.toDisplayString(showCentsEnabled),
             fontSize = 44.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 4.dp),
         )
         Text(
-            "${result.safeToSpendPerDay.toDisplayString()} per dag · ${result.daysRemaining} dagen te gaan",
+            "${result.safeToSpendPerDay.toDisplayString(showCentsEnabled)} per dag · ${result.daysRemaining} dagen te gaan",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),

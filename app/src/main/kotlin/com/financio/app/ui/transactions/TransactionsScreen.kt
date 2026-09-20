@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.financio.app.data.local.TransactionDensity
 import com.financio.app.ui.common.CategorizationConflictDialog
 import com.financio.app.ui.common.CategorySquare
 import com.financio.app.ui.common.toSignedMagnitudeString
@@ -137,7 +138,7 @@ fun TransactionsScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 20.dp))
                     }
                     when (item) {
-                        is TransactionListItem.DayHeader -> DayHeaderRow(item.date, item.netCents)
+                        is TransactionListItem.DayHeader -> DayHeaderRow(item.date, item.netCents, showCentsEnabled = state.showCentsEnabled)
                         is TransactionListItem.CounterpartyHeader -> CounterpartyHeaderRow(item.counterpartyName, item.count)
                         is TransactionListItem.Row -> {
                             val transaction = item.transaction
@@ -147,6 +148,8 @@ fun TransactionsScreen(
                                 isSplit = transaction.id in state.splitTransactionIds,
                                 splits = state.splitsByTransaction[transaction.id].orEmpty(),
                                 categoriesById = state.categoriesById,
+                                density = state.transactionDensity,
+                                showCentsEnabled = state.showCentsEnabled,
                                 // Tap opens the detail screen; long-press (or the "Categorie
                                 // kiezen" pill's own tap, for an uncategorized row) keeps the
                                 // quick category-change flow that used to be behind a plain tap.
@@ -270,7 +273,7 @@ private fun LocalDate.dayHeaderLabel(): String =
     "${dayOfWeek.getDisplayName(TextStyle.SHORT, Locale("nl")).uppercase()} $dayOfMonth ${month.getDisplayName(TextStyle.FULL, Locale("nl")).uppercase()}"
 
 @Composable
-private fun DayHeaderRow(date: LocalDate, netCents: Long) {
+private fun DayHeaderRow(date: LocalDate, netCents: Long, showCentsEnabled: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -284,7 +287,7 @@ private fun DayHeaderRow(date: LocalDate, netCents: Long) {
             color = LocalFinancioColors.current.inkFaint,
         )
         Text(
-            Money(netCents).toSignedMagnitudeString(),
+            Money(netCents).toSignedMagnitudeString(showCentsEnabled),
             fontSize = 12.sp,
             color = LocalFinancioColors.current.inkFaint,
         )
@@ -649,16 +652,19 @@ private fun TransactionRow(
     categoriesById: Map<Long, Category>,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    density: TransactionDensity = TransactionDensity.COMFORTABLE,
+    showCentsEnabled: Boolean = true,
 ) {
     // A split transaction has its own categoryId nulled (see TransactionDao.setSplits), so without
     // isSplit it would look identical to a genuinely uncategorized one here.
     val uncategorized = categoryName == null && !isSplit
+    val verticalPadding = if (density == TransactionDensity.COMPACT) 6.dp else 12.dp
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = verticalPadding),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         CategorySquare(categoryName, isSplit = isSplit)
@@ -690,7 +696,7 @@ private fun TransactionRow(
         }
         val isIncome = transaction.amount.cents > 0
         Text(
-            transaction.amount.toSignedMagnitudeString(),
+            transaction.amount.toSignedMagnitudeString(showCentsEnabled),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (isIncome) FontWeight.SemiBold else FontWeight.Medium,
             color = if (isIncome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,

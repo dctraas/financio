@@ -3,8 +3,11 @@ package com.financio.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.data.local.AppPreferences
+import com.financio.app.data.local.StartTab
 import com.financio.app.data.local.TextSize
 import com.financio.app.data.local.ThemeMode
+import com.financio.app.data.local.TransactionDensity
+import com.financio.app.data.local.WeekStartDay
 import com.financio.core.model.Category
 import com.financio.core.model.CategoryRule
 import com.financio.core.model.Money
@@ -34,6 +37,10 @@ data class SettingsUiState(
     val rolloverByCategory: Map<Long, Boolean> = emptyMap(),
     /** 1-28 — see [AppPreferences.monthStartDay] for why nothing downstream reads this yet. */
     val monthStartDay: Int = 1,
+    val startTab: StartTab = StartTab.VANDAAG,
+    val transactionDensity: TransactionDensity = TransactionDensity.COMFORTABLE,
+    val weekStartDay: WeekStartDay = WeekStartDay.MONDAY,
+    val showCentsEnabled: Boolean = true,
 )
 
 @HiltViewModel
@@ -81,11 +88,30 @@ class SettingsViewModel @Inject constructor(
         val textSize: TextSize,
     )
 
+    // A second "extras" group, same reasoning as displayAndNotificationState above - the newer
+    // Instellingen additions (startpagina, transactiedichtheid, weekstart, centen tonen).
+    private val layoutState: Flow<LayoutExtras> = combine(
+        appPreferences.startTab,
+        appPreferences.transactionDensity,
+        appPreferences.weekStartDay,
+        appPreferences.showCentsEnabled,
+    ) { startTab, transactionDensity, weekStartDay, showCentsEnabled ->
+        LayoutExtras(startTab, transactionDensity, weekStartDay, showCentsEnabled)
+    }
+
+    private data class LayoutExtras(
+        val startTab: StartTab,
+        val transactionDensity: TransactionDensity,
+        val weekStartDay: WeekStartDay,
+        val showCentsEnabled: Boolean,
+    )
+
     val uiState: StateFlow<SettingsUiState> = combine(
         coreState,
         displayAndNotificationState,
         appPreferences.monthStartDay,
-    ) { snapshot, extras, monthStartDay ->
+        layoutState,
+    ) { snapshot, extras, monthStartDay, layout ->
         snapshot.copy(
             budgetThresholdNotificationsEnabled = extras.budgetThresholdNotificationsEnabled,
             weeklyDigestEnabled = extras.weeklyDigestEnabled,
@@ -93,6 +119,10 @@ class SettingsViewModel @Inject constructor(
             themeMode = extras.themeMode,
             textSize = extras.textSize,
             monthStartDay = monthStartDay,
+            startTab = layout.startTab,
+            transactionDensity = layout.transactionDensity,
+            weekStartDay = layout.weekStartDay,
+            showCentsEnabled = layout.showCentsEnabled,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
@@ -131,6 +161,22 @@ class SettingsViewModel @Inject constructor(
 
     fun setMonthStartDay(day: Int) {
         appPreferences.setMonthStartDay(day)
+    }
+
+    fun setStartTab(tab: StartTab) {
+        appPreferences.setStartTab(tab)
+    }
+
+    fun setTransactionDensity(density: TransactionDensity) {
+        appPreferences.setTransactionDensity(density)
+    }
+
+    fun setWeekStartDay(day: WeekStartDay) {
+        appPreferences.setWeekStartDay(day)
+    }
+
+    fun setShowCentsEnabled(enabled: Boolean) {
+        appPreferences.setShowCentsEnabled(enabled)
     }
 
     /** Called once the user finishes editing a limit field — not on every keystroke. */
