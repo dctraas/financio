@@ -1,6 +1,8 @@
 package com.financio.app.data.local
 
 import android.content.Context
+import com.financio.core.model.SavedTransactionFilter
+import com.financio.core.model.SavedTransactionFilterSerializer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -295,6 +297,36 @@ class AppPreferences(context: Context) {
         _confirmedMerchantAliases.value = updated
     }
 
+    /**
+     * Transacties' "opgeslagen filters" — named snapshots of the search/category/amount/date
+     * filter controls (see [SavedTransactionFilter]), stored as one JSON blob via
+     * [SavedTransactionFilterSerializer] rather than a Room table: this is a device-local
+     * convenience list, not data anyone needs to query or back up transaction-by-transaction.
+     */
+    private val _savedTransactionFilters = MutableStateFlow(
+        SavedTransactionFilterSerializer.decode(prefs.getString(KEY_SAVED_TRANSACTION_FILTERS, null).orEmpty()),
+    )
+    val savedTransactionFilters: StateFlow<List<SavedTransactionFilter>> = _savedTransactionFilters.asStateFlow()
+
+    private fun persistSavedTransactionFilters(filters: List<SavedTransactionFilter>) {
+        prefs.edit().putString(KEY_SAVED_TRANSACTION_FILTERS, SavedTransactionFilterSerializer.encode(filters)).apply()
+        _savedTransactionFilters.value = filters
+    }
+
+    /** Adds a new filter, or replaces an existing one with the same id (editing "opslaan" over an already-saved filter). */
+    fun saveTransactionFilter(filter: SavedTransactionFilter) {
+        persistSavedTransactionFilters(_savedTransactionFilters.value.filterNot { it.id == filter.id } + filter)
+    }
+
+    fun deleteTransactionFilter(id: Long) {
+        persistSavedTransactionFilters(_savedTransactionFilters.value.filterNot { it.id == id })
+    }
+
+    /** Vandaag's quick-access chip row - toggled from the same filter list Transacties manages. */
+    fun setTransactionFilterPinned(id: Long, pinned: Boolean) {
+        persistSavedTransactionFilters(_savedTransactionFilters.value.map { if (it.id == id) it.copy(pinnedOnVandaag = pinned) else it })
+    }
+
     companion object {
         private const val PREFS_NAME = "financio_settings"
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
@@ -318,6 +350,7 @@ class AppPreferences(context: Context) {
         private const val KEY_DISMISSED_SUBSCRIPTIONS = "dismissed_subscription_names"
         private const val KEY_CONFIRMED_MERCHANT_ALIASES = "confirmed_merchant_aliases"
         private const val KEY_DISMISSED_MERCHANT_GROUPS = "dismissed_merchant_groups"
+        private const val KEY_SAVED_TRANSACTION_FILTERS = "saved_transaction_filters"
         private const val MERCHANT_ALIAS_SEPARATOR = "\u0001"
         // On by default for a finance app — matches the architecture doc's security section.
         private const val DEFAULT_BIOMETRIC_LOCK = true

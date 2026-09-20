@@ -11,6 +11,7 @@ import com.financio.core.categorize.CounterpartyConflict
 import com.financio.core.categorize.LearnedRule
 import com.financio.core.model.Account
 import com.financio.core.model.Category
+import com.financio.core.model.SavedTransactionFilter
 import com.financio.core.model.Transaction
 import com.financio.core.model.TransactionSplit
 import com.financio.core.repository.AccountRepository
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 /** Mirrors the filter chips competing budgeting apps (bunq, YNAB, Buddy) put on their transaction list. */
@@ -82,6 +84,15 @@ data class TransactionsUiState(
     val appliedCategorization: AppliedCategorization? = null,
     val transactionDensity: TransactionDensity = TransactionDensity.COMFORTABLE,
     val showCentsEnabled: Boolean = true,
+    /** Magnitude in cents (never signed) - "meer dan €50", matching how the amount filter fields read. */
+    val minAmountCents: Long? = null,
+    val maxAmountCents: Long? = null,
+    val dateFrom: LocalDate? = null,
+    val dateTo: LocalDate? = null,
+    val savedFilters: List<SavedTransactionFilter> = emptyList(),
+    /** True while the multi-select "bulk bewerken" mode is active - rows show a checkbox instead of opening detail/quick-categorize on tap. */
+    val bulkModeEnabled: Boolean = false,
+    val selectedTransactionIds: Set<Long> = emptySet(),
 )
 
 @HiltViewModel
@@ -97,6 +108,13 @@ class TransactionsViewModel @Inject constructor(
     private val searchQuery = MutableStateFlow("")
     private val categoryFilter = MutableStateFlow<CategoryFilter>(CategoryFilter.All)
     private val sort = MutableStateFlow(TransactionSort.DATE_DESC)
+    private val minAmountCents = MutableStateFlow<Long?>(null)
+    private val maxAmountCents = MutableStateFlow<Long?>(null)
+    private val dateFrom = MutableStateFlow<LocalDate?>(null)
+    private val dateTo = MutableStateFlow<LocalDate?>(null)
+
+    private val bulkModeEnabled = MutableStateFlow(false)
+    private val selectedTransactionIds = MutableStateFlow<Set<Long>>(emptySet())
 
     /** null = alle rekeningen — the default, and the only state a single-account install ever sees. */
     private val selectedAccountId = MutableStateFlow<Long?>(null)
@@ -111,18 +129,39 @@ class TransactionsViewModel @Inject constructor(
         if (accountId == null) transactionRepository.observeAllTransactions() else transactionRepository.observeTransactions(accountId)
     }
 
-    // A 6th input flow would need the vararg combine() overload's less readable Array<T> callback,
-    // so instead the usual 5-arg combine() is chained with two more via the 3-arg overload.
-    private val filteredSnapshot = combine(
+    private data class AmountDateFilter(
+        val minAmountCents: Long? = null,
+        val maxAmountCents: Long? = null,
+        val dateFrom: LocalDate? = null,
+        val dateTo: LocalDate? = null,
+    )
+
+    // Grouped for the same reason as SettingsViewModel's own "extras" flows: a 6th+ input to
+    // combine() needs its much less readable Array<T> vararg overload.
+    private val amountDateFilter: Flow<AmountDateFilter> = combine(
+        minAmountCents, maxAmountCents, dateFrom, dateTo,
+    ) { min, max, from, to -> AmountDateFilter(min, max, from, to) }
+
+    private data class BaseSnapshot(
+        val transactions: List<Transaction>,
+        val categories: List<Category>,
+        val query: String,
+        val filter: CategoryFilter,
+        val sortOrder: TransactionSort,
+    )
+
+    private val baseSnapshot: Flow<BaseSnapshot> = combine(
         transactionsForSelection,
         categoryRepository.observeCategories(),
         searchQuery,
         categoryFilter,
         sort,
-    ) { transactions, categories, query, filter, sortOrder ->
-        val searchMatched = transactions.filter { matchesSearch(it, query) }
-        val filteredByCategory = searchMatched.filter { matchesCategoryFilter(it, filter) }
-        val filtered = if (sortOrder == TransactionSort.COUNTERPARTY_FREQUENCY_DESC) {
+    ) { transactions, categories, query, filter, sortOrder -> BaseSnapshot(transactions, categories, query, filter, sortOrder) }
+
+    private val filteredSnapshot: Flow<TransactionsUiState> = baseSnapshot.combine(amountDateFilter) { base, amountDate ->
+        val searchMatched = base.transactions.filter { matchesSearch(it, base.query) && matchesAmountDate(it, amountDate) }
+        val filteredByCategory = searchMatched.filter { matchesCategoryFilter(it, base.filter) }
+        val filtered = if (base.sortOrder == TransactionSort.COUNTERPARTY_FREQUENCY_DESC) {
             // Counts within filteredByCategory, not searchMatched or all transactions: picking
             // this sort while filtered to "Niet gecategoriseerd" must rank by how many
             // *uncategorized* transactions share a counterparty, not how many exist overall.
@@ -134,22 +173,26 @@ class TransactionsViewModel @Inject constructor(
                     .thenByDescending { it.id },
             )
         } else {
-            filteredByCategory.sortedWith(comparatorFor(sortOrder))
+            filteredByCategory.sortedWith(comparatorFor(base.sortOrder))
         }
 
         TransactionsUiState(
             transactions = filtered,
-            categories = categories,
-            categoriesById = categories.associateBy { it.id },
-            searchQuery = query,
-            categoryFilter = filter,
-            sort = sortOrder,
-            hasUnfilteredTransactions = transactions.isNotEmpty(),
-            safeToSpend = safeToSpendFor(transactions, accounts.value.size, singleAccountSelected = selectedAccountId.value != null),
+            categories = base.categories,
+            categoriesById = base.categories.associateBy { it.id },
+            searchQuery = base.query,
+            categoryFilter = base.filter,
+            sort = base.sortOrder,
+            hasUnfilteredTransactions = base.transactions.isNotEmpty(),
+            safeToSpend = safeToSpendFor(base.transactions, accounts.value.size, singleAccountSelected = selectedAccountId.value != null),
             selectedAccountId = selectedAccountId.value,
             totalCount = searchMatched.size,
             uncategorizedCount = searchMatched.count { it.categoryId == null },
             categoryCounts = searchMatched.mapNotNull { it.categoryId }.groupingBy { it }.eachCount(),
+            minAmountCents = amountDate.minAmountCents,
+            maxAmountCents = amountDate.maxAmountCents,
+            dateFrom = amountDate.dateFrom,
+            dateTo = amountDate.dateTo,
         )
     }
 
@@ -170,6 +213,10 @@ class TransactionsViewModel @Inject constructor(
         )
     }.combine(appPreferences.transactionDensity) { state, density -> state.copy(transactionDensity = density) }
         .combine(appPreferences.showCentsEnabled) { state, showCents -> state.copy(showCentsEnabled = showCents) }
+        .combine(appPreferences.savedTransactionFilters) { state, filters -> state.copy(savedFilters = filters) }
+        .combine(combine(bulkModeEnabled, selectedTransactionIds) { enabled, ids -> enabled to ids }) { state, (enabled, ids) ->
+            state.copy(bulkModeEnabled = enabled, selectedTransactionIds = ids)
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TransactionsUiState())
 
     fun selectAccount(accountId: Long?) {
@@ -188,9 +235,107 @@ class TransactionsViewModel @Inject constructor(
         sort.value = newSort
     }
 
+    fun setMinAmountCents(cents: Long?) {
+        minAmountCents.value = cents
+    }
+
+    fun setMaxAmountCents(cents: Long?) {
+        maxAmountCents.value = cents
+    }
+
+    fun setDateFrom(date: LocalDate?) {
+        dateFrom.value = date
+    }
+
+    fun setDateTo(date: LocalDate?) {
+        dateTo.value = date
+    }
+
     fun clearFilters() {
         searchQuery.value = ""
         categoryFilter.value = CategoryFilter.All
+        minAmountCents.value = null
+        maxAmountCents.value = null
+        dateFrom.value = null
+        dateTo.value = null
+    }
+
+    /** "Filter opslaan" — captures the current search/category/amount/date controls under [name]. */
+    fun saveCurrentFilterAsNew(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        appPreferences.saveTransactionFilter(
+            SavedTransactionFilter(
+                id = System.currentTimeMillis(),
+                name = trimmed,
+                searchQuery = searchQuery.value,
+                categoryId = (categoryFilter.value as? CategoryFilter.Specific)?.categoryId,
+                uncategorizedOnly = categoryFilter.value == CategoryFilter.Uncategorized,
+                minAmountCents = minAmountCents.value,
+                maxAmountCents = maxAmountCents.value,
+                dateFrom = dateFrom.value?.toString(),
+                dateTo = dateTo.value?.toString(),
+            ),
+        )
+    }
+
+    /** Applies a saved filter's controls to the live search/category/amount/date state. */
+    fun applySavedFilter(filter: SavedTransactionFilter) {
+        searchQuery.value = filter.searchQuery
+        categoryFilter.value = when {
+            filter.uncategorizedOnly -> CategoryFilter.Uncategorized
+            filter.categoryId != null -> CategoryFilter.Specific(filter.categoryId)
+            else -> CategoryFilter.All
+        }
+        minAmountCents.value = filter.minAmountCents
+        maxAmountCents.value = filter.maxAmountCents
+        dateFrom.value = filter.dateFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        dateTo.value = filter.dateTo?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    }
+
+    /** Vandaag's pinned-chip deep link only carries the filter's id (see FinancioNavHost's `filterId` nav arg) — read straight from AppPreferences rather than [uiState], which may not have started collecting yet on a fresh navigation. */
+    fun applySavedFilterById(id: Long) {
+        appPreferences.savedTransactionFilters.value.firstOrNull { it.id == id }?.let { applySavedFilter(it) }
+    }
+
+    fun deleteSavedFilter(id: Long) {
+        appPreferences.deleteTransactionFilter(id)
+    }
+
+    fun setSavedFilterPinned(id: Long, pinned: Boolean) {
+        appPreferences.setTransactionFilterPinned(id, pinned)
+    }
+
+    /** "Selecteren" — the bulk-edit mode toggle; leaving it clears any in-progress selection. */
+    fun toggleBulkMode() {
+        val enabling = !bulkModeEnabled.value
+        bulkModeEnabled.value = enabling
+        if (!enabling) selectedTransactionIds.value = emptySet()
+    }
+
+    fun toggleTransactionSelected(transactionId: Long) {
+        val current = selectedTransactionIds.value
+        selectedTransactionIds.value = if (transactionId in current) current - transactionId else current + transactionId
+    }
+
+    /**
+     * Bulk "Categorie toewijzen" — applies [categoryId] directly to every selected transaction,
+     * without [categorize]'s counterparty-conflict pause or auto-learned rule: selecting several
+     * transactions by hand is already a deliberate, explicit choice, not a "remember this
+     * merchant for next time" signal the way tapping one row is.
+     */
+    fun bulkCategorize(categoryId: Long) {
+        val ids = selectedTransactionIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val previousSpent = budgetThresholdNotifier.currentSpent(categoryId)
+            val previousCategoryNet = savingsGoalAchievedNotifier.currentCategoryNet(categoryId)
+            ids.forEach { transactionRepository.updateCategory(it, categoryId) }
+            budgetThresholdNotifier.checkAndNotify(categoryId, previousSpent)
+            savingsGoalAchievedNotifier.checkAndNotify(categoryId, previousCategoryNet)
+            selectedTransactionIds.value = emptySet()
+            bulkModeEnabled.value = false
+        }
     }
 
     /**
@@ -303,6 +448,16 @@ class TransactionsViewModel @Inject constructor(
         CategoryFilter.All -> true
         CategoryFilter.Uncategorized -> transaction.categoryId == null
         is CategoryFilter.Specific -> transaction.categoryId == filter.categoryId
+    }
+
+    /** Amounts compare by magnitude ("meer dan €50" reads the same for income and expenses); dates compare inclusively on both ends. */
+    private fun matchesAmountDate(transaction: Transaction, filter: AmountDateFilter): Boolean {
+        val magnitude = kotlin.math.abs(transaction.amount.cents)
+        if (filter.minAmountCents != null && magnitude < filter.minAmountCents) return false
+        if (filter.maxAmountCents != null && magnitude > filter.maxAmountCents) return false
+        if (filter.dateFrom != null && transaction.date.isBefore(filter.dateFrom)) return false
+        if (filter.dateTo != null && transaction.date.isAfter(filter.dateTo)) return false
+        return true
     }
 
     private fun comparatorFor(sortOrder: TransactionSort): Comparator<Transaction> = when (sortOrder) {
