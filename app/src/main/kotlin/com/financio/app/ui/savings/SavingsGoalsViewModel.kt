@@ -2,6 +2,7 @@ package com.financio.app.ui.savings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financio.app.notifications.SavingsGoalAchievedNotifier
 import com.financio.core.model.Account
 import com.financio.core.model.Category
 import com.financio.core.model.Money
@@ -17,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -88,6 +90,7 @@ class SavingsGoalsViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val accountRepository: AccountRepository,
     private val transactionRepository: TransactionRepository,
+    private val savingsGoalAchievedNotifier: SavingsGoalAchievedNotifier,
 ) : ViewModel() {
 
     val uiState: StateFlow<SavingsGoalsUiState> = combine(
@@ -263,6 +266,13 @@ class SavingsGoalsViewModel @Inject constructor(
     }
 
     fun addManualAdjustment(goalId: Long, delta: Money) {
-        viewModelScope.launch { savingsGoalRepository.addManualAdjustment(goalId, delta) }
+        viewModelScope.launch {
+            val goal = savingsGoalRepository.observeGoals().first().firstOrNull { it.id == goalId }
+            val previousCategoryNet = goal?.let { savingsGoalAchievedNotifier.currentCategoryNet(it.categoryId) }
+            savingsGoalRepository.addManualAdjustment(goalId, delta)
+            if (goal != null && previousCategoryNet != null) {
+                savingsGoalAchievedNotifier.checkAndNotify(goal.categoryId, previousCategoryNet)
+            }
+        }
     }
 }

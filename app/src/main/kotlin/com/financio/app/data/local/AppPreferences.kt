@@ -71,6 +71,49 @@ class AppPreferences(context: Context) {
         _weeklyDigestEnabled.value = enabled
     }
 
+    private val _savingsGoalAchievedNotificationsEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_SAVINGS_GOAL_ACHIEVED_NOTIFICATIONS, DEFAULT_SAVINGS_GOAL_ACHIEVED_NOTIFICATIONS),
+    )
+    val savingsGoalAchievedNotificationsEnabled: StateFlow<Boolean> = _savingsGoalAchievedNotificationsEnabled.asStateFlow()
+
+    fun setSavingsGoalAchievedNotificationsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SAVINGS_GOAL_ACHIEVED_NOTIFICATIONS, enabled).apply()
+        _savingsGoalAchievedNotificationsEnabled.value = enabled
+    }
+
+    private val _unusualTransactionNotificationsEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_UNUSUAL_TRANSACTION_NOTIFICATIONS, DEFAULT_UNUSUAL_TRANSACTION_NOTIFICATIONS),
+    )
+    val unusualTransactionNotificationsEnabled: StateFlow<Boolean> = _unusualTransactionNotificationsEnabled.asStateFlow()
+
+    fun setUnusualTransactionNotificationsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_UNUSUAL_TRANSACTION_NOTIFICATIONS, enabled).apply()
+        _unusualTransactionNotificationsEnabled.value = enabled
+    }
+
+    /** "Plan je week" - zondagavond, uit per default net als het weekoverzicht. */
+    private val _sundayPlanningNotificationsEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_SUNDAY_PLANNING_NOTIFICATIONS, DEFAULT_SUNDAY_PLANNING_NOTIFICATIONS),
+    )
+    val sundayPlanningNotificationsEnabled: StateFlow<Boolean> = _sundayPlanningNotificationsEnabled.asStateFlow()
+
+    fun setSundayPlanningNotificationsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SUNDAY_PLANNING_NOTIFICATIONS, enabled).apply()
+        _sundayPlanningNotificationsEnabled.value = enabled
+    }
+
+    /** Categories that never trigger [com.financio.app.notifications.BudgetThresholdNotifier], stored as string-encoded ids same as [confirmedSubscriptionNames]'s string-set approach. */
+    private val _mutedBudgetCategoryIds = MutableStateFlow(
+        prefs.getStringSet(KEY_MUTED_BUDGET_CATEGORY_IDS, emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet(),
+    )
+    val mutedBudgetCategoryIds: StateFlow<Set<Long>> = _mutedBudgetCategoryIds.asStateFlow()
+
+    fun setBudgetCategoryMuted(categoryId: Long, muted: Boolean) {
+        val updated = if (muted) _mutedBudgetCategoryIds.value + categoryId else _mutedBudgetCategoryIds.value - categoryId
+        prefs.edit().putStringSet(KEY_MUTED_BUDGET_CATEGORY_IDS, updated.map { it.toString() }.toSet()).apply()
+        _mutedBudgetCategoryIds.value = updated
+    }
+
     /**
      * "Bedragen verbergen tot je de app ontgrendelt" (Instellingen, schermontwerp #17) - stored and
      * toggleable now, like [monthStartDay] before the screens that actually compute month
@@ -267,6 +310,10 @@ class AppPreferences(context: Context) {
         private const val KEY_TRANSACTION_DENSITY = "transaction_density"
         private const val KEY_WEEK_START_DAY = "week_start_day"
         private const val KEY_SHOW_CENTS = "show_cents_enabled"
+        private const val KEY_SAVINGS_GOAL_ACHIEVED_NOTIFICATIONS = "savings_goal_achieved_notifications_enabled"
+        private const val KEY_UNUSUAL_TRANSACTION_NOTIFICATIONS = "unusual_transaction_notifications_enabled"
+        private const val KEY_SUNDAY_PLANNING_NOTIFICATIONS = "sunday_planning_notifications_enabled"
+        private const val KEY_MUTED_BUDGET_CATEGORY_IDS = "muted_budget_category_ids"
         private const val KEY_CONFIRMED_SUBSCRIPTIONS = "confirmed_subscription_names"
         private const val KEY_DISMISSED_SUBSCRIPTIONS = "dismissed_subscription_names"
         private const val KEY_CONFIRMED_MERCHANT_ALIASES = "confirmed_merchant_aliases"
@@ -287,5 +334,8 @@ class AppPreferences(context: Context) {
         // Matches every existing screen's own hardcoded behavior today - opting in to rounder
         // numbers is something someone turns on, not a change sprung on existing installs.
         private const val DEFAULT_SHOW_CENTS = true
+        private const val DEFAULT_SAVINGS_GOAL_ACHIEVED_NOTIFICATIONS = true
+        private const val DEFAULT_UNUSUAL_TRANSACTION_NOTIFICATIONS = true
+        private const val DEFAULT_SUNDAY_PLANNING_NOTIFICATIONS = false
     }
 }

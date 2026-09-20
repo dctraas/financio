@@ -74,6 +74,15 @@ fun SettingsScreen(
     val weeklyDigestPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted -> viewModel.setWeeklyDigestEnabled(granted) }
+    val savingsGoalAchievedPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> viewModel.setSavingsGoalAchievedNotificationsEnabled(granted) }
+    val unusualTransactionPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> viewModel.setUnusualTransactionNotificationsEnabled(granted) }
+    val sundayPlanningPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> viewModel.setSundayPlanningNotificationsEnabled(granted) }
 
     fun onBudgetThresholdToggle(enabled: Boolean) {
         if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -88,6 +97,30 @@ fun SettingsScreen(
             weeklyDigestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             viewModel.setWeeklyDigestEnabled(enabled)
+        }
+    }
+
+    fun onSavingsGoalAchievedToggle(enabled: Boolean) {
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            savingsGoalAchievedPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.setSavingsGoalAchievedNotificationsEnabled(enabled)
+        }
+    }
+
+    fun onUnusualTransactionToggle(enabled: Boolean) {
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            unusualTransactionPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.setUnusualTransactionNotificationsEnabled(enabled)
+        }
+    }
+
+    fun onSundayPlanningToggle(enabled: Boolean) {
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            sundayPlanningPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.setSundayPlanningNotificationsEnabled(enabled)
         }
     }
 
@@ -243,6 +276,30 @@ fun SettingsScreen(
                                 subtitle = "maandagochtend",
                                 checked = state.weeklyDigestEnabled,
                                 onCheckedChange = ::onWeeklyDigestToggle,
+                            )
+                        },
+                        {
+                            ToggleRow(
+                                title = "Plan je week",
+                                subtitle = "zondagavond",
+                                checked = state.sundayPlanningNotificationsEnabled,
+                                onCheckedChange = ::onSundayPlanningToggle,
+                            )
+                        },
+                        {
+                            ToggleRow(
+                                title = "Spaardoel gehaald",
+                                subtitle = "zodra een doel vol staat",
+                                checked = state.savingsGoalAchievedNotificationsEnabled,
+                                onCheckedChange = ::onSavingsGoalAchievedToggle,
+                            )
+                        },
+                        {
+                            ToggleRow(
+                                title = "Ongewone transactie",
+                                subtitle = "veel meer dan gebruikelijk bij een tegenpartij",
+                                checked = state.unusualTransactionNotificationsEnabled,
+                                onCheckedChange = ::onUnusualTransactionToggle,
                             )
                         },
                     ),

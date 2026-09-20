@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.financio.app.data.local.AppPreferences
 import com.financio.app.data.local.TransactionDensity
 import com.financio.app.notifications.BudgetThresholdNotifier
+import com.financio.app.notifications.SavingsGoalAchievedNotifier
 import com.financio.app.usecase.safeToSpendFor
 import com.financio.core.categorize.CounterpartyConflict
 import com.financio.core.categorize.LearnedRule
@@ -88,6 +89,7 @@ class TransactionsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val categoryRepository: CategoryRepository,
     private val budgetThresholdNotifier: BudgetThresholdNotifier,
+    private val savingsGoalAchievedNotifier: SavingsGoalAchievedNotifier,
     accountRepository: AccountRepository,
     private val appPreferences: AppPreferences,
 ) : ViewModel() {
@@ -214,9 +216,11 @@ class TransactionsViewModel @Inject constructor(
 
     private suspend fun applyCategorize(transaction: Transaction, categoryId: Long) {
         val previousSpent = budgetThresholdNotifier.currentSpent(categoryId)
+        val previousCategoryNet = savingsGoalAchievedNotifier.currentCategoryNet(categoryId)
         transactionRepository.updateCategory(transaction.id, categoryId)
         categoryRepository.addRule(LearnedRule.from(categoryId, transaction.counterpartyName))
         budgetThresholdNotifier.checkAndNotify(categoryId, previousSpent)
+        savingsGoalAchievedNotifier.checkAndNotify(categoryId, previousCategoryNet)
         appliedCategorization.value = AppliedCategorization(transaction, categoryId)
     }
 

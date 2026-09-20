@@ -1,9 +1,12 @@
 package com.financio.app.ui.importing
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.financio.app.DefaultAccount
+import com.financio.app.data.local.AppPreferences
 import com.financio.app.notifications.BudgetThresholdNotifier
+import com.financio.app.notifications.NotificationHelper
 import com.financio.core.categorize.CategorySuggester
 import com.financio.core.categorize.CategorySuggestion
 import com.financio.core.categorize.LearnedRule
@@ -18,7 +21,9 @@ import com.financio.core.repository.TransactionRepository
 import com.financio.core.usecase.AccountDetectionResult
 import com.financio.core.usecase.ImportPreview
 import com.financio.core.usecase.ImportStatementUseCase
+import com.financio.core.usecase.UnusualTransactionDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -115,6 +120,8 @@ class ImportViewModel @Inject constructor(
     private val budgetThresholdNotifier: BudgetThresholdNotifier,
     private val transactionRepository: TransactionRepository,
     private val accountRepository: AccountRepository,
+    private val appPreferences: AppPreferences,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ImportUiState>(ImportUiState.PickFile)
@@ -347,7 +354,16 @@ class ImportViewModel @Inject constructor(
             val affectedCategoryIds = toImport.mapNotNull { it.categoryId }.distinct()
             val previousSpentByCategory = affectedCategoryIds.associateWith { budgetThresholdNotifier.currentSpent(it) }
 
+            // Snapshotted for the same reason: "unusual" is judged against what existed before
+            // this batch, never against other transactions the same import just added.
+            val historyForUnusualCheck = transactionRepository.observeAllTransactions().first()
+
             importStatementUseCase.confirm(toImport)
+
+            if (appPreferences.unusualTransactionNotificationsEnabled.first()) {
+                val unusual = UnusualTransactionDetector.findUnusual(toImport, historyForUnusualCheck)
+                if (unusual.isNotEmpty()) NotificationHelper.notifyUnusualTransaction(context, unusual)
+            }
 
             // A keyword-scoped choice learns a rule on just that keyword, not the bare
             // counterparty name — otherwise the rule would wrongly capture the counterparty's

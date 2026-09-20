@@ -41,6 +41,9 @@ data class SettingsUiState(
     val transactionDensity: TransactionDensity = TransactionDensity.COMFORTABLE,
     val weekStartDay: WeekStartDay = WeekStartDay.MONDAY,
     val showCentsEnabled: Boolean = true,
+    val savingsGoalAchievedNotificationsEnabled: Boolean = true,
+    val unusualTransactionNotificationsEnabled: Boolean = true,
+    val sundayPlanningNotificationsEnabled: Boolean = false,
 )
 
 @HiltViewModel
@@ -106,6 +109,22 @@ class SettingsViewModel @Inject constructor(
         val showCentsEnabled: Boolean,
     )
 
+    // A third "extras" group, same reasoning as the two above - the newer notification toggles
+    // (spaardoel behaald, ongewone transactie, zondagavond-planning).
+    private val newerNotificationState: Flow<NewerNotificationExtras> = combine(
+        appPreferences.savingsGoalAchievedNotificationsEnabled,
+        appPreferences.unusualTransactionNotificationsEnabled,
+        appPreferences.sundayPlanningNotificationsEnabled,
+    ) { goalAchieved, unusualTransaction, sundayPlanning ->
+        NewerNotificationExtras(goalAchieved, unusualTransaction, sundayPlanning)
+    }
+
+    private data class NewerNotificationExtras(
+        val savingsGoalAchievedNotificationsEnabled: Boolean,
+        val unusualTransactionNotificationsEnabled: Boolean,
+        val sundayPlanningNotificationsEnabled: Boolean,
+    )
+
     val uiState: StateFlow<SettingsUiState> = combine(
         coreState,
         displayAndNotificationState,
@@ -123,6 +142,12 @@ class SettingsViewModel @Inject constructor(
             transactionDensity = layout.transactionDensity,
             weekStartDay = layout.weekStartDay,
             showCentsEnabled = layout.showCentsEnabled,
+        )
+    }.combine(newerNotificationState) { state, extras2 ->
+        state.copy(
+            savingsGoalAchievedNotificationsEnabled = extras2.savingsGoalAchievedNotificationsEnabled,
+            unusualTransactionNotificationsEnabled = extras2.unusualTransactionNotificationsEnabled,
+            sundayPlanningNotificationsEnabled = extras2.sundayPlanningNotificationsEnabled,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
@@ -177,6 +202,19 @@ class SettingsViewModel @Inject constructor(
 
     fun setShowCentsEnabled(enabled: Boolean) {
         appPreferences.setShowCentsEnabled(enabled)
+    }
+
+    fun setSavingsGoalAchievedNotificationsEnabled(enabled: Boolean) {
+        appPreferences.setSavingsGoalAchievedNotificationsEnabled(enabled)
+    }
+
+    fun setUnusualTransactionNotificationsEnabled(enabled: Boolean) {
+        appPreferences.setUnusualTransactionNotificationsEnabled(enabled)
+    }
+
+    /** Same permission caveat as [setBudgetThresholdNotificationsEnabled]. */
+    fun setSundayPlanningNotificationsEnabled(enabled: Boolean) {
+        appPreferences.setSundayPlanningNotificationsEnabled(enabled)
     }
 
     /** Called once the user finishes editing a limit field — not on every keystroke. */
