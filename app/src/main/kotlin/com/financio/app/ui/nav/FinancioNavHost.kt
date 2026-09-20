@@ -27,6 +27,7 @@ import com.financio.app.ui.budgets.BudgetsScreen
 import com.financio.app.ui.categories.CategoryManagementScreen
 import com.financio.app.ui.categorizequeue.CategorizeQueueScreen
 import com.financio.app.ui.charts.ChartsScreen
+import com.financio.app.ui.cleanup.CleanupWizardScreen
 import com.financio.app.ui.debts.DebtsScreen
 import com.financio.app.ui.importing.ImportScreen
 import com.financio.app.ui.meer.MeerScreen
@@ -78,6 +79,7 @@ private sealed class Destination(val route: String, val label: String) {
     data object Settings : Destination("settings", "Instellingen")
     data object MonthStart : Destination("settings/month-start", "Maand begint op")
     data object BackupExport : Destination("settings/backup-export", "Back-up & export")
+    data object CleanupWizard : Destination("cleanup-wizard", "Opschoon-wizard")
 }
 
 // Order per the schermontwerp redesign: Inzicht now comes before Doelen (was the reverse).
@@ -206,6 +208,14 @@ fun FinancioNavHost(startTab: StartTab = StartTab.VANDAAG) {
                     onDebtsClick = { navController.navigate(Destination.Debts.route) },
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onSettingsClick = { navController.navigate(Destination.Settings.route) },
+                    onCleanupWizardClick = { navController.navigate(Destination.CleanupWizard.route) },
+                )
+            }
+            composable(Destination.CleanupWizard.route) {
+                CleanupWizardScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onGoToCategorize = { navController.navigate(Destination.CategorizeQueue.route) },
+                    onGoToMerchants = { navController.navigate(Destination.MerchantManagement.route) },
                 )
             }
             composable(Destination.Import.route) {
@@ -284,5 +294,6 @@ private fun NavIcon(destination: Destination) {
         Destination.Settings -> Unit
         Destination.MonthStart -> Unit
         Destination.BackupExport -> Unit
+        Destination.CleanupWizard -> Unit
     }
 }
