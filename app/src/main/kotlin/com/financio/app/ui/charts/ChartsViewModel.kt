@@ -427,7 +427,8 @@ class ChartsViewModel @Inject constructor(
         relevantRawNames: Set<String>,
     ): MerchantGrouper.MerchantGroupCandidate? {
         if (relevantRawNames.isEmpty()) return null
-        return MerchantGrouper.candidateGroups(transactions.map { it.counterpartyName })
+        val counterpartyNames = transactions.map { it.counterpartyName }
+        return (MerchantGrouper.candidateGroups(counterpartyNames) + MerchantGrouper.fuzzyCandidateGroups(counterpartyNames))
             .firstOrNull { candidate ->
                 candidate.canonicalName !in dismissedGroups &&
                     candidate.rawNames.any { it in relevantRawNames } &&
