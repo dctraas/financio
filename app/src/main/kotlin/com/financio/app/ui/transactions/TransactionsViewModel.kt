@@ -282,9 +282,13 @@ class TransactionsViewModel @Inject constructor(
     /** Applies a saved filter's controls to the live search/category/amount/date state. */
     fun applySavedFilter(filter: SavedTransactionFilter) {
         searchQuery.value = filter.searchQuery
+        // Local val, not filter.categoryId directly in the when-branch: a public val declared in
+        // a different module (:core) can't be smart-cast, same cross-module restriction noted in
+        // SavingsGoalsViewModel.buildRow's own goal.targetDate comment.
+        val categoryId = filter.categoryId
         categoryFilter.value = when {
             filter.uncategorizedOnly -> CategoryFilter.Uncategorized
-            filter.categoryId != null -> CategoryFilter.Specific(filter.categoryId)
+            categoryId != null -> CategoryFilter.Specific(categoryId)
             else -> CategoryFilter.All
         }
         minAmountCents.value = filter.minAmountCents
