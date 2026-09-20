@@ -54,4 +54,82 @@ object MerchantGrouper {
             else -> trimmed
         }
     }
+
+    // Below this normalized length, a 1-character edit distance is too easy to hit by chance
+    // between two genuinely unrelated short names ("ING" vs "BING").
+    private const val MIN_FUZZY_NORMALIZED_LENGTH = 6
+    private const val MAX_FUZZY_EDIT_DISTANCE = 1
+
+    /**
+     * A second, looser suggestion source than [candidateGroups]'s exact-prefix rule - catches the
+     * kind of near-duplicate spelling the digit-cut heuristic can't, because there's no digit
+     * anywhere to cut at: punctuation ("Coolblue B.V." vs "Coolblue BV"), a stray typo ("Spotify"
+     * vs "Spotfy"). Grouping is by edit distance on a normalized (lowercased, letters/digits only)
+     * form, capped at [MAX_FUZZY_EDIT_DISTANCE] and only above [MIN_FUZZY_NORMALIZED_LENGTH] - both
+     * deliberately tight, same "never blend two unrelated payees' spend" reasoning as
+     * [candidateGroups]'s own doc comment. Names [candidateGroups] already grouped are excluded
+     * here, so the two suggestion sources never overlap or contradict each other.
+     */
+    fun fuzzyCandidateGroups(counterpartyNames: Collection<String>): List<MerchantGroupCandidate> {
+        val distinct = counterpartyNames.toSet()
+        val alreadyGrouped = candidateGroups(distinct).flatMap { it.rawNames }.toSet()
+        val normalizedByName = distinct
+            .filter { it !in alreadyGrouped }
+            .associateWith { normalize(it) }
+            .filterValues { it.length >= MIN_FUZZY_NORMALIZED_LENGTH }
+        val names = normalizedByName.keys.toList()
+
+        // Union-find over pairwise similarity - a chain of near-matches (A~B~C) ends up in one
+        // group even if A and C themselves aren't within the edit-distance cap of each other.
+        val parent = names.associateWith { it }.toMutableMap()
+        fun find(name: String): String {
+            var root = name
+            while (parent.getValue(root) != root) root = parent.getValue(root)
+            return root
+        }
+        fun union(a: String, b: String) {
+            val rootA = find(a)
+            val rootB = find(b)
+            if (rootA != rootB) parent[rootA] = rootB
+        }
+
+        for (i in names.indices) {
+            for (j in i + 1 until names.size) {
+                if (editDistance(normalizedByName.getValue(names[i]), normalizedByName.getValue(names[j])) <= MAX_FUZZY_EDIT_DISTANCE) {
+                    union(names[i], names[j])
+                }
+            }
+        }
+
+        return names.groupBy(::find).values
+            .filter { it.size >= 2 }
+            .map { group ->
+                val sorted = group.sorted()
+                // The shortest spelling is usually the cleanest one (no extra punctuation/legal
+                // suffix) - alphabetical order is just the tiebreaker for a deterministic result.
+                MerchantGroupCandidate(sorted.minByOrNull { it.length } ?: sorted.first(), sorted)
+            }
+            .sortedBy { it.canonicalName }
+    }
+
+    private fun normalize(name: String): String = name.lowercase().filter { it.isLetterOrDigit() }
+
+    /** Classic Levenshtein edit distance, single-row dynamic programming. */
+    private fun editDistance(a: String, b: String): Int {
+        if (a == b) return 0
+        val previousRow = IntArray(b.length + 1) { it }
+        val currentRow = IntArray(b.length + 1)
+        for (i in 1..a.length) {
+            currentRow[0] = i
+            for (j in 1..b.length) {
+                currentRow[j] = if (a[i - 1] == b[j - 1]) {
+                    previousRow[j - 1]
+                } else {
+                    1 + minOf(previousRow[j - 1], previousRow[j], currentRow[j - 1])
+                }
+            }
+            for (j in 0..b.length) previousRow[j] = currentRow[j]
+        }
+        return previousRow[b.length]
+    }
 }

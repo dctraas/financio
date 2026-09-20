@@ -19,7 +19,7 @@ data class MerchantManagementUiState(
     val loaded: Boolean = false,
     /** Tegenpartijen the user already confirmed or created themselves, alphabetical. */
     val confirmedGroups: List<MerchantGroup> = emptyList(),
-    /** [MerchantGrouper]'s own automatic reading of every counterparty name ever seen, minus whatever's already confirmed or dismissed - the same "Dit lijkt dezelfde tegenpartij" suggestions Inzicht surfaces contextually, all in one place here. */
+    /** [MerchantGrouper]'s own automatic reading of every counterparty name ever seen (both its exact-prefix and fuzzy-spelling suggestions), minus whatever's already confirmed or dismissed - the same "Dit lijkt dezelfde tegenpartij" suggestions Inzicht surfaces contextually, all in one place here. */
     val suggestedGroups: List<MerchantGroup> = emptyList(),
     /** Every counterparty name not currently part of a confirmed tegenpartij - the picker list for "naam toevoegen" and "nieuwe tegenpartij". */
     val unassignedNames: List<String> = emptyList(),
@@ -51,7 +51,7 @@ class MerchantManagementViewModel @Inject constructor(
         val confirmedGroups = aliases.values.toSet().sorted().map { canonical ->
             MerchantGroup(canonical, aliases.filterValues { it == canonical }.keys.sorted())
         }
-        val suggestedGroups = MerchantGrouper.candidateGroups(allNames)
+        val suggestedGroups = (MerchantGrouper.candidateGroups(allNames) + MerchantGrouper.fuzzyCandidateGroups(allNames))
             .filter { candidate ->
                 candidate.canonicalName !in dismissedGroups &&
                     candidate.rawNames.any { aliases[it] != candidate.canonicalName }
