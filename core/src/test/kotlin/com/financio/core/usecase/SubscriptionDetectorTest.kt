@@ -171,6 +171,21 @@ class SubscriptionDetectorTest {
     }
 
     @Test
+    fun `an uncertain subscription also reports its own price change - not just confirmed ones`() {
+        // Irregular timing keeps this out of detect()'s confirmed list, but a twijfelgeval is
+        // just as able to have billed a different price recently as a strictly regular one.
+        val driftingDayWithIncrease = listOf(
+            txn("Wasserette", -1500, LocalDate.of(2026, 1, 1)),
+            txn("Wasserette", -1500, LocalDate.of(2026, 2, 8)),
+            txn("Wasserette", -1500, LocalDate.of(2026, 3, 15)),
+            txn("Wasserette", -1700, LocalDate.of(2026, 4, 22)),
+        )
+        val priceChange = SubscriptionDetector.detectUncertain(driftingDayWithIncrease).single().priceChange
+        assertEquals(Money(-1500), priceChange?.previousAmount)
+        assertEquals(Money(-1700), priceChange?.newAmount)
+    }
+
+    @Test
     fun `a confirmed subscription never also appears as uncertain`() {
         val netflix = monthly("Netflix", -1299, LocalDate.of(2026, 1, 15), 4)
         assertTrue(SubscriptionDetector.detectUncertain(netflix).isEmpty())
@@ -198,6 +213,7 @@ class SubscriptionDetectorTest {
         assertEquals(Money(-3000), summary?.lastAmount)
         assertEquals(LocalDate.of(2026, 1, 10), summary?.lastDate)
         assertEquals("handmatig toegevoegd", summary?.reason)
+        assertEquals(null, summary?.priceChange) // nothing to compare a single occurrence against
     }
 
     @Test
@@ -219,5 +235,9 @@ class SubscriptionDetectorTest {
         assertEquals(2, summary?.occurrences)
         assertEquals(Money(-3500), summary?.lastAmount)
         assertEquals(LocalDate.of(2026, 2, 10), summary?.lastDate)
+        // Manually tracked, no cadence requirement at all - but still gets the same price-change
+        // detection a strict subscription would, since it's purely amount-based.
+        assertEquals(Money(-3000), summary?.priceChange?.previousAmount)
+        assertEquals(Money(-3500), summary?.priceChange?.newAmount)
     }
 }

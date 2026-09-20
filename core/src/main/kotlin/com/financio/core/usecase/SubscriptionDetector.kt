@@ -53,6 +53,12 @@ data class UncertainSubscription(
     val lastDate: LocalDate,
     /** Human-readable, e.g. "bedragen wisselen, dag varieert" - which of the strict checks this merchant only barely failed. */
     val reason: String,
+    /**
+     * Same [PriceChange] a confirmed [DetectedSubscription] gets - price-increase detection only
+     * ever needs a sorted amount history, never gap-regularity, so a "twijfelgeval" or a manually
+     * tracked recurring cost is just as able to show "prijs omhoog" as a strictly regular one.
+     */
+    val priceChange: PriceChange? = null,
 )
 
 /**
@@ -101,6 +107,7 @@ object SubscriptionDetector {
             lastAmount = sorted.last().amount,
             lastDate = sorted.last().date,
             reason = "handmatig toegevoegd",
+            priceChange = priceChangeFor(sorted),
         )
     }
 
@@ -149,6 +156,7 @@ object SubscriptionDetector {
             lastAmount = sorted.last().amount,
             lastDate = sorted.last().date,
             reason = reasons.joinToString(", "),
+            priceChange = priceChangeFor(sorted),
         )
     }
 
