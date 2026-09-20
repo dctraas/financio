@@ -310,6 +310,7 @@ private fun ManuallyConfirmedRow(candidate: UncertainSubscription, onDismiss: ()
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            candidate.priceChange?.let { change -> PriceIncreasePill(change) }
         }
         Text(candidate.lastAmount.toSignedMagnitudeString(), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)
         IconButton(onClick = onDismiss) {
@@ -341,6 +342,7 @@ private fun UncertainCard(candidate: UncertainSubscription, onConfirm: () -> Uni
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
         )
+        candidate.priceChange?.let { change -> PriceIncreasePill(change) }
         Row(modifier = Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
                 modifier = Modifier
