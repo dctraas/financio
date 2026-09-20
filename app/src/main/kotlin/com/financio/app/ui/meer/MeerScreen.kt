@@ -52,6 +52,7 @@ fun MeerScreen(
     onDebtsClick: () -> Unit,
     onImportClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onCleanupWizardClick: () -> Unit,
     viewModel: MeerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -125,6 +126,7 @@ fun MeerScreen(
                     { TerugblikRow("Vermogen", state.accountsTotalBalance.roundedEuroString(), onNetWorthClick) },
                     { TerugblikRow("Schulden & leningen", debtsSummary(state), onDebtsClick) },
                     { TerugblikRow("Jaaroverzicht ${LocalDate.now().year}", null, onYearReviewClick) },
+                    { TerugblikRow("Opschoon-wizard", null, onCleanupWizardClick) },
                     { TerugblikRow("Instellingen", null, onSettingsClick) },
                 ),
             )
