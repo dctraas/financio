@@ -45,15 +45,16 @@ import com.financio.app.ui.yearreview.YearReviewScreen
 private const val ARG_CATEGORY_ID = "categoryId"
 private const val ARG_TRANSACTION_ID = "transactionId"
 private const val ARG_UNCATEGORIZED = "uncategorized"
+private const val ARG_FILTER_ID = "filterId"
 private const val CHARTS_ROUTE = "charts?categoryId={categoryId}"
 private const val TRANSACTION_DETAIL_ROUTE = "transaction/{transactionId}"
-private const val TRANSACTIONS_ROUTE = "transactions?uncategorized={uncategorized}"
+private const val TRANSACTIONS_ROUTE = "transactions?uncategorized={uncategorized}&filterId={filterId}"
 
 private sealed class Destination(val route: String, val label: String) {
     // Vandaag is the start destination - "het antwoord, niet de data" - so it's first both here
     // and in the bottom bar.
     data object Vandaag : Destination("vandaag", "Vandaag")
-    /** Registered with an optional `uncategorized` flag so Vandaag's "Nu doen" tile can deep-link straight into the already-filtered list. */
+    /** Registered with optional `uncategorized`/`filterId` args so Vandaag's "Nu doen" tile and pinned saved-filter chips can both deep-link straight into an already-filtered list. */
     data object Transactions : Destination(TRANSACTIONS_ROUTE, "Transacties")
     data object Budgets : Destination("budgets", "Budget")
     /** Registered with an optional `categoryId` so Budget can deep-link into one category's chart. */
@@ -158,17 +159,26 @@ fun FinancioNavHost(startTab: StartTab = StartTab.VANDAAG) {
                     onCategorizeClick = { navController.navigate(Destination.CategorizeQueue.route) },
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
+                    // Deliberately not popUpTo/saveState/restoreState like the bottom-tab switch
+                    // above: restoring a previously saved Transacties back stack entry would keep
+                    // its old filter and silently ignore the new filterId this chip is meant to
+                    // apply. A plain navigate (same as onOpenDetail's drill-in) always re-reads it.
+                    onOpenSavedFilter = { filterId -> navController.navigate("transactions?filterId=$filterId") { launchSingleTop = true } },
                 )
             }
             composable(
                 route = Destination.Transactions.route,
-                arguments = listOf(navArgument(ARG_UNCATEGORIZED) { type = NavType.BoolType; defaultValue = false }),
+                arguments = listOf(
+                    navArgument(ARG_UNCATEGORIZED) { type = NavType.BoolType; defaultValue = false },
+                    navArgument(ARG_FILTER_ID) { type = NavType.LongType; defaultValue = -1L },
+                ),
             ) { backStackEntry ->
                 TransactionsScreen(
                     onImportClick = { navController.navigate(Destination.Import.route) },
                     onOpenDetail = { transactionId -> navController.navigate("transaction/$transactionId") },
                     onPlayCategorize = { navController.navigate(Destination.CategorizeQueue.route) },
                     startWithUncategorizedFilter = backStackEntry.arguments?.getBoolean(ARG_UNCATEGORIZED) ?: false,
+                    startWithFilterId = backStackEntry.arguments?.getLong(ARG_FILTER_ID)?.takeIf { it > 0 },
                 )
             }
             composable(Destination.SavingsGoals.route) { SavingsGoalsScreen() }

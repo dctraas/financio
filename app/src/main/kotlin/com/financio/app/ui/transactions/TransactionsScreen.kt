@@ -22,7 +22,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -30,10 +33,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,6 +61,7 @@ import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.app.ui.theme.LocalFinancioColors
 import com.financio.core.model.Category
 import com.financio.core.model.Money
+import com.financio.core.model.SavedTransactionFilter
 import com.financio.core.model.Transaction
 import com.financio.core.model.TransactionSplit
 import java.time.LocalDate
@@ -77,6 +83,7 @@ fun TransactionsScreen(
     onOpenDetail: (Long) -> Unit,
     onPlayCategorize: () -> Unit,
     startWithUncategorizedFilter: Boolean = false,
+    startWithFilterId: Long? = null,
     viewModel: TransactionsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -87,10 +94,18 @@ fun TransactionsScreen(
         if (startWithUncategorizedFilter) viewModel.setCategoryFilter(CategoryFilter.Uncategorized)
     }
 
+    // Vandaag's pinned saved-filter chips deep-link here with just an id (see FinancioNavHost's
+    // `filterId` nav arg) - the actual filter fields still live in AppPreferences.
+    LaunchedEffect(startWithFilterId) {
+        if (startWithFilterId != null) viewModel.applySavedFilterById(startWithFilterId)
+    }
+
     var categorizing by remember { mutableStateOf<Transaction?>(null) }
     var splitting by remember { mutableStateOf<Transaction?>(null) }
     var bulkApplyPrompt by remember { mutableStateOf<BulkApplyPrompt?>(null) }
     var categorySheetOpen by remember { mutableStateOf(false) }
+    var filterSheetOpen by remember { mutableStateOf(false) }
+    var bulkCategoryPickerOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -102,6 +117,8 @@ fun TransactionsScreen(
                     onSelectAll = { viewModel.setCategoryFilter(CategoryFilter.All) },
                     onSelectUncategorized = { viewModel.setCategoryFilter(CategoryFilter.Uncategorized) },
                     onOpenCategorySheet = { categorySheetOpen = true },
+                    onOpenFilterSheet = { filterSheetOpen = true },
+                    onToggleBulkMode = viewModel::toggleBulkMode,
                 )
                 // Only worth the extra row while actually looking at "Zonder categorie" - the
                 // swipe/suggest/confirm game (see CategorizeQueueScreen) is exactly this filter's
@@ -114,6 +131,15 @@ fun TransactionsScreen(
                         modifier = Modifier.fillMaxWidth().clickable(onClick = onPlayCategorize).padding(horizontal = 20.dp).padding(bottom = 12.dp),
                     )
                 }
+            }
+        },
+        bottomBar = {
+            if (state.bulkModeEnabled) {
+                BulkActionBar(
+                    selectedCount = state.selectedTransactionIds.size,
+                    onCancel = viewModel::toggleBulkMode,
+                    onAssignCategory = { bulkCategoryPickerOpen = true },
+                )
             }
         },
     ) { padding ->
@@ -150,11 +176,16 @@ fun TransactionsScreen(
                                 categoriesById = state.categoriesById,
                                 density = state.transactionDensity,
                                 showCentsEnabled = state.showCentsEnabled,
+                                bulkModeEnabled = state.bulkModeEnabled,
+                                selected = transaction.id in state.selectedTransactionIds,
                                 // Tap opens the detail screen; long-press (or the "Categorie
                                 // kiezen" pill's own tap, for an uncategorized row) keeps the
                                 // quick category-change flow that used to be behind a plain tap.
-                                onClick = { onOpenDetail(transaction.id) },
-                                onLongClick = { categorizing = transaction },
+                                // In bulk mode, a tap toggles selection instead of either.
+                                onClick = {
+                                    if (state.bulkModeEnabled) viewModel.toggleTransactionSelected(transaction.id) else onOpenDetail(transaction.id)
+                                },
+                                onLongClick = { if (!state.bulkModeEnabled) categorizing = transaction },
                             )
                         }
                     }
@@ -168,6 +199,26 @@ fun TransactionsScreen(
         ModalBottomSheet(onDismissRequest = { categorySheetOpen = false }, sheetState = sheetState) {
             CategorySheet(state = state, viewModel = viewModel, onDismiss = { categorySheetOpen = false })
         }
+    }
+
+    if (filterSheetOpen) {
+        val sheetState = rememberModalBottomSheetState()
+        ModalBottomSheet(onDismissRequest = { filterSheetOpen = false }, sheetState = sheetState) {
+            FilterSheet(state = state, viewModel = viewModel)
+        }
+    }
+
+    if (bulkCategoryPickerOpen) {
+        CategoryPickerDialog(
+            transactionName = "${state.selectedTransactionIds.size} transacties",
+            categories = state.categories,
+            currentCategoryId = null,
+            onDismiss = { bulkCategoryPickerOpen = false },
+            onSelect = { categoryId ->
+                viewModel.bulkCategorize(categoryId)
+                bulkCategoryPickerOpen = false
+            },
+        )
     }
 
     categorizing?.let { transaction ->
@@ -408,12 +459,15 @@ private fun FilterChipsRow(
     onSelectAll: () -> Unit,
     onSelectUncategorized: () -> Unit,
     onOpenCategorySheet: () -> Unit,
+    onOpenFilterSheet: () -> Unit,
+    onToggleBulkMode: () -> Unit,
 ) {
     val specific = state.categoryFilter as? CategoryFilter.Specific
     val categoryChipLabel = specific
         ?.let { filter -> state.categoriesById[filter.categoryId]?.name }
         ?.let { name -> "$name · ${state.categoryCounts[specific.categoryId] ?: 0}" }
         ?: "Categorie"
+    val advancedFilterActive = state.minAmountCents != null || state.maxAmountCents != null || state.dateFrom != null || state.dateTo != null
 
     LazyRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 12.dp),
@@ -449,6 +503,52 @@ private fun FilterChipsRow(
                 borderColor = if (specific != null) null else MaterialTheme.colorScheme.outline,
                 onClick = onOpenCategorySheet,
             )
+        }
+        item {
+            // Opens the amount/date/opgeslagen-filters sheet - stays highlighted while an
+            // amount or date bound is active, same "selected" signal the other chips use.
+            FilterPill(
+                "Filters",
+                selected = advancedFilterActive,
+                containerColor = if (advancedFilterActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                contentColor = if (advancedFilterActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                borderColor = if (advancedFilterActive) null else MaterialTheme.colorScheme.outline,
+                onClick = onOpenFilterSheet,
+            )
+        }
+        item {
+            FilterPill(
+                if (state.bulkModeEnabled) "Selecteren · ${state.selectedTransactionIds.size}" else "Selecteren",
+                selected = state.bulkModeEnabled,
+                containerColor = if (state.bulkModeEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                contentColor = if (state.bulkModeEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                borderColor = if (state.bulkModeEnabled) null else MaterialTheme.colorScheme.outline,
+                onClick = onToggleBulkMode,
+            )
+        }
+    }
+}
+
+/** The bulk-edit mode's bottom bar - "N geselecteerd" plus the one bulk action Transacties supports today (assigning a category), mirroring MerchantManagementScreen's own multi-select bottom bar. */
+@Composable
+private fun BulkActionBar(selectedCount: Int, onCancel: () -> Unit, onAssignCategory: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (selectedCount == 1) "1 geselecteerd" else "$selectedCount geselecteerd",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onCancel) { Text("Annuleren") }
+            Button(onClick = onAssignCategory, enabled = selectedCount > 0) { Text("Categorie toewijzen") }
         }
     }
 }
@@ -536,6 +636,151 @@ private fun CategorySheet(state: TransactionsUiState, viewModel: TransactionsVie
     }
 }
 
+/**
+ * "Filters" chip's bottom sheet: bedrag- en datumgrenzen, plus the "opgeslagen filters" list
+ * (opslaan/toepassen/pinnen op Vandaag/verwijderen) — one shared home for #49/#50/#52/#53, since
+ * they're all just different views onto the same underlying filter state.
+ */
+@Composable
+private fun FilterSheet(state: TransactionsUiState, viewModel: TransactionsViewModel) {
+    var minText by remember(state.minAmountCents) { mutableStateOf(state.minAmountCents?.let(::formatEuroInputCents) ?: "") }
+    var maxText by remember(state.maxAmountCents) { mutableStateOf(state.maxAmountCents?.let(::formatEuroInputCents) ?: "") }
+    var fromText by remember(state.dateFrom) { mutableStateOf(state.dateFrom?.toString() ?: "") }
+    var toText by remember(state.dateTo) { mutableStateOf(state.dateTo?.toString() ?: "") }
+    var newFilterName by remember { mutableStateOf("") }
+
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+        Text("Filters", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        Text(
+            "Bedrag",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = minText,
+                onValueChange = { minText = it; viewModel.setMinAmountCents(parseEuroInputToCents(it)) },
+                label = { Text("Min") },
+                prefix = { Text("€") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = maxText,
+                onValueChange = { maxText = it; viewModel.setMaxAmountCents(parseEuroInputToCents(it)) },
+                label = { Text("Max") },
+                prefix = { Text("€") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Text(
+            "Datum",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = fromText,
+                onValueChange = { fromText = it; viewModel.setDateFrom(parseDateInput(it)) },
+                label = { Text("Vanaf") },
+                placeholder = { Text("JJJJ-MM-DD") },
+                singleLine = true,
+                isError = fromText.isNotBlank() && parseDateInput(fromText) == null,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = toText,
+                onValueChange = { toText = it; viewModel.setDateTo(parseDateInput(it)) },
+                label = { Text("Tot en met") },
+                placeholder = { Text("JJJJ-MM-DD") },
+                singleLine = true,
+                isError = toText.isNotBlank() && parseDateInput(toText) == null,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Text(
+            "Wis filters",
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 12.dp).clickable(onClick = viewModel::clearFilters),
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp))
+
+        Text(
+            "Opgeslagen filters",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+        if (state.savedFilters.isEmpty()) {
+            Text(
+                "Nog geen opgeslagen filters.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            state.savedFilters.forEach { filter -> SavedFilterRow(filter, viewModel) }
+        }
+
+        Row(
+            modifier = Modifier.padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = newFilterName,
+                onValueChange = { newFilterName = it },
+                label = { Text("Filter opslaan als...") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            Button(
+                onClick = { viewModel.saveCurrentFilterAsNew(newFilterName); newFilterName = "" },
+                enabled = newFilterName.isNotBlank(),
+            ) { Text("Opslaan") }
+        }
+    }
+}
+
+@Composable
+private fun SavedFilterRow(filter: SavedTransactionFilter, viewModel: TransactionsViewModel) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            filter.name,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f, fill = false).clickable { viewModel.applySavedFilter(filter) },
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                if (filter.pinnedOnVandaag) "Op Vandaag ✓" else "Pin op Vandaag",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (filter.pinnedOnVandaag) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (filter.pinnedOnVandaag) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier.clickable { viewModel.setSavedFilterPinned(filter.id, !filter.pinnedOnVandaag) },
+            )
+            Text(
+                "✕",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clickable { viewModel.deleteSavedFilter(filter.id) },
+            )
+        }
+    }
+}
+
 @Composable
 private fun CategorySheetRow(name: String, selected: Boolean, count: Int, onClick: () -> Unit) {
     Row(
@@ -560,7 +805,7 @@ private fun CategoryPickerDialog(
     currentCategoryId: Long?,
     onDismiss: () -> Unit,
     onSelect: (Long) -> Unit,
-    onSplitClick: () -> Unit,
+    onSplitClick: (() -> Unit)? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -578,12 +823,16 @@ private fun CategoryPickerDialog(
                         modifier = Modifier.fillMaxWidth().clickable { onSelect(category.id) }.padding(vertical = 12.dp),
                     )
                 }
-                Text(
-                    "Splitsen over meerdere categorieën →",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.fillMaxWidth().clickable(onClick = onSplitClick).padding(top = 8.dp, bottom = 4.dp),
-                )
+                // Splitsen only makes sense for one specific transaction - the bulk-categorize
+                // picker (multiple transactions at once) omits it by passing onSplitClick = null.
+                if (onSplitClick != null) {
+                    Text(
+                        "Splitsen over meerdere categorieën →",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = onSplitClick).padding(top = 8.dp, bottom = 4.dp),
+                    )
+                }
             }
         },
         confirmButton = {},
@@ -654,6 +903,8 @@ private fun TransactionRow(
     onLongClick: () -> Unit,
     density: TransactionDensity = TransactionDensity.COMFORTABLE,
     showCentsEnabled: Boolean = true,
+    bulkModeEnabled: Boolean = false,
+    selected: Boolean = false,
 ) {
     // A split transaction has its own categoryId nulled (see TransactionDao.setSplits), so without
     // isSplit it would look identical to a genuinely uncategorized one here.
@@ -667,6 +918,9 @@ private fun TransactionRow(
             .padding(horizontal = 20.dp, vertical = verticalPadding),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (bulkModeEnabled) {
+            Checkbox(checked = selected, onCheckedChange = { onClick() })
+        }
         CategorySquare(categoryName, isSplit = isSplit)
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -748,3 +1002,11 @@ private fun splitSubtitle(splits: List<TransactionSplit>, categoriesById: Map<Lo
  */
 internal fun Money.toSignedDisplayString(): String =
     if (cents > 0) "+${toDisplayString()}" else toDisplayString()
+
+private fun formatEuroInputCents(cents: Long): String = "${cents / 100},${(cents % 100).toString().padStart(2, '0')}"
+
+private fun parseEuroInputToCents(text: String): Long? =
+    if (text.isBlank()) null else runCatching { Money.parseCommaDecimal(if (text.contains(",")) text else "$text,00").cents }.getOrNull()
+
+private fun parseDateInput(text: String): LocalDate? =
+    if (text.isBlank()) null else runCatching { LocalDate.parse(text) }.getOrNull()

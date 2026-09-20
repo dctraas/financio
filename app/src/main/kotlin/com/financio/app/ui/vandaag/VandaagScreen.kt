@@ -43,6 +43,7 @@ import com.financio.app.ui.common.toShortDisplayString
 import com.financio.app.ui.common.toSignedMagnitudeString
 import com.financio.app.ui.theme.LocalBudgetStatusColors
 import com.financio.app.ui.theme.LocalFinancioColors
+import com.financio.core.model.SavedTransactionFilter
 import com.financio.core.model.Transaction
 import com.financio.core.usecase.BalanceForecastCalculator
 import java.time.LocalDate
@@ -55,6 +56,7 @@ fun VandaagScreen(
     onCategorizeClick: () -> Unit,
     onImportClick: () -> Unit,
     onOpenDetail: (Long) -> Unit,
+    onOpenSavedFilter: (Long) -> Unit,
     viewModel: VandaagViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -73,6 +75,9 @@ fun VandaagScreen(
             item { TaskCard(state.uncategorizedCount, state.uncategorizedGroupCount, onCategorizeClick) }
         }
         state.forecast?.let { forecast -> item { ForecastCard(forecast) } }
+        if (state.pinnedFilters.isNotEmpty()) {
+            item { PinnedFiltersRow(state.pinnedFilters, onOpenSavedFilter) }
+        }
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
@@ -157,6 +162,30 @@ private fun ImportButton(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Importeren", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Transacties' pinned saved filters as quick-access chips - each tap deep-links straight into Transacties with that filter already applied (see FinancioNavHost's `filterId` nav arg). */
+@Composable
+private fun PinnedFiltersRow(filters: List<SavedTransactionFilter>, onOpenSavedFilter: (Long) -> Unit) {
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(filters, key = { it.id }) { filter ->
+            Row(
+                modifier = Modifier
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(999.dp))
+                    .clickable { onOpenSavedFilter(filter.id) }
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(filter.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            }
+        }
     }
 }
 

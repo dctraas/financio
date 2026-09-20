@@ -7,6 +7,7 @@ import com.financio.app.data.local.WeekStartDay
 import com.financio.app.usecase.safeToSpendFor
 import com.financio.core.model.Category
 import com.financio.core.model.Money
+import com.financio.core.model.SavedTransactionFilter
 import com.financio.core.model.Transaction
 import com.financio.core.repository.AccountRepository
 import com.financio.core.repository.CategoryRepository
@@ -43,6 +44,8 @@ data class VandaagUiState(
     val dataIsStale: Boolean = false,
     /** "Centen tonen" - see [AppPreferences.showCentsEnabled]. */
     val showCentsEnabled: Boolean = true,
+    /** Transacties' saved filters pinned here — see [AppPreferences.savedTransactionFilters]'s own `pinnedOnVandaag` field. */
+    val pinnedFilters: List<SavedTransactionFilter> = emptyList(),
 )
 
 /**
@@ -66,6 +69,8 @@ class VandaagViewModel @Inject constructor(
         combine(appPreferences.weekStartDay, appPreferences.showCentsEnabled) { weekStartDay, showCents -> weekStartDay to showCents },
     ) { transactions, accounts, splitIds, categories, (weekStartDay, showCentsEnabled) ->
         buildState(transactions, accounts.size, splitIds, categories, weekStartDay, showCentsEnabled)
+    }.combine(appPreferences.savedTransactionFilters) { state, filters ->
+        state.copy(pinnedFilters = filters.filter { it.pinnedOnVandaag })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VandaagUiState())
 
     private fun buildState(
