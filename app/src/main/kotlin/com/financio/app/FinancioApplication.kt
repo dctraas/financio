@@ -6,6 +6,7 @@ import com.financio.app.backup.AutoBackupManager
 import com.financio.app.backup.AutoBackupWorker
 import com.financio.app.data.local.DatabaseSeeder
 import com.financio.app.notifications.NotificationHelper
+import com.financio.app.notifications.SundayPlanningWorker
 import com.financio.app.notifications.WeeklyDigestWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +42,7 @@ class FinancioApplication : Application() {
         // WeeklyDigestWorker.doWork) rather than being scheduled/cancelled from the toggle.
         NotificationHelper.ensureChannel(this)
         WeeklyDigestWorker.schedule(this)
+        SundayPlanningWorker.schedule(this)
         AutoBackupWorker.schedule(this)
     }
 }

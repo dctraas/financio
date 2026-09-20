@@ -205,9 +205,11 @@ fun CategoryManagementScreen(onBackClick: () -> Unit, viewModel: CategoryManagem
     categoryActionsFor?.let { category ->
         CategoryActionsSheet(
             category = category,
+            isNotificationMuted = category.id in state.mutedBudgetCategoryIds,
             onDismiss = { categoryActionsFor = null },
             onChangeColor = { categoryActionsFor = null; pickingColorFor = category },
             onRename = { categoryActionsFor = null; renamingCategory = category },
+            onToggleNotificationMuted = { muted -> viewModel.toggleBudgetNotificationMuted(category.id, muted) },
             onDelete = { categoryActionsFor = null; viewModel.requestCategoryDelete(category) },
         )
     }
@@ -570,9 +572,11 @@ private fun CategoryCard(row: CategoryRow, onClick: () -> Unit) {
 @Composable
 private fun CategoryActionsSheet(
     category: Category,
+    isNotificationMuted: Boolean,
     onDismiss: () -> Unit,
     onChangeColor: () -> Unit,
     onRename: () -> Unit,
+    onToggleNotificationMuted: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -581,6 +585,10 @@ private fun CategoryActionsSheet(
             Text(category.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
             CategoryActionRow("Kleur wijzigen", onChangeColor)
             CategoryActionRow("Naam wijzigen", onRename)
+            CategoryActionRow(
+                if (isNotificationMuted) "Budgetmeldingen weer aanzetten" else "Budgetmeldingen uitzetten voor deze categorie",
+                { onToggleNotificationMuted(!isNotificationMuted) },
+            )
             CategoryActionRow("Verwijderen", onDelete, isLast = true, destructive = true)
         }
     }

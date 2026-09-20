@@ -2,6 +2,7 @@ package com.financio.app.ui.categories
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.financio.app.data.local.AppPreferences
 import com.financio.core.categorize.ManualRule
 import com.financio.core.categorize.RuleMatcher
 import com.financio.core.model.Category
@@ -80,6 +81,8 @@ data class CategoryManagementUiState(
     val categoryDeletePreview: CategoryDeletePreview? = null,
     /** The most recent reversible bulk action, if any - drives the "Ongedaan maken" snackbar. */
     val undoableAction: UndoableAction? = null,
+    /** Categories that never trigger [com.financio.app.notifications.BudgetThresholdNotifier] - see [CategoryActionsSheet]'s "Meldingen" toggle. */
+    val mutedBudgetCategoryIds: Set<Long> = emptySet(),
 )
 
 /** A small rotation, not a picker: keeps "add a category" down to just typing a name. */
@@ -93,6 +96,7 @@ class CategoryManagementViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
     private val budgetRepository: BudgetRepository,
+    private val appPreferences: AppPreferences,
 ) : ViewModel() {
 
     private val tab = MutableStateFlow(CategoryManagementTab.CATEGORIES)
@@ -109,7 +113,12 @@ class CategoryManagementViewModel @Inject constructor(
         combine(ruleApplicationPreview, ruleApplicationResult, categoryDeletePreview, undoableAction) { a, b, c, d -> Quad(a, b, c, d) },
     ) { currentTab, categories, rules, transactions, extras ->
         buildState(currentTab, categories, rules, transactions, extras)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CategoryManagementUiState())
+    }.combine(appPreferences.mutedBudgetCategoryIds) { state, muted -> state.copy(mutedBudgetCategoryIds = muted) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CategoryManagementUiState())
+
+    fun toggleBudgetNotificationMuted(categoryId: Long, muted: Boolean) {
+        appPreferences.setBudgetCategoryMuted(categoryId, muted)
+    }
 
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 
